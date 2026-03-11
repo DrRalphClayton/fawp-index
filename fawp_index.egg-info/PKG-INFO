@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: fawp-index
-Version: 0.2.0
+Version: 0.3.0
 Summary: FAWP Alpha Index v2.1 — Information-Control Exclusion Principle detector
 Home-page: https://github.com/DrRalphClayton/fawp-index
 Author: Ralph Clayton
@@ -8,6 +8,7 @@ Classifier: Programming Language :: Python :: 3
 Classifier: License :: OSI Approved :: MIT License
 Classifier: Topic :: Scientific/Engineering
 Classifier: Topic :: Scientific/Engineering :: Information Analysis
+Classifier: Topic :: Office/Business :: Financial
 Requires-Python: >=3.8
 Description-Content-Type: text/markdown
 License-File: LICENSE.txt
@@ -19,10 +20,13 @@ Provides-Extra: finance
 Requires-Dist: yfinance>=0.2; extra == "finance"
 Provides-Extra: weather
 Requires-Dist: requests>=2.28; extra == "weather"
+Provides-Extra: sklearn
+Requires-Dist: scikit-learn>=1.0; extra == "sklearn"
 Provides-Extra: all
 Requires-Dist: matplotlib>=3.4; extra == "all"
 Requires-Dist: yfinance>=0.2; extra == "all"
 Requires-Dist: requests>=2.28; extra == "all"
+Requires-Dist: scikit-learn>=1.0; extra == "all"
 Dynamic: author
 Dynamic: classifier
 Dynamic: description

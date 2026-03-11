@@ -1,126 +1,232 @@
 # fawp-index
 
-**FAWP Alpha Index v2.1** — Python implementation of the Information-Control Exclusion Principle detector.
-
-Based on research by **Ralph Clayton** (2026):
-- [Agency Horizon paper](https://doi.org/10.5281/zenodo.18663547)
-- [FAWP confirmation suite (E8)](https://doi.org/10.5281/zenodo.18673949)
-
----
-
-## What is FAWP?
-
-**Future Access Without Presence (FAWP)** is the condition where:
-- Predictive coupling **persists** — you can still forecast the future
-- Steering coupling has **collapsed** — you can no longer influence it
-
-This is the *Information-Control Exclusion Principle*: in unstable regimes, prediction and control are conjugate variables. High predictive certainty is not a measure of mastery — it is a leading indicator of control failure.
+[![PyPI version](https://badge.fury.io/py/fawp-index.svg)](https://badge.fury.io/py/fawp-index)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18673949.svg)](https://doi.org/10.5281/zenodo.18673949)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/DrRalphClayton/fawp-index/blob/main/notebooks/fawp_demo.ipynb)
 
 ---
 
-## Installation
+## Your model still predicts. But you've already lost control.
+
+**fawp-index** detects the moment when a system crosses into the *Information-Control Exclusion Principle* regime — where **predictive information persists** but **the ability to act on it has collapsed**.
+
+This happens more than you think:
+
+| Domain | What predicts | What collapses |
+|--------|--------------|----------------|
+| 📈 Quant finance | Factor alpha signal | Market execution edge (crowding) |
+| 🌀 Dynamical systems | State forecasts | Stabilizing control authority |
+| 🌊 Weather / climate | Forecast skill | Intervention window |
+| 🌍 Seismic | Precursor signal | Stress release control |
+| 🤖 ML systems | Model predictions | Ability to retrain / intervene |
+
+This is not a failure of prediction. It is a structural decoupling — and it has a precise information-theoretic signature.
+
+---
+
+## Install
 
 ```bash
-pip install fawp-index
-```
-
-Or from source:
-```bash
-git clone https://github.com/ralphclayton/fawp-index
-cd fawp-index
-pip install -e .
+pip install fawp-index                  # core
+pip install fawp-index[plot]            # + matplotlib figures
+pip install fawp-index[finance]         # + Yahoo Finance loader
+pip install fawp-index[all]             # everything
 ```
 
 ---
 
-## Quick Start
-
-### From a CSV file
+## 60-second quickstart
 
 ```python
+import numpy as np
 from fawp_index import FAWPAlphaIndex
-from fawp_index.io.csv_loader import load_csv_simple
 
-# Load data (only needs state + action columns)
-data = load_csv_simple(
-    "market_data.csv",
-    state_col="price",
-    action_col="trade_size",
-    delta_pred=20,
+pred    = np.random.randn(5000)
+future  = pred[20:] + np.random.randn(4980) * 0.3
+action  = np.random.randn(4980) * 0.001   # near zero = FAWP
+obs     = np.random.randn(4980) * 0.1
+
+result = FAWPAlphaIndex().compute(pred[:4980], future, action, obs)
+print(result.summary())
+result.plot()   # requires: pip install fawp-index[plot]
+```
+
+```
+==================================================
+FAWP Alpha Index v2.1 — Results Summary
+==================================================
+Agency Horizon (tau_h):  4
+Peak Alpha Index:        2.2326
+Peak Alpha at tau:       9
+FAWP regime detected:   YES
+FAWP tau range:          [4, 5, 6, 7, 8, 9, 10, 11, 12]
+==================================================
+```
+
+---
+
+## Works natively with DataFrames
+
+```python
+import pandas as pd
+from fawp_index import fawp_from_dataframe
+
+df = pd.read_csv("my_data.csv")
+
+result = fawp_from_dataframe(
+    df,
+    pred_col   = "factor_score",
+    action_col = "trade_size",
+    future_col = "forward_return",
 )
-
-# Run FAWP Alpha Index
-detector = FAWPAlphaIndex(eta=1e-4, epsilon=1e-4, m_persist=5)
-result = detector.compute(
-    pred_series=data.pred_series,
-    future_series=data.future_series,
-    action_series=data.action_series,
-    obs_series=data.obs_series,
-)
-
 print(result.summary())
 ```
 
-### Live data stream
+### Rolling regime detection
 
 ```python
-from fawp_index import FAWPStreamDetector
+from fawp_index import fawp_rolling
 
-def alert(result):
-    print(f"⚠️  FAWP REGIME DETECTED at tau={result.peak_tau}, alpha={result.peak_alpha:.4f}")
+df_annotated = fawp_rolling(df, pred_col="returns", action_col="volume")
+df_annotated[df_annotated["fawp_in_regime"]]
+```
 
-detector = FAWPStreamDetector(
-    window=500,
-    delta_pred=20,
-    on_fawp=alert,
-)
+Adds columns: `fawp_pred_mi`, `fawp_steer_mi`, `fawp_gap`, `fawp_in_regime`
 
-# Feed data points as they arrive
-for state, action in live_feed:
-    detector.update(state=state, action=action)
+---
+
+## Sklearn compatible
+
+```python
+from fawp_index.sklearn_api import FAWPTransformer
+from sklearn.pipeline import Pipeline
+
+pipe = Pipeline([
+    ("fawp", FAWPTransformer(pred_col=0, action_col=1, delta=20)),
+])
+pipe.fit(X)
+score = pipe.score(X)   # peak FAWP alpha index
 ```
 
 ---
 
-## Output
+## Feature importance
 
-`FAWPResult` contains:
+```python
+from fawp_index.features import FAWPFeatureImportance
 
-| Field | Description |
-|---|---|
-| `tau` | Delay grid |
-| `alpha_index` | FAWP Alpha Index v2.1 at each tau |
-| `in_fawp` | Boolean array — True where FAWP regime detected |
-| `tau_h` | Empirical agency horizon |
-| `peak_alpha` | Maximum alpha index value |
-| `peak_tau` | Delay at peak alpha |
-| `pred_mi_corrected` | Null-corrected predictive MI |
-| `steer_mi_corrected` | Null-corrected steering MI |
+fi = FAWPFeatureImportance(action_col="trade_size", delta=21)
+result = fi.fit(df, feature_cols=["momentum", "value", "quality", "carry"])
+print(result.summary())
+result.plot()
+```
+
+```
+Rank     Feature    Alpha  Pred MI  Steer MI   FAWP
+   1    momentum   1.8823   2.1034    0.0003  ✓
+   2       carry   0.4211   0.5102    0.0041  ✓
+   3       value   0.0000   0.0823    0.1204
+   4     quality   0.0000   0.0412    0.2891
+2/4 features in FAWP regime
+```
 
 ---
 
-## Applications
+## Quant finance
 
-- **Financial systems** — detect when forecast signal persists after execution leverage collapses
-- **Weather prediction** — flag when forecast certainty arrives after intervention window closes
-- **Seismic monitoring** — quantify predictive coupling vs zero steering (no earthquake off-switch)
-- **Control systems** — early warning of impending control failure via resonance spike
+```python
+from fawp_index.quant import (
+    FAWPRegimeDetector,     # rolling market breakdown flag
+    MomentumDecayDetector,  # crowded trade detection
+    RiskParityWarning,      # vol-targeting failure warning
+    EventStudyFAWP,         # pre/post announcement analysis
+)
+
+detector = FAWPRegimeDetector(window=252, step=21)
+result = detector.detect(returns, volumes)
+print(result.summary())
+```
+
+---
+
+## Command line
+
+```bash
+fawp-index mydata.csv --state price --action trade_size --plot
+```
+
+---
+
+## Reproduce published figures
+
+The real E8 experimental data is bundled with the package:
+
+```bash
+python examples/reproduce_e8.py --save
+```
+
+Exactly reproduces figures from:
+> *"Forecasting Without Power: Agency Horizons and the Leverage Gap"*
+> Ralph Clayton (2026) · [doi:10.5281/zenodo.18663547](https://doi.org/10.5281/zenodo.18663547)
+
+---
+
+## The mathematics
+
+The **FAWP Alpha Index v2.1**:
+
+```
+α₂(τ) = I[τ≥1] · g(τ) · (Sₘ(τ) − Ĩ_steer(τ)) · (1 + κ · R_log(τ))
+```
+
+- `g(τ)` — gate: fires when pred MI > η AND steer MI ≤ ε
+- `Sₘ(τ)` — windowed-min corrected predictive MI (persistence)
+- `Ĩ_steer(τ)` — null-corrected steering MI: I(action_t ; obs_{t+τ+1})
+- `R_log(τ)` — log-slope resonance amplifier near the horizon
+
+The **agency horizon τ_h** is where steering MI first falls below ε.
+Near τ_h, predictive MI does not fall — it surges. This resonance ridge is the empirical signature of the Information-Control Exclusion Principle.
+
+---
+
+## What this is not
+
+- ❌ Not a forecasting model
+- ❌ Not a trading signal
+- ✅ A diagnostic: tells you *when* your model is in an irrecoverable information regime
 
 ---
 
 ## Citation
 
 ```bibtex
-@misc{clayton2026fawp,
-  author = {Clayton, Ralph},
-  title  = {Future Access Without Presence (FAWP)},
+@software{clayton2026fawpindex,
+  author    = {Ralph Clayton},
+  title     = {fawp-index: FAWP Alpha Index v2.1},
+  year      = {2026},
+  url       = {https://github.com/DrRalphClayton/fawp-index}
+}
+
+@article{clayton2026agency,
+  author = {Ralph Clayton},
+  title  = {Forecasting Without Power: Agency Horizons and the Leverage Gap},
   year   = {2026},
-  doi    = {10.5281/zenodo.18673949},
+  doi    = {10.5281/zenodo.18663547}
 }
 ```
 
 ---
 
-## License
+## Links
 
-MIT © Ralph Clayton 2026
+- 📦 **PyPI:** [pypi.org/project/fawp-index](https://pypi.org/project/fawp-index/)
+- 📂 **GitHub:** [github.com/DrRalphClayton/fawp-index](https://github.com/DrRalphClayton/fawp-index)
+- 📄 **Paper (E1-E7):** [doi:10.5281/zenodo.18663547](https://doi.org/10.5281/zenodo.18663547)
+- 📄 **Paper (E8):** [doi:10.5281/zenodo.18673949](https://doi.org/10.5281/zenodo.18673949)
+- 📗 **Book:** *Forecasting Without Power* — Ralph Clayton (2026)
+
+---
+
+*MIT License · Ralph Clayton · 2026*

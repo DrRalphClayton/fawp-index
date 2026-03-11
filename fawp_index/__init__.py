@@ -1,37 +1,10 @@
 """
-fawp-index v0.3.0
+fawp-index v0.4.0
 FAWP Alpha Index — Information-Control Exclusion Principle detector.
-
-Ralph Clayton (2026)
-DOI: https://doi.org/10.5281/zenodo.18673949
-GitHub: https://github.com/DrRalphClayton/fawp-index
-
---- Core ---
-    from fawp_index import FAWPAlphaIndex
-    result = FAWPAlphaIndex().compute(pred, future, action, obs)
-    result.plot()
-
---- DataFrame API ---
-    from fawp_index import fawp_from_dataframe
-    result = fawp_from_dataframe(df, pred_col='returns', action_col='volume')
-
---- Sklearn API ---
-    from fawp_index.sklearn_api import FAWPTransformer
-    fawp = FAWPTransformer(pred_col=0, action_col=1).fit(X)
-
---- Feature Importance ---
-    from fawp_index.features import FAWPFeatureImportance
-    result = FAWPFeatureImportance(action_col='volume').fit(df)
-
---- Quant Finance ---
-    from fawp_index.quant import FAWPRegimeDetector, MomentumDecayDetector
-    from fawp_index.quant import RiskParityWarning, EventStudyFAWP
-
---- CLI ---
-    fawp-index mydata.csv --state price --action trade --plot
+Ralph Clayton (2026) · doi:10.5281/zenodo.18673949
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __author__ = "Ralph Clayton"
 __doi__ = "https://doi.org/10.5281/zenodo.18673949"
 __github__ = "https://github.com/DrRalphClayton/fawp-index"
@@ -43,6 +16,8 @@ from .io.csv_loader import load_csv, load_csv_simple, FAWPData
 from .dataframe_api import fawp_from_dataframe, fawp_rolling
 from .sklearn_api import FAWPTransformer
 from .features import FAWPFeatureImportance
+from .multivariate import MultivariateFAWP, MultivariateFAWPResult
+from .simulate import FAWPSimulator, SimulationResult
 
 def _plot_result(self, **kwargs):
     from .viz.plots import plot_leverage_gap
@@ -57,5 +32,7 @@ __all__ = [
     "fawp_from_dataframe", "fawp_rolling",
     "FAWPTransformer",
     "FAWPFeatureImportance",
+    "MultivariateFAWP", "MultivariateFAWPResult",
+    "FAWPSimulator", "SimulationResult",
     "mi_from_arrays", "null_corrected_mi", "conservative_null_floor",
 ]
