@@ -32,11 +32,8 @@ import numpy as np
 import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
-import pathlib
-import sys
 
 # Allow running from examples/ directly
-sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 
 from fawp_index.data import E8_DATA, E8_CONFIRM_FULL, E8_SIGNIFICANCE
 

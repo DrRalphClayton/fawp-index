@@ -14,8 +14,6 @@ described in Clayton (2026) Forecasting Without Power.
 
 import numpy as np
 import pandas as pd
-import sys
-sys.path.insert(0, '/home/claude/fawp_index')
 
 from fawp_index import FAWPAlphaIndex, FAWPStreamDetector
 from fawp_index.io.csv_loader import load_csv

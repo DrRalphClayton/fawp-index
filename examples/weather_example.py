@@ -18,8 +18,6 @@ improve at the same rate."
 
 import numpy as np
 import pandas as pd
-import sys
-sys.path.insert(0, '/home/claude/fawp_index')
 
 from fawp_index import FAWPAlphaIndex
 from fawp_index.io.csv_loader import load_csv

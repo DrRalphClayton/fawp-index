@@ -5,6 +5,8 @@ fawp_index/__init__.py
 fawp_index/cli.py
 fawp_index/dataframe_api.py
 fawp_index/features.py
+fawp_index/multivariate.py
+fawp_index/simulate.py
 fawp_index/sklearn_api.py
 fawp_index.egg-info/PKG-INFO
 fawp_index.egg-info/SOURCES.txt
