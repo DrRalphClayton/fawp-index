@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fawp-index"
-version = "0.6.0"
+version = "0.7.0"
 description = "FAWP Alpha Index — Information-Control Exclusion Principle detector"
 readme = "README.md"
 license = { file = "LICENSE.txt" }
@@ -35,10 +35,15 @@ dependencies = [
 
 [project.optional-dependencies]
 plot    = ["matplotlib>=3.4"]
+report  = ["reportlab>=4.0", "matplotlib>=3.4"]
 finance = ["yfinance>=0.2"]
 weather = ["requests>=2.28"]
 sklearn = ["scikit-learn>=1.0"]
-all     = ["matplotlib>=3.4", "yfinance>=0.2", "requests>=2.28", "scikit-learn>=1.0"]
+test    = ["pytest>=7.0", "pytest-cov>=4.0", "matplotlib>=3.4", "reportlab>=4.0"]
+dev     = ["pytest>=7.0", "pytest-cov>=4.0", "matplotlib>=3.4", "reportlab>=4.0",
+           "scikit-learn>=1.0", "twine>=4.0", "build>=0.10", "ruff>=0.1"]
+all     = ["matplotlib>=3.4", "reportlab>=4.0", "yfinance>=0.2",
+           "requests>=2.28", "scikit-learn>=1.0"]
 
 [project.scripts]
 fawp-index = "fawp_index.cli:main"

@@ -1,11 +1,11 @@
 """
-fawp-index v0.6.0
+fawp-index v0.7.0
 FAWP Alpha Index — Information-Control Exclusion Principle detector.
 Includes full E1-E9 experimental suite data.
 Ralph Clayton (2026) · doi:10.5281/zenodo.18673949
 """
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 __author__ = "Ralph Clayton"
 __doi__ = "https://doi.org/10.5281/zenodo.18673949"
 __github__ = "https://github.com/DrRalphClayton/fawp-index"
@@ -22,6 +22,15 @@ from .features import FAWPFeatureImportance
 from .multivariate import MultivariateFAWP, MultivariateFAWPResult
 from .simulate import FAWPSimulator, SimulationResult, ControlCliff, ControlCliffResult
 from .explain import explain, explain_fawp, explain_oats, explain_control_cliff
+from .report import generate_report, FAWPReport
+from .benchmarks import (
+    run_all as run_benchmarks,
+    BenchmarkSuite, BenchmarkResult, BenchmarkFailure,
+    clean_control, prediction_only, control_only,
+    noisy_false_positive, delayed_collapse,
+)
+from .exports import _inject_exports
+_inject_exports()
 
 def _plot_result(self, **kwargs):
     from .viz.plots import plot_leverage_gap
@@ -42,5 +51,10 @@ __all__ = [
     "FAWPSimulator", "SimulationResult",
     "ControlCliff", "ControlCliffResult",
     "explain", "explain_fawp", "explain_oats", "explain_control_cliff",
+    "generate_report", "FAWPReport",
+    "run_benchmarks", "BenchmarkSuite", "BenchmarkResult", "BenchmarkFailure",
+    "clean_control", "prediction_only", "control_only",
+    "noisy_false_positive", "delayed_collapse",
+    # exports injected onto result classes: .to_json / .to_markdown / .to_html / .to_dict
     "mi_from_arrays", "null_corrected_mi", "conservative_null_floor",
 ]

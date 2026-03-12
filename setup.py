@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="fawp-index",
-    version="0.6.0",
+    version="0.7.0",
     author="Ralph Clayton",
     description="FAWP Alpha Index v2.1 — Information-Control Exclusion Principle detector",
     long_description=open("README.md", encoding="utf-8").read(),

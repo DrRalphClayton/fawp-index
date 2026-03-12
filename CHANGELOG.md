@@ -5,6 +5,106 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.7.0] — 2026-03-12
+
+### Added
+
+**`fawp_index.benchmarks` — Synthetic Benchmark Suite**
+
+Five canonical ground-truth cases covering the full detection landscape:
+
+- `clean_control()` — textbook FAWP: steering collapses, prediction survives (FAWP expected)
+- `prediction_only()` — predictable system with no steering channel (FAWP NOT expected)
+- `control_only()` — active controller but no predictive horizon (FAWP NOT expected)
+- `noisy_false_positive()` — noisy stable system designed to trap detectors (FAWP NOT expected)
+- `delayed_collapse()` — fast-collapsing unstable system, narrow ODW (FAWP expected)
+
+All five run in < 1 second (analytic curves, no simulation).  Pass ``simulate=True``
+to run real FAWPSimulator for each case instead.
+
+Usage::
+
+    from fawp_index.benchmarks import run_all
+
+    suite = run_all()
+    print(suite.summary())          # pass/fail table
+    suite.verify_all()              # raises BenchmarkFailure if any case fails
+    suite.to_html("bench.html")     # self-contained HTML report with charts
+    suite.to_json("bench.json")     # JSON export
+
+    # One case at a time
+    from fawp_index import clean_control, delayed_collapse
+    clean_control().verify()
+    delayed_collapse().plot()
+
+---
+
+## [0.7.0] — 2026-03-12
+
+### Added
+
+**`fawp_index.exports` — one-shot result exports**
+
+All result objects (`ODWResult`, `AlphaV2Result`) now have:
+
+- `.to_json(path, indent=2, include_curves=True)` — full result as JSON,
+  including all numeric fields, parameters, diagnosis text, and (for AlphaV2)
+  the complete tau-wise curve arrays.
+- `.to_markdown(path)` — clean Markdown with a key-numbers table and
+  plain-English diagnosis. Ready to paste into a paper, README, or blog post.
+- `.to_html(path)` — self-contained HTML file with navy/gold styling,
+  embedded matplotlib figure (if available), and full diagnosis. No external
+  dependencies. Share as a file or open in any browser.
+- `.to_dict()` — Python dict (same structure as JSON, useful for custom pipelines).
+
+Usage::
+
+    from fawp_index import ODWDetector, FAWPAlphaIndexV2
+
+    odw   = ODWDetector.from_e9_2_data()
+    alpha = FAWPAlphaIndexV2.from_e9_2_data()
+
+    odw.to_json("odw.json")
+    odw.to_markdown("odw.md")
+    odw.to_html("odw.html")
+
+    alpha.to_json("alpha.json")
+    alpha.to_markdown("alpha.md")
+    alpha.to_html("alpha.html")
+
+    # JSON without the full curve arrays (smaller file)
+    alpha.to_json("alpha_summary.json", include_curves=False)
+
+**`fawp_index/report.py` — PDF report generator (completed)**
+
+- `generate_report(result, path, *, title, mode, doi, include_figures, include_methods)`
+- `FAWPReport` — chainable builder with `.build(result, path)`
+- Navy/gold cover page with dynamic canvas background
+- Key-numbers table (striped, navy header)
+- Plain-English diagnosis section
+- Embedded matplotlib figures (in-memory, no temp files)
+- Methods section (5 paragraphs: MI estimation, null correction, ODW, α₂ v2.1,
+  baseline dynamical setting)
+- Citation page with BibTeX block and DOIs
+- `mode='lab'` — personal notebook style, no citation page
+- Header/footer on all non-cover pages with page numbers
+- No Unicode Greek (ReportLab font limitation) — all math uses ASCII +
+  `<sub>`/`<super>` markup inside Paragraph elements
+
+Requires `pip install fawp-index[report]`
+
+**`[test]` and `[dev]` install extras (#5)**
+
+```
+pip install fawp-index[test]    # pytest, pytest-cov
+pip install fawp-index[dev]     # test + matplotlib + reportlab + twine + build
+pip install -e ".[dev]"         # contributor editable install
+```
+
+CI can now use `pip install -e ".[test]"` instead of bare `pytest`.
+
+---
+
 ## [0.6.0] — 2026-03-12
 
 ### Added
