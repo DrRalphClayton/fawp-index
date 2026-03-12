@@ -62,7 +62,7 @@ Examples:
     parser.add_argument('--plot', action='store_true', help='Show leverage gap plot')
     parser.add_argument('--save', help='Save plot to file (e.g. result.png)')
     parser.add_argument('--verbose', action='store_true', help='Verbose output')
-    parser.add_argument('--version', action='version', version='fawp-index 0.5.1')
+    parser.add_argument('--version', action='version', version='fawp-index 0.6.0')
 
     args = parser.parse_args()
 
@@ -75,7 +75,7 @@ Examples:
         sys.exit(1)
 
     # ── Load data ─────────────────────────────────────────────────────────────
-    print(f"\nfawp-index v0.5.1 | Clayton (2026)")
+    print(f"\nfawp-index v0.6.0 | Clayton (2026)")
     print(f"{'='*50}")
     print(f"Loading: {args.csv}")
 

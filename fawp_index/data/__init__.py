@@ -1,5 +1,5 @@
 """
-fawp_index.data — Bundled experimental data (E1-E8)
+fawp_index.data — Bundled experimental data (E1-E9)
 
 All paths are guaranteed to exist after pip install fawp-index.
 
@@ -48,6 +48,11 @@ E8_DATA             = _DATA / "e8_data.csv"
 E8_CONFIRM_FULL     = _DATA / "e8_confirm_final_full.csv"
 E8_SIGNIFICANCE     = _DATA / "e8_confirm_significance.csv"
 
+# E9.2 — u vs ξ steering comparison
+E9_2_AGGREGATE_CURVES = _DATA / "e9_2_aggregate_curves.csv"
+E9_2_SEED_CURVES      = _DATA / "e9_2_seed_curves.csv"
+E9_2_SUMMARY_JSON     = _DATA / "e9_2_summary.json"
+
 __all__ = [
     "E1_HORIZONS_SWEEP",
     "E2_CONVERGENCE",
@@ -58,4 +63,5 @@ __all__ = [
     "E6_SURFACE_DROPOUT_MEAN", "E6_SURFACE_DROPOUT_STD",
     "E7_QUANTUM",
     "E8_DATA", "E8_CONFIRM_FULL", "E8_SIGNIFICANCE",
+    "E9_2_AGGREGATE_CURVES", "E9_2_SEED_CURVES", "E9_2_SUMMARY_JSON",
 ]

@@ -1,10 +1,10 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "fawp-index"
-version = "0.5.1"
+version = "0.6.0"
 description = "FAWP Alpha Index — Information-Control Exclusion Principle detector"
 readme = "README.md"
 license = { file = "LICENSE.txt" }
@@ -56,4 +56,4 @@ Book       = "https://www.amazon.com/dp/B0GS1ZVNM7/"
 where = ["."]
 
 [tool.setuptools.package-data]
-fawp_index = ["data/*.csv"]
+fawp_index = ["data/*.csv", "data/*.json"]

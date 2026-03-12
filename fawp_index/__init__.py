@@ -1,17 +1,19 @@
 """
-fawp-index v0.5.1
+fawp-index v0.6.0
 FAWP Alpha Index — Information-Control Exclusion Principle detector.
-Includes full E1-E8 experimental suite data.
+Includes full E1-E9 experimental suite data.
 Ralph Clayton (2026) · doi:10.5281/zenodo.18673949
 """
 
-__version__ = "0.5.1"
+__version__ = "0.6.0"
 __author__ = "Ralph Clayton"
 __doi__ = "https://doi.org/10.5281/zenodo.18673949"
 __github__ = "https://github.com/DrRalphClayton/fawp-index"
 
 from .core.alpha_index import FAWPAlphaIndex, FAWPResult
+from .core.alpha_v2 import FAWPAlphaIndexV2, AlphaV2Result
 from .core.estimators import mi_from_arrays, null_corrected_mi, conservative_null_floor
+from .detection.odw import ODWDetector, ODWResult
 from .stream.live import FAWPStreamDetector
 from .io.csv_loader import load_csv, load_csv_simple, FAWPData
 from .dataframe_api import fawp_from_dataframe, fawp_rolling
@@ -29,6 +31,8 @@ FAWPResult.plot = _plot_result
 
 __all__ = [
     "FAWPAlphaIndex", "FAWPResult",
+    "FAWPAlphaIndexV2", "AlphaV2Result",
+    "ODWDetector", "ODWResult",
     "FAWPStreamDetector",
     "FAWPData", "load_csv", "load_csv_simple",
     "fawp_from_dataframe", "fawp_rolling",

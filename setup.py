@@ -2,14 +2,14 @@ from setuptools import setup, find_packages
 
 setup(
     name="fawp-index",
-    version="0.5.1",
+    version="0.6.0",
     author="Ralph Clayton",
     description="FAWP Alpha Index v2.1 — Information-Control Exclusion Principle detector",
     long_description=open("README.md", encoding="utf-8").read(),
     long_description_content_type="text/markdown",
     url="https://github.com/DrRalphClayton/fawp-index",
     packages=find_packages(),
-    package_data={"fawp_index": ["data/*.csv"]},
+    package_data={"fawp_index": ["data/*.csv", "data/*.json"]},
     python_requires=">=3.8",
     install_requires=[
         "numpy>=1.21",
