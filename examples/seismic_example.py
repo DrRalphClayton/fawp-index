@@ -110,7 +110,7 @@ print("  The haunting case: you can see it. You cannot stop it.\n")
 
 print("Generating seismic sequence data...")
 df = generate_seismic_data(n_sequences=250, n_timesteps=180, seed=42)
-csv_path = "/tmp/seismic_fawp.csv"
+csv_path = "seismic_fawp_output.csv"
 df.to_csv(csv_path, index=False)
 print(f"Generated {len(df):,} rows across {df['seq_id'].nunique()} sequences")
 

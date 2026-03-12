@@ -94,7 +94,7 @@ print("  - FAWP = you can see the move but can't catch it\n")
 
 print("Generating simulated market data...")
 df = generate_financial_data(n_steps=800, n_trials=200, seed=42)
-csv_path = "/tmp/finance_fawp.csv"
+csv_path = "finance_fawp_output.csv"
 df.to_csv(csv_path, index=False)
 print(f"Generated {len(df):,} rows across {df['trial'].nunique()} trials")
 

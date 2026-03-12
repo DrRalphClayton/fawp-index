@@ -108,7 +108,7 @@ print("  - FAWP = forecast gets good AFTER you can still evacuate\n")
 
 print("Generating storm track simulation...")
 df = generate_weather_data(n_storms=250, n_timesteps=100, seed=42)
-csv_path = "/tmp/weather_fawp.csv"
+csv_path = "weather_fawp_output.csv"
 df.to_csv(csv_path, index=False)
 print(f"Generated {len(df):,} rows across {df['storm_id'].nunique()} simulated storms")
 

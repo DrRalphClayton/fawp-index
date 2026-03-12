@@ -225,7 +225,7 @@ Near τ_h, predictive MI does not fall — it surges. This resonance ridge is th
 - 📂 **GitHub:** [github.com/DrRalphClayton/fawp-index](https://github.com/DrRalphClayton/fawp-index)
 - 📄 **Paper (E1-E7):** [doi:10.5281/zenodo.18663547](https://doi.org/10.5281/zenodo.18663547)
 - 📄 **Paper (E8):** [doi:10.5281/zenodo.18673949](https://doi.org/10.5281/zenodo.18673949)
-- 📗 **Book:** *Forecasting Without Power* — Ralph Clayton (2026)
+- 📗 **Book:** [*Forecasting Without Power*](https://www.amazon.com/dp/B0GS1ZVNM7/) — Ralph Clayton (2026)
 
 ---
 
