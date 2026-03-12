@@ -1,0 +1,50 @@
+# Build artifacts — never commit these
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Generated output files
+*.png
+*.jpg
+E1_*.png
+E2_*.png
+E3_*.png
+E4_*.png
+E5_*.png
+E6_*.png
+E7_*.png
+E8_*.png
+leverage_gap_*.png
+alpha_index_*.png
+*_fawp_output.csv
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test/coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/

@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "fawp-index"
+version = "0.5.0"
+description = "FAWP Alpha Index — Information-Control Exclusion Principle detector"
+readme = "README.md"
+license = { file = "LICENSE.txt" }
+authors = [{ name = "Ralph Clayton" }]
+requires-python = ">=3.8"
+keywords = [
+    "forecasting", "information theory", "mutual information",
+    "agency", "control theory", "time series", "FAWP"
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Office/Business :: Financial",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Financial and Insurance Industry",
+]
+dependencies = [
+    "numpy>=1.21",
+    "pandas>=1.3",
+]
+
+[project.optional-dependencies]
+plot    = ["matplotlib>=3.4"]
+finance = ["yfinance>=0.2"]
+weather = ["requests>=2.28"]
+sklearn = ["scikit-learn>=1.0"]
+all     = ["matplotlib>=3.4", "yfinance>=0.2", "requests>=2.28", "scikit-learn>=1.0"]
+
+[project.scripts]
+fawp-index = "fawp_index.cli:main"
+
+[project.urls]
+Homepage   = "https://github.com/DrRalphClayton/fawp-index"
+PyPI       = "https://pypi.org/project/fawp-index/"
+Issues     = "https://github.com/DrRalphClayton/fawp-index/issues"
+Changelog  = "https://github.com/DrRalphClayton/fawp-index/releases"
+"Paper (E1-E7)" = "https://doi.org/10.5281/zenodo.18663547"
+"Paper (E8)"    = "https://doi.org/10.5281/zenodo.18673949"
+Book       = "https://www.amazon.com/dp/B0GS1ZVNM7/"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.setuptools.package-data]
+fawp_index = ["data/*.csv"]

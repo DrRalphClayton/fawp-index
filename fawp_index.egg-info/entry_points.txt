@@ -1,2 +1,0 @@
-[console_scripts]
-fawp-index = fawp_index.cli:main

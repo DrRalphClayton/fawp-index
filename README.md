@@ -29,9 +29,11 @@ This is not a failure of prediction. It is a structural decoupling — and it ha
 ## Install
 
 ```bash
-pip install fawp-index                  # core
+pip install fawp-index                  # core (numpy + pandas)
 pip install fawp-index[plot]            # + matplotlib figures
 pip install fawp-index[finance]         # + Yahoo Finance loader
+pip install fawp-index[weather]         # + requests (weather feeds)
+pip install fawp-index[sklearn]         # + scikit-learn (FAWPTransformer)
 pip install fawp-index[all]             # everything
 ```
 
