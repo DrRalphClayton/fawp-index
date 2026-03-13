@@ -1,11 +1,11 @@
 """
-fawp-index v0.7.0
+fawp-index v0.8.0
 FAWP Alpha Index — Information-Control Exclusion Principle detector.
 Includes full E1-E9 experimental suite data.
 Ralph Clayton (2026) · doi:10.5281/zenodo.18673949
 """
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 __author__ = "Ralph Clayton"
 __doi__ = "https://doi.org/10.5281/zenodo.18673949"
 __github__ = "https://github.com/DrRalphClayton/fawp-index"
@@ -23,6 +23,8 @@ from .multivariate import MultivariateFAWP, MultivariateFAWPResult
 from .simulate import FAWPSimulator, SimulationResult, ControlCliff, ControlCliffResult
 from .explain import explain, explain_fawp, explain_oats, explain_control_cliff
 from .report import generate_report, FAWPReport
+from .significance import fawp_significance, FAWPSignificance, SignificanceResult
+from .compare import compare_fawp, ComparisonResult
 from .benchmarks import (
     run_all as run_benchmarks,
     BenchmarkSuite, BenchmarkResult, BenchmarkFailure,
@@ -52,6 +54,8 @@ __all__ = [
     "ControlCliff", "ControlCliffResult",
     "explain", "explain_fawp", "explain_oats", "explain_control_cliff",
     "generate_report", "FAWPReport",
+    "fawp_significance", "FAWPSignificance", "SignificanceResult",
+    "compare_fawp", "ComparisonResult",
     "run_benchmarks", "BenchmarkSuite", "BenchmarkResult", "BenchmarkFailure",
     "clean_control", "prediction_only", "control_only",
     "noisy_false_positive", "delayed_collapse",

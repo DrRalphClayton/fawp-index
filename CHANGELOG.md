@@ -5,6 +5,45 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.8.0] — 2026-03-12
+
+### Added
+
+**`fawp_index.significance` — Significance testing**
+
+Three entry points depending on available data:
+
+- `fawp_significance(odw)` — one-call convenience, auto-selects method
+- `FAWPSignificance().from_seed_curves(odw)` — bootstrap from bundled E9.2 20-seed CSV (fastest, no extra data needed)
+- `FAWPSignificance().from_mi_curves(odw, tau, pred_raw, steer_raw, fail_rate)` — permutation test from pre-computed raw MI arrays
+- `FAWPSignificance().from_arrays(odw, tau, pred_pairs, steer_pairs, fail_rate)` — full shuffle+shift null from raw (x,y) paired arrays
+
+Output (`SignificanceResult`): `p_value_fawp`, `p_value_null`, `significant`, `ci_tau_h`, `ci_odw_start`, `ci_odw_end`, `ci_peak_gap`, `ci_peak_gap_tau`, per-tau p-values, bootstrap sample arrays, `.summary()`, `.to_json()`, `.to_html()` (with embedded histograms), `.plot()`
+
+E9.2 verified: p_fawp=1.000, p_null=0.145, significant=True, ci_tau_h=[31,31], ci_peak_gap=[1.538, 1.562]
+
+**`fawp_index.compare` — Side-by-side comparison**
+
+`compare_fawp(result_a, result_b, label_a, label_b)` — auto-detects ODWResult, AlphaV2Result, or BenchmarkResult.
+Output (`ComparisonResult`): per-field comparison table, winner per field, overall winner, scores, `.summary()`, `.to_json()`, `.to_html()` (with embedded bar chart), `.plot()`, `.to_pdf()`
+
+Usage::
+
+    from fawp_index import ODWDetector, fawp_significance, compare_fawp
+
+    odw = ODWDetector.from_e9_2_data()
+
+    # Significance
+    sig = fawp_significance(odw)
+    print(sig.summary())
+    sig.to_html("significance.html")
+
+    # Comparison
+    odw_xi = ODWDetector.from_e9_2_data(steering='xi')
+    cmp = compare_fawp(odw, odw_xi, label_a='u', label_b='xi')
+    print(cmp.summary())
+    cmp.to_html("comparison.html")
+
 ## [0.7.0] — 2026-03-12
 
 ### Added
@@ -36,72 +75,6 @@ Usage::
     from fawp_index import clean_control, delayed_collapse
     clean_control().verify()
     delayed_collapse().plot()
-
----
-
-## [0.7.0] — 2026-03-12
-
-### Added
-
-**`fawp_index.exports` — one-shot result exports**
-
-All result objects (`ODWResult`, `AlphaV2Result`) now have:
-
-- `.to_json(path, indent=2, include_curves=True)` — full result as JSON,
-  including all numeric fields, parameters, diagnosis text, and (for AlphaV2)
-  the complete tau-wise curve arrays.
-- `.to_markdown(path)` — clean Markdown with a key-numbers table and
-  plain-English diagnosis. Ready to paste into a paper, README, or blog post.
-- `.to_html(path)` — self-contained HTML file with navy/gold styling,
-  embedded matplotlib figure (if available), and full diagnosis. No external
-  dependencies. Share as a file or open in any browser.
-- `.to_dict()` — Python dict (same structure as JSON, useful for custom pipelines).
-
-Usage::
-
-    from fawp_index import ODWDetector, FAWPAlphaIndexV2
-
-    odw   = ODWDetector.from_e9_2_data()
-    alpha = FAWPAlphaIndexV2.from_e9_2_data()
-
-    odw.to_json("odw.json")
-    odw.to_markdown("odw.md")
-    odw.to_html("odw.html")
-
-    alpha.to_json("alpha.json")
-    alpha.to_markdown("alpha.md")
-    alpha.to_html("alpha.html")
-
-    # JSON without the full curve arrays (smaller file)
-    alpha.to_json("alpha_summary.json", include_curves=False)
-
-**`fawp_index/report.py` — PDF report generator (completed)**
-
-- `generate_report(result, path, *, title, mode, doi, include_figures, include_methods)`
-- `FAWPReport` — chainable builder with `.build(result, path)`
-- Navy/gold cover page with dynamic canvas background
-- Key-numbers table (striped, navy header)
-- Plain-English diagnosis section
-- Embedded matplotlib figures (in-memory, no temp files)
-- Methods section (5 paragraphs: MI estimation, null correction, ODW, α₂ v2.1,
-  baseline dynamical setting)
-- Citation page with BibTeX block and DOIs
-- `mode='lab'` — personal notebook style, no citation page
-- Header/footer on all non-cover pages with page numbers
-- No Unicode Greek (ReportLab font limitation) — all math uses ASCII +
-  `<sub>`/`<super>` markup inside Paragraph elements
-
-Requires `pip install fawp-index[report]`
-
-**`[test]` and `[dev]` install extras (#5)**
-
-```
-pip install fawp-index[test]    # pytest, pytest-cov
-pip install fawp-index[dev]     # test + matplotlib + reportlab + twine + build
-pip install -e ".[dev]"         # contributor editable install
-```
-
-CI can now use `pip install -e ".[test]"` instead of bare `pytest`.
 
 ---
 
@@ -215,3 +188,4 @@ from fawp_index.data import E9_2_AGGREGATE_CURVES, E9_2_SEED_CURVES, E9_2_SUMMAR
 - CSV loader
 - Live stream detector (`FAWPStreamDetector`)
 - MI estimators (`mi_from_arrays`, `null_corrected_mi`)
+
