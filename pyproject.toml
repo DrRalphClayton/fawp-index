@@ -4,10 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fawp-index"
-version = "0.7.0"
+version = "0.8.0"
 description = "FAWP Alpha Index — Information-Control Exclusion Principle detector"
 readme = "README.md"
-license = { file = "LICENSE.txt" }
+license = "MIT"
+license-files = ["LICENSE.txt"]
 authors = [{ name = "Ralph Clayton" }]
 requires-python = ">=3.8"
 keywords = [
@@ -21,7 +22,6 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "License :: OSI Approved :: MIT License",
     "Topic :: Scientific/Engineering",
     "Topic :: Scientific/Engineering :: Information Analysis",
     "Topic :: Office/Business :: Financial",
@@ -59,6 +59,7 @@ Book       = "https://www.amazon.com/dp/B0GS1ZVNM7/"
 
 [tool.setuptools.packages.find]
 where = ["."]
+exclude = ["tests*", "examples*", "fawp_forge*"]
 
 [tool.setuptools.package-data]
 fawp_index = ["data/*.csv", "data/*.json"]
