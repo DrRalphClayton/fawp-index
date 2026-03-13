@@ -1,3 +1,52 @@
+## [0.10.0] — 2026-03-13
+
+### Added
+
+**`fawp_index.watchlist` — Multi-asset, multi-timeframe watchlist scanner**
+
+`WatchlistScanner` / `scan_watchlist()` — scan a whole dict of DataFrames (or
+a list of tickers via yfinance) across multiple timeframes and rank by FAWP signal.
+
+    from fawp_index.watchlist import scan_watchlist
+    result = scan_watchlist({"SPY": spy_df, "QQQ": qqq_df}, timeframes=["1d","1wk"])
+    result.rank_by("score")        # strongest signal first
+    result.rank_by("gap")          # widest leverage gap
+    result.rank_by("persistence")  # longest active regime
+    result.rank_by("freshness")    # most recent signal
+    result.active_regimes()        # only currently flagged assets
+    result.to_html("watchlist.html")
+
+Supports yfinance auto-fetch, parallel scanning (`max_workers`),
+graceful error handling per asset, and full HTML/JSON/CSV export.
+
+**`fawp_index.alerts` — Multi-channel alert engine**
+
+`AlertEngine` — fire alerts when FAWP regimes change or thresholds are crossed.
+State-aware: tracks previous regime state to fire NEW_FAWP / REGIME_END diffs only.
+
+    engine = AlertEngine(gap_threshold=0.05, state_path="fawp_state.json")
+    engine.add_terminal()
+    engine.add_telegram(token="...", chat_id="...")
+    engine.add_discord(webhook_url="https://discord.com/api/webhooks/...")
+    engine.add_email(smtp_host="smtp.gmail.com", username="...", password="...")
+    engine.add_webhook("https://hooks.slack.com/services/...")
+    engine.add_callback(my_fn)
+
+    alerts = engine.check(watchlist_result)
+    engine.daily_summary(watchlist_result)
+
+Alert types: `NEW_FAWP`, `REGIME_END`, `GAP_THRESHOLD`, `HORIZON_COLLAPSE`, `DAILY_SUMMARY`
+
+**`dashboard/app.py` — Streamlit dashboard**
+
+Five-tab visual tool deployable locally or to Streamlit Cloud.
+
+    pip install fawp-index[plot] streamlit
+    cd dashboard && streamlit run app.py
+
+Tabs: Scanner (ranked table + alerts), Curves (MI curves + leverage gap per window),
+Heatmap (assets × timeframes), Significance (bootstrap test), Export (HTML/JSON/CSV).
+
 ## [0.9.0] — 2026-03-13
 
 ### Added

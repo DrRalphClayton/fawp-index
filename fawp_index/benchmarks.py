@@ -198,7 +198,7 @@ class BenchmarkResult:
         det = "YES" if r.fawp_found else "NO"
         fig.text(0.5, -0.01,
                  f"Expected FAWP={exp}  |  Detected={det}  |  "
-                 f"fawp-index v0.9.0 | Clayton (2026)",
+                 f"fawp-index v0.10.0 | Clayton (2026)",
                  ha="center", fontsize=7, color="grey", style="italic")
         plt.tight_layout()
 
@@ -296,7 +296,7 @@ class BenchmarkSuite:
         """Write full suite results to JSON."""
         data = {
             "generated_date": self.generated_date,
-            "fawp_index_version": "0.9.0",
+            "fawp_index_version": "0.10.0",
             "n_passed": self.n_passed,
             "n_failed": self.n_failed,
             "cases": [r.to_dict() for r in self.results],
@@ -861,7 +861,7 @@ def _suite_html(suite: BenchmarkSuite) -> str:
 
 <header>
   <h1>fawp-index Benchmark Suite</h1>
-  <p>Generated {suite.generated_date} &bull; fawp-index v0.9.0</p>
+  <p>Generated {suite.generated_date} &bull; fawp-index v0.10.0</p>
   <p><a href="https://doi.org/10.5281/zenodo.18673949"
      style="color:#D4AF37">doi:10.5281/zenodo.18673949</a></p>
 </header>

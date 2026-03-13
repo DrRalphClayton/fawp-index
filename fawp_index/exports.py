@@ -40,7 +40,7 @@ from typing import Any, Dict, Optional, Union
 
 import numpy as np
 
-_VERSION = "0.9.0"
+_VERSION = "0.10.0"
 _DOI     = "https://doi.org/10.5281/zenodo.18673949"
 _GITHUB  = "https://github.com/DrRalphClayton/fawp-index"
 
