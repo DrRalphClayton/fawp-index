@@ -38,7 +38,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-_VERSION = "0.8.0"
+_VERSION = "0.9.0"
 _DOI     = "https://doi.org/10.5281/zenodo.18673949"
 _GITHUB  = "https://github.com/DrRalphClayton/fawp-index"
 

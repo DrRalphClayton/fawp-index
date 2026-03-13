@@ -111,7 +111,7 @@ class TestSuite:
         assert data["n_passed"] == 5
         assert data["n_failed"] == 0
         assert len(data["cases"]) == 5
-        assert data["fawp_index_version"] == "0.8.0"
+        assert data["fawp_index_version"] == "0.9.0"
 
     def test_to_html(self, tmp_path):
         suite = run_all()

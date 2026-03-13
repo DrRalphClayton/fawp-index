@@ -589,7 +589,7 @@ def _build_citation(story, styles, doi: Optional[str], title: str, author: str, 
         f"  year    = {{{year}}},\n"
         f"  doi     = {{{doi_line}}},\n"
         "  url     = {https://github.com/DrRalphClayton/fawp-index},\n"
-        "  note    = {Python package, version 0.8.0}\n"
+        "  note    = {Python package, version 0.9.0}\n"
         "}"
     )
 

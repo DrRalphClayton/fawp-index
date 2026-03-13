@@ -1,3 +1,48 @@
+## [0.9.0] — 2026-03-13
+
+### Added
+
+**`fawp_index.market` — Rolling FAWP Market Scanner**
+
+`FAWPMarketScanner` / `scan_fawp_market()` — rolling-window FAWP detection
+on financial price (and optionally volume) DataFrames.
+
+Financial interpretation: pred channel = `I(return_t; return_{t+Δ})` (forecastability),
+steer channel = `I(signed_flow_t; return_{t+τ})` (market-impact effectiveness).
+A FAWP window means you can still forecast direction but your orders no longer move price.
+
+Usage::
+
+    from fawp_index.market import scan_fawp_market
+
+    df = pd.read_csv("SPY.csv", parse_dates=["Date"], index_col="Date")
+
+    # Fast (no null correction):
+    scan = scan_fawp_market(df, ticker="SPY")
+
+    # Rigorous:
+    scan = scan_fawp_market(df, ticker="SPY", n_null=50)
+
+    print(scan.summary())
+    scan.plot(prices=df["Close"])
+    scan.to_html("spy_fawp.html")
+    scan.to_csv("spy_fawp.csv")
+    scan.to_json("spy_fawp.json")
+
+Key classes: `MarketScanConfig`, `MarketWindowResult`, `MarketScanSeries`
+
+`MarketScanSeries` attributes: `windows`, `dates`, `regime_scores`, `fawp_flags`,
+`fawp_fraction`, `.latest`, `.peak`, `.fawp_windows`
+
+`MarketWindowResult` attributes: `date`, `fawp_found`, `regime_score`, `odw_result`,
+`pred_mi`, `steer_mi`, `pred_mi_raw`, `steer_mi_raw`
+
+Supports: price-only (no volume), custom pred/steer columns, `date_col` param,
+null correction (`n_null` > 0), log or simple returns, full HTML/JSON/CSV export.
+
+Also fixed: removed dead `FAWPStreamDetector` stub (was broken since v0.6.0).
+Replaced `stream/live.py` and `viz/plots.py` with thin delegation shims.
+
 # Changelog — fawp-index
 
 All notable changes to this project are documented here.
