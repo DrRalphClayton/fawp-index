@@ -77,7 +77,7 @@ from .market import (
     scan_fawp_market,
 )
 
-_VERSION = "0.10.0"
+from fawp_index import __version__ as _VERSION
 _DOI     = "https://doi.org/10.5281/zenodo.18673949"
 _GITHUB  = "https://github.com/DrRalphClayton/fawp-index"
 

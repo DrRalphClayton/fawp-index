@@ -40,7 +40,7 @@ from typing import Any, Dict, Optional, Union
 
 import numpy as np
 
-_VERSION = "0.10.0"
+from fawp_index import __version__ as _VERSION
 _DOI     = "https://doi.org/10.5281/zenodo.18673949"
 _GITHUB  = "https://github.com/DrRalphClayton/fawp-index"
 
@@ -412,7 +412,8 @@ def _alpha2_chart_html(result) -> str:
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
-        import base64, io
+        import base64
+        import io
 
         tau    = result.tau_grid
         alpha2 = result.alpha2

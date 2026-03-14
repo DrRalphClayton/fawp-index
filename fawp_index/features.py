@@ -140,7 +140,10 @@ class FAWPFeatureImportance:
                 feature_cols = [c for c in df.columns if c != self.action_col]
             action = df[self.action_col].values.astype(float)
             target = df[self.target_col].values.astype(float) if self.target_col else None
-            get_col = lambda c: df[c].values.astype(float)
+
+            def get_col(c):
+                return df[c].values.astype(float)
+
             names = [str(c) for c in feature_cols]
         else:
             df = np.asarray(df)
@@ -148,7 +151,10 @@ class FAWPFeatureImportance:
                 feature_cols = [i for i in range(df.shape[1]) if i != self.action_col]
             action = df[:, self.action_col].astype(float)
             target = df[:, self.target_col].astype(float) if self.target_col is not None else None
-            get_col = lambda c: df[:, c].astype(float)
+
+            def get_col(c):  # type: ignore[misc]
+                return df[:, c].astype(float)
+
             names = [f"col_{c}" for c in feature_cols]
 
         alpha_scores = []

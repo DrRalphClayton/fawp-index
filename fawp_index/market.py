@@ -74,7 +74,7 @@ from typing import List, Optional, Union
 import numpy as np
 import pandas as pd
 
-_VERSION = "0.10.0"
+from fawp_index import __version__ as _VERSION
 _DOI     = "https://doi.org/10.5281/zenodo.18673949"
 _GITHUB  = "https://github.com/DrRalphClayton/fawp-index"
 
@@ -197,6 +197,30 @@ class MarketWindowResult:
     pred_mi_raw:   np.ndarray
     steer_mi_raw:  np.ndarray
     n_obs:         int
+
+    @property
+    def fawp_score(self) -> dict:
+        """One-glance FAWP score. Keys: score(0-100), prediction, control, regime, gap_bits, odw."""
+        score      = int(round(float(self.regime_score) * 100))
+        pred_mean  = float(self.pred_mi.mean())  if len(self.pred_mi)  else 0.0
+        steer_mean = float(self.steer_mi.mean()) if len(self.steer_mi) else 0.0
+        pred_tier  = "HIGH" if pred_mean  > 0.05 else ("MEDIUM" if pred_mean  > 0.01 else "LOW")
+        steer_tier = "LOW"  if steer_mean < 0.01 else ("MEDIUM" if steer_mean < 0.05 else "HIGH")
+        regime     = "FAWP" if self.fawp_found else ("WATCHING" if score > 5 else "CLEAR")
+        odw = (f"\u03c4 {self.odw_result.odw_start}\u2013{self.odw_result.odw_end}"
+               if self.odw_result.odw_start is not None else "\u2014")
+        return {"score": score, "prediction": pred_tier, "control": steer_tier,
+                "regime": regime, "gap_bits": round(float(self.odw_result.peak_gap_bits), 4), "odw": odw}
+
+    def fawp_score_str(self) -> str:
+        """Human-readable one-glance FAWP score card."""
+        s = self.fawp_score
+        return (f"FAWP Score  : {s['score']}/100\n"
+                f"Prediction  : {s['prediction']}\n"
+                f"Control     : {s['control']}\n"
+                f"Regime      : {s['regime']}\n"
+                f"Leverage gap: {s['gap_bits']} bits\n"
+                f"ODW         : {s['odw']}")
 
     def to_dict(self) -> dict:
         r = self.odw_result
@@ -952,7 +976,8 @@ def _scan_html(scan: MarketScanSeries) -> str:
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
         import matplotlib.patches as mpatches
-        import base64, io
+        import base64
+        import io
 
         fig = scan.plot(show=False)
         buf = io.BytesIO()

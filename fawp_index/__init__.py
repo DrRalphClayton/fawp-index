@@ -22,6 +22,10 @@ from .multivariate import MultivariateFAWP, MultivariateFAWPResult
 from .simulate import FAWPSimulator, SimulationResult, ControlCliff, ControlCliffResult
 from .explain import explain, explain_fawp, explain_oats, explain_control_cliff
 from .report import generate_report, FAWPReport
+from .scanner import (
+    scan_crypto, scan_equities, scan_sectors, scan_etfs, scan_macro,
+    PRESETS,
+)
 from .watchlist import (
     WatchlistScanner, scan_watchlist,
     WatchlistResult, AssetResult,
@@ -51,25 +55,42 @@ def _plot_result(self, **kwargs):
 FAWPResult.plot = _plot_result
 
 __all__ = [
+    # Core detector
     "FAWPAlphaIndex", "FAWPResult",
     "FAWPAlphaIndexV2", "AlphaV2Result",
     "ODWDetector", "ODWResult",
-        "FAWPData", "load_csv", "load_csv_simple",
+    # I/O
+    "FAWPData", "load_csv", "load_csv_simple",
+    # DataFrame / sklearn APIs
     "fawp_from_dataframe", "fawp_rolling",
     "FAWPTransformer",
     "FAWPFeatureImportance",
+    # Multivariate / simulation
     "MultivariateFAWP", "MultivariateFAWPResult",
     "FAWPSimulator", "SimulationResult",
     "ControlCliff", "ControlCliffResult",
+    # Explain / report
     "explain", "explain_fawp", "explain_oats", "explain_control_cliff",
     "generate_report", "FAWPReport",
+    # Scanner presets
+    "scan_crypto", "scan_equities", "scan_sectors", "scan_etfs", "scan_macro",
+    "PRESETS",
+    # Watchlist
+    "WatchlistScanner", "scan_watchlist",
+    "WatchlistResult", "AssetResult",
+    # Alerts
+    "AlertEngine", "FAWPAlert", "AlertType",
+    # Market scanner
     "FAWPMarketScanner", "scan_fawp_market",
     "MarketScanConfig", "MarketScanSeries", "MarketWindowResult",
+    # Significance / compare
     "fawp_significance", "FAWPSignificance", "SignificanceResult",
     "compare_fawp", "ComparisonResult",
+    # Benchmarks
     "run_benchmarks", "BenchmarkSuite", "BenchmarkResult", "BenchmarkFailure",
     "clean_control", "prediction_only", "control_only",
     "noisy_false_positive", "delayed_collapse",
-    # exports injected onto result classes: .to_json / .to_markdown / .to_html / .to_dict
+    # MI estimators
+    # (exports also injected onto result classes: .to_json / .to_markdown / .to_html / .to_dict)
     "mi_from_arrays", "null_corrected_mi", "conservative_null_floor",
 ]

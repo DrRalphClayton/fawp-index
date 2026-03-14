@@ -314,7 +314,7 @@ class TestAlertEngine:
         engine.check(self._make_wl_result(active_tickers=("AAA",)))
         assert state_file.exists()
         state = json.loads(state_file.read_text())
-        assert state.get("AAA|1d") == True
+        assert state.get("AAA|1d")
 
     def test_alert_to_dict(self):
         alert = FAWPAlert(

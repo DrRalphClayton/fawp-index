@@ -64,7 +64,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Union
 
-_VERSION = "0.10.0"
+from fawp_index import __version__ as _VERSION
 
 
 # ─────────────────────────────────────────────────────────────────────────────

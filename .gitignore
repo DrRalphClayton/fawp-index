@@ -46,5 +46,6 @@ desktop.ini
 
 # Test/coverage artifacts
 .pytest_cache/
+.ruff_cache/
 .coverage
 htmlcov/

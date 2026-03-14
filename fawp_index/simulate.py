@@ -182,7 +182,7 @@ class FAWPSimulator:
 
         D = np.empty(self.n_steps)
         A = np.empty(self.n_steps)
-        O = np.full(self.n_steps, np.nan)
+        O = np.full(self.n_steps, np.nan)  # noqa: E741
 
         x = 0.0
         x_hist[0] = x

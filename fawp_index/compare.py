@@ -38,7 +38,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-_VERSION = "0.10.0"
+from fawp_index import __version__ as _VERSION
 _DOI     = "https://doi.org/10.5281/zenodo.18673949"
 _GITHUB  = "https://github.com/DrRalphClayton/fawp-index"
 
@@ -565,7 +565,8 @@ def _cmp_html(cmp: ComparisonResult) -> str:
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
-        import base64, io
+        import base64
+        import io
 
         numeric = [
             r for r in cmp.rows

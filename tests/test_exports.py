@@ -1,7 +1,6 @@
 """Tests for fawp_index.exports — to_json, to_markdown, to_html."""
 
 import json
-import tempfile
 from pathlib import Path
 
 import pytest

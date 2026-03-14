@@ -158,7 +158,7 @@ class DistributionalRobustness:
 
     def _mi_mc(self, A: np.ndarray, noise_std: float, rng, n_inner: int = 200) -> float:
         """Monte Carlo MI via log-likelihood ratio."""
-        O = A + rng.normal(0, noise_std, len(A))
+        O = A + rng.normal(0, noise_std, len(A))  # noqa: E741
         # Gaussian likelihood for p(O|A) and p(O) approximation
         log_p_O_given_A = -0.5 * ((O - A) / noise_std) ** 2 - np.log(noise_std * np.sqrt(2 * np.pi))
         A_inner = rng.normal(0, np.sqrt(self.P), (n_inner, len(A)))
@@ -208,7 +208,7 @@ class DistributionalRobustness:
                         scale = noise_std * np.sqrt((self.df_t - 2) / self.df_t)
                         N = rng.standard_t(self.df_t, self.n_samples) * scale
 
-                    O = A + N
+                    O = A + N  # noqa: E741
                     rho = np.corrcoef(A, O)[0, 1]
                     rho = np.clip(rho, -0.9999, 0.9999)
                     mi = float(-0.5 * np.log2(1 - rho**2))

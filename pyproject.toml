@@ -39,6 +39,7 @@ report  = ["reportlab>=4.0", "matplotlib>=3.4"]
 finance = ["yfinance>=0.2"]
 weather = ["requests>=2.28"]
 sklearn = ["scikit-learn>=1.0"]
+dashboard = ["streamlit>=1.30", "matplotlib>=3.4", "yfinance>=0.2"]
 test    = ["pytest>=7.0", "pytest-cov>=4.0", "matplotlib>=3.4", "reportlab>=4.0"]
 dev     = ["pytest>=7.0", "pytest-cov>=4.0", "matplotlib>=3.4", "reportlab>=4.0",
            "scikit-learn>=1.0", "twine>=4.0", "build>=0.10", "ruff>=0.1"]
@@ -46,7 +47,9 @@ all     = ["matplotlib>=3.4", "reportlab>=4.0", "yfinance>=0.2",
            "requests>=2.28", "scikit-learn>=1.0"]
 
 [project.scripts]
-fawp-index = "fawp_index.cli:main"
+fawp-index     = "fawp_index.cli:main"
+fawp-dashboard = "fawp_index.dashboard_launcher:launch"
+fawp-scan      = "fawp_index.scan_cli:main"
 
 [project.urls]
 Homepage   = "https://github.com/DrRalphClayton/fawp-index"
@@ -61,5 +64,26 @@ Book       = "https://www.amazon.com/dp/B0GS1ZVNM7/"
 where = ["."]
 exclude = ["tests*", "examples*", "fawp_forge*"]
 
+[tool.setuptools.data-files]
+"share/fawp-index/examples" = [
+    "examples/reproduce_e8.py",
+    "examples/reproduce_e1_e7.py",
+    "examples/example_usage.py",
+    "examples/finance_example.py",
+]
+
 [tool.setuptools.package-data]
 fawp_index = ["data/*.csv", "data/*.json"]
+
+[tool.ruff]
+exclude = [
+    "build",
+    "dist",
+    "*.egg-info",
+    ".pytest_cache",
+    ".ruff_cache",
+    "__pycache__",
+]
+
+[tool.ruff.lint]
+ignore = ["E501"]

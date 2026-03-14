@@ -54,6 +54,8 @@ from typing import Any, Dict, Optional, Union
 
 import numpy as np
 
+from fawp_index import __version__ as _VERSION
+
 # ── reportlab imports (optional dep) ─────────────────────────────────────────
 def _require_reportlab():
     try:
@@ -589,7 +591,7 @@ def _build_citation(story, styles, doi: Optional[str], title: str, author: str, 
         f"  year    = {{{year}}},\n"
         f"  doi     = {{{doi_line}}},\n"
         "  url     = {https://github.com/DrRalphClayton/fawp-index},\n"
-        "  note    = {Python package, version 0.10.0}\n"
+        f"  note    = {{Python package, version {_VERSION}}}\n"
         "}"
     )
 
