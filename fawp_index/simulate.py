@@ -563,7 +563,6 @@ class ControlCliff:
                 x = 0.0
                 history = [0.0] * (d + 1)
                 cost = 0.0
-                crashed = False
                 for t in range(self.n_steps):
                     obs = history[0] + rng.normal(0, obs_std)
                     u = float(np.clip(-self.K * obs, -self.u_max, self.u_max))
@@ -571,7 +570,6 @@ class ControlCliff:
                     cost += min(x**2, self.cost_cap)
                     history = [x] + history[:-1]
                     if abs(x) > self.x_fail:
-                        crashed = True
                         fails += 1
                         break
                 costs.append(cost / self.n_steps)

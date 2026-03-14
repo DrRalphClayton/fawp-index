@@ -1,4 +1,108 @@
-## [0.10.0] — 2026-03-13
+## [0.11.0] — 2026-03-14
+
+### Added
+
+**`fawp_index.leaderboard` — Market-wide ranked leaderboard**
+
+`Leaderboard.from_watchlist(result)` derives four ranked categories from any
+`WatchlistResult`:
+
+- `top_fawp` — active FAWP regimes ranked by score
+- `rising_risk` — fastest-increasing regime scores (OLS slope over last 10 windows)
+- `collapsing_control` — highest pred-MI / steer-MI ratio (pre-FAWP warning)
+- `strongest_odw` — widest Operational Detection Windows
+
+```python
+from fawp_index.leaderboard import Leaderboard
+lb = Leaderboard.from_watchlist(result)
+print(lb.summary())
+lb.to_html("leaderboard.html")
+lb.to_csv("leaderboard.csv")
+```
+
+Also exposed via `fawp-scan --leaderboard` and `fawp-watchlist scan --leaderboard`.
+
+**`fawp_index.watchlist_store` — Saved named watchlists**
+
+`WatchlistStore` persists named watchlists to `~/.fawp/watchlists.json`
+(or `$FAWP_STORE`). Rescan any saved list with one call.
+
+```python
+from fawp_index.watchlist_store import WatchlistStore
+store = WatchlistStore()
+store.create("tech", ["AAPL", "MSFT", "NVDA", "AMD"])
+result = store.scan("tech")
+```
+
+**`fawp-watchlist` CLI — new command**
+
+```bash
+fawp-watchlist create tech AAPL MSFT NVDA AMD
+fawp-watchlist scan tech
+fawp-watchlist scan tech --rank-by gap --leaderboard --explain --out tech.html
+fawp-watchlist list
+fawp-watchlist show tech
+fawp-watchlist delete tech
+```
+
+**`explain_asset()` — plain-English "Why flagged?" card**
+
+`explain_asset(asset)` produces a self-contained explanation card for any
+`AssetResult`, showing: FAWP Score (0–100), prediction/steering coupling tiers,
+leverage gap assessment, ODW presence, bulleted reasons the alert fired, and
+a recommended action.
+
+```python
+from fawp_index.explain import explain_asset
+print(explain_asset(result.rank_by("score")[0]))
+```
+
+Also exposed via `fawp-scan --explain` and `fawp-watchlist scan --explain`.
+
+**Upgraded `AlertEngine` — cooldown, severity, consecutive-window filters**
+
+Four new `AlertEngine` parameters:
+
+- `cooldown_hours` — suppress repeat alerts for the same asset within N hours
+- `min_consecutive_windows` — only fire `NEW_FAWP` after N consecutive flagged windows
+- `score_change_threshold` — only fire `GAP_THRESHOLD` if score changed by ≥ X
+- `min_severity` — suppress alerts below `AlertSeverity.LOW/MEDIUM/HIGH/CRITICAL`
+
+```python
+engine = AlertEngine(
+    gap_threshold=0.05,
+    cooldown_hours=4,
+    min_consecutive_windows=2,
+    score_change_threshold=0.02,
+    min_severity=AlertSeverity.MEDIUM,
+)
+```
+
+New `AlertSeverity` enum (`LOW/MEDIUM/HIGH/CRITICAL`) added to all `FAWPAlert`
+objects. State file format migrated automatically from v0.10 boolean format.
+
+**`fawp-scan` upgrades**
+
+```bash
+fawp-scan --preset equities --leaderboard
+fawp-scan --preset crypto --leaderboard --leaderboard-out lb.html
+fawp-scan SPY QQQ GLD --explain
+```
+
+### New exports
+
+```python
+from fawp_index import (
+    AlertSeverity,
+    Leaderboard, LeaderboardEntry,
+    WatchlistStore,
+)
+from fawp_index.explain import explain_asset
+from fawp_index.leaderboard import Leaderboard
+from fawp_index.watchlist_store import WatchlistStore
+```
+
+
 
 ### Added
 

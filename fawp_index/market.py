@@ -418,7 +418,7 @@ class MarketScanSeries:
         # Threshold line at epsilon-equivalent score
         eps_score = self.config.epsilon / (1 + self.config.epsilon)
         ax_score.axhline(eps_score, color="grey", lw=0.8, ls="--",
-                         label=f"ε threshold")
+                         label="ε threshold")
 
         # x-axis labels: show ~8 evenly spaced dates
         n = len(self.dates)

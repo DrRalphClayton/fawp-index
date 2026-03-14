@@ -1,11 +1,11 @@
 """
-fawp-index v0.10.0
+fawp-index v0.11.0
 FAWP Alpha Index — Information-Control Exclusion Principle detector.
 Includes full E1-E9 experimental suite data.
 Ralph Clayton (2026) · doi:10.5281/zenodo.18673949
 """
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"
 __author__ = "Ralph Clayton"
 __doi__ = "https://doi.org/10.5281/zenodo.18673949"
 __github__ = "https://github.com/DrRalphClayton/fawp-index"
@@ -31,8 +31,10 @@ from .watchlist import (
     WatchlistResult, AssetResult,
 )
 from .alerts import (
-    AlertEngine, FAWPAlert, AlertType,
+    AlertEngine, FAWPAlert, AlertType, AlertSeverity,
 )
+from .leaderboard import Leaderboard, LeaderboardEntry
+from .watchlist_store import WatchlistStore
 from .market import (
     FAWPMarketScanner, scan_fawp_market,
     MarketScanConfig, MarketScanSeries, MarketWindowResult,
@@ -79,7 +81,11 @@ __all__ = [
     "WatchlistScanner", "scan_watchlist",
     "WatchlistResult", "AssetResult",
     # Alerts
-    "AlertEngine", "FAWPAlert", "AlertType",
+    "AlertEngine", "FAWPAlert", "AlertType", "AlertSeverity",
+    # Leaderboard
+    "Leaderboard", "LeaderboardEntry",
+    # Saved watchlists
+    "WatchlistStore",
     # Market scanner
     "FAWPMarketScanner", "scan_fawp_market",
     "MarketScanConfig", "MarketScanSeries", "MarketWindowResult",

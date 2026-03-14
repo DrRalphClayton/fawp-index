@@ -19,7 +19,8 @@ Default calibration from independent record-chain validation:
   m = 5         — persistence window (use 3 for noisier regimes)
   η = 1e-4 bits — pred detectability buffer after floor subtraction
   ε = 1e-4 bits — steer near-null threshold after floor subtraction
-  κ = 1.0       — resonance scaling (not specified in paper; 1.0 is neutral)
+  κ = 1.0       — resonance scaling (not specified in paper
+  1.0 is neutral)
   δ = 1e-6      — log-domain regularizer
 """
 
@@ -82,12 +83,12 @@ class AlphaV2Result:
             "  α₂(τ) v2.1 Result",
             "=" * 58,
             f"FAWP detected      : {'YES' if self.fawp_detected else 'NO'}",
-            f"ODW                : "
+            "ODW                : "
             + (f"τ = {self.odw_start} — {self.odw_end}" if self.odw_start is not None else "none"),
             f"Peak α₂(τ)         : {self.peak_alpha2:.4f}"
             + (f"  at τ = {self.peak_tau2}" if self.peak_tau2 is not None else ""),
-            f"Peak Ĩ_pred        : {self.pred_mi_corr.max():.4f} bits",
-            f"Min Ĩ_steer (gated): "
+            "Peak Ĩ_pred        : {self.pred_mi_corr.max():.4f} bits",
+            "Min Ĩ_steer (gated): "
             + f"{self.steer_mi_corr[self.gate].min():.6f} bits" if self.gate.any() else "  (no gated taus)",
             "",
             f"Params: m={self.params.get('m')}, η={self.params.get('eta')}, "
@@ -115,7 +116,9 @@ class AlphaV2Result:
         if self.odw_start is not None:
             ax1.axvspan(self.odw_start, self.odw_end, alpha=0.12,
                         color='green', label='ODW')
-        ax1.set_ylabel("MI (bits)"); ax1.legend(fontsize=8); ax1.grid(True, alpha=0.3)
+        ax1.set_ylabel("MI (bits)")
+        ax1.legend(fontsize=8)
+        ax1.grid(True, alpha=0.3)
         ax1.set_title("Upgraded FAWP Alpha Index v2.1 — null-corrected MI curves")
 
         # Bottom: α₂(τ)
@@ -127,8 +130,10 @@ class AlphaV2Result:
             ax2.axvspan(self.odw_start, self.odw_end, alpha=0.12,
                         color='green', label='ODW')
         ax2.axhline(0, lw=1.0, color='black')
-        ax2.set_xlabel("Latency τ"); ax2.set_ylabel("α₂(τ)")
-        ax2.legend(fontsize=8); ax2.grid(True, alpha=0.3)
+        ax2.set_xlabel("Latency τ")
+        ax2.set_ylabel("α₂(τ)")
+        ax2.legend(fontsize=8)
+        ax2.grid(True, alpha=0.3)
         ax2.set_title("α₂(τ) — upgraded FAWP index with log-slope resonance")
 
         fig.text(0.99, 0.01, 'fawp-index | Clayton (2026) doi:10.5281/zenodo.18673949',

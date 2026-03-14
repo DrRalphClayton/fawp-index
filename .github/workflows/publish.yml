@@ -1,0 +1,57 @@
+# Publish to PyPI on every version tag: git tag v0.10.0 && git push --tags
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install and test
+        run: |
+          pip install --upgrade pip
+          pip install -e ".[test]"
+          pytest tests/ -v --tb=short
+
+  build-and-publish:
+    needs: test
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/fawp-index/
+
+    permissions:
+      id-token: write   # required for trusted publishing (OIDC)
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: pip install --upgrade pip build twine
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Check dist with twine
+        run: twine check dist/*
+
+      - name: Publish to PyPI (trusted publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1

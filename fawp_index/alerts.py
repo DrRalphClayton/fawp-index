@@ -79,6 +79,24 @@ class AlertType(str, Enum):
     DAILY_SUMMARY     = "DAILY_SUMMARY"
 
 
+class AlertSeverity(str, Enum):
+    """Severity tier for a FAWP alert, based on regime score."""
+    LOW      = "LOW"       # score 0.05–0.25
+    MEDIUM   = "MEDIUM"    # score 0.25–0.50
+    HIGH     = "HIGH"      # score 0.50–0.75
+    CRITICAL = "CRITICAL"  # score > 0.75
+
+
+def _score_to_severity(score: float) -> AlertSeverity:
+    if score >= 0.75:
+        return AlertSeverity.CRITICAL
+    if score >= 0.50:
+        return AlertSeverity.HIGH
+    if score >= 0.25:
+        return AlertSeverity.MEDIUM
+    return AlertSeverity.LOW
+
+
 @dataclass
 class FAWPAlert:
     """
@@ -89,6 +107,8 @@ class FAWPAlert:
     ticker : str
     timeframe : str
     alert_type : AlertType
+    severity : AlertSeverity
+        LOW / MEDIUM / HIGH / CRITICAL based on regime score.
     score : float
     gap_bits : float
     odw_start : int or None
@@ -106,6 +126,7 @@ class FAWPAlert:
     odw_end:    Optional[int]
     timestamp:  datetime
     message:    str
+    severity:   AlertSeverity = AlertSeverity.LOW
 
     def to_dict(self) -> dict:
         return {
@@ -117,6 +138,7 @@ class FAWPAlert:
             "odw_start":  self.odw_start,
             "odw_end":    self.odw_end,
             "timestamp":  self.timestamp.isoformat(),
+            "severity":   self.severity.value,
             "message":    self.message,
         }
 
@@ -308,17 +330,50 @@ class AlertEngine:
 
     def __init__(
         self,
-        gap_threshold:      float = 0.05,
-        horizon_warn_tau:   Optional[int] = None,
-        state_path:         Optional[Union[str, Path]] = None,
-        suppress_errors:    bool = True,
+        gap_threshold:           float = 0.05,
+        horizon_warn_tau:        Optional[int] = None,
+        state_path:              Optional[Union[str, Path]] = None,
+        suppress_errors:         bool = True,
+        # ── New in v0.11.0 ───────────────────────────────────────────────
+        cooldown_hours:          float = 0.0,
+        min_consecutive_windows: int   = 1,
+        score_change_threshold:  float = 0.0,
+        min_severity:            Optional[AlertSeverity] = None,
     ):
-        self.gap_threshold    = gap_threshold
-        self.horizon_warn_tau = horizon_warn_tau
-        self.state_path       = Path(state_path) if state_path else None
-        self.suppress_errors  = suppress_errors
-        self._backends: list  = []
-        self._prev_state: Dict[str, bool] = self._load_state()
+        """
+        Parameters
+        ----------
+        gap_threshold : float
+            Fire GAP_THRESHOLD when peak_gap_bits crosses this value.
+        horizon_warn_tau : int or None
+            Fire HORIZON_COLLAPSE when tau_h_plus < this value.
+        state_path : str or Path, optional
+            JSON file for persistent state across runs.
+        suppress_errors : bool
+            Catch and print backend send errors rather than raising.
+        cooldown_hours : float
+            Suppress repeat alerts for the same (ticker, timeframe) within
+            this many hours after the last alert. 0 = no cooldown.
+        min_consecutive_windows : int
+            Only fire NEW_FAWP after this many consecutive flagged windows.
+            1 = fire immediately (default, original behaviour).
+        score_change_threshold : float
+            Only fire GAP_THRESHOLD if the score has changed by at least
+            this amount since the last check. 0 = always fire (default).
+        min_severity : AlertSeverity or None
+            Suppress any alert below this severity tier.
+            None = no suppression (default).
+        """
+        self.gap_threshold            = gap_threshold
+        self.horizon_warn_tau         = horizon_warn_tau
+        self.state_path               = Path(state_path) if state_path else None
+        self.suppress_errors          = suppress_errors
+        self.cooldown_hours           = cooldown_hours
+        self.min_consecutive_windows  = max(1, int(min_consecutive_windows))
+        self.score_change_threshold   = score_change_threshold
+        self.min_severity             = min_severity
+        self._backends: list          = []
+        self._prev_state: Dict[str, dict] = self._load_state()
 
     # ── Backend registration ─────────────────────────────────────────────────
 
@@ -373,6 +428,8 @@ class AlertEngine:
         """
         Compare a WatchlistResult against the previous state and fire alerts.
 
+        Applies cooldown, consecutive-window, score-change, and severity filters.
+
         Parameters
         ----------
         watchlist_result : WatchlistResult
@@ -388,51 +445,100 @@ class AlertEngine:
             if asset.error:
                 continue
 
-            key = f"{asset.ticker}|{asset.timeframe}"
-            was_active = self._prev_state.get(key, False)
+            key      = f"{asset.ticker}|{asset.timeframe}"
+            prev     = self._prev_state.get(key, {})
+            was_active    = prev.get("active", False)
+            prev_score    = prev.get("score", 0.0)
+            last_alert_ts = prev.get("last_alert_ts")
 
-            # ── NEW_FAWP ──────────────────────────────────────────────────
-            if asset.regime_active and not was_active:
-                alerts.append(self._make_alert(
-                    asset, AlertType.NEW_FAWP, now
-                ))
-
-            # ── REGIME_END ────────────────────────────────────────────────
-            elif not asset.regime_active and was_active:
-                alerts.append(self._make_alert(
-                    asset, AlertType.REGIME_END, now
-                ))
-
-            # ── GAP_THRESHOLD ─────────────────────────────────────────────
-            if (asset.regime_active
-                    and asset.peak_gap_bits >= self.gap_threshold):
-                alerts.append(self._make_alert(
-                    asset, AlertType.GAP_THRESHOLD, now
-                ))
-
-            # ── HORIZON_COLLAPSE ──────────────────────────────────────────
-            if (self.horizon_warn_tau is not None
-                    and asset.scan is not None):
+            # ── Cooldown check ────────────────────────────────────────────
+            in_cooldown = False
+            if self.cooldown_hours > 0 and last_alert_ts:
                 try:
-                    tau_h = asset.scan.latest.odw_result.tau_h_plus
-                    if tau_h is not None and tau_h < self.horizon_warn_tau:
-                        alerts.append(self._make_alert(
-                            asset, AlertType.HORIZON_COLLAPSE, now
-                        ))
+                    last_dt  = datetime.fromisoformat(last_alert_ts)
+                    elapsed  = (now - last_dt).total_seconds() / 3600
+                    in_cooldown = elapsed < self.cooldown_hours
                 except Exception:
                     pass
 
-        # Send and update state
+            # ── Consecutive-window check ──────────────────────────────────
+            meets_consecutive = True
+            if self.min_consecutive_windows > 1 and asset.scan is not None:
+                recent = asset.scan.windows[-self.min_consecutive_windows:]
+                meets_consecutive = (
+                    len(recent) >= self.min_consecutive_windows
+                    and all(w.fawp_found for w in recent)
+                )
+
+            # ── NEW_FAWP ──────────────────────────────────────────────────
+            if (asset.regime_active and not was_active
+                    and meets_consecutive and not in_cooldown):
+                a = self._make_alert(asset, AlertType.NEW_FAWP, now)
+                if self._passes_severity(a):
+                    alerts.append(a)
+
+            # ── REGIME_END ────────────────────────────────────────────────
+            elif not asset.regime_active and was_active and not in_cooldown:
+                a = self._make_alert(asset, AlertType.REGIME_END, now)
+                if self._passes_severity(a):
+                    alerts.append(a)
+
+            # ── GAP_THRESHOLD ─────────────────────────────────────────────
+            score_delta = abs(asset.latest_score - prev_score)
+            if (asset.regime_active
+                    and asset.peak_gap_bits >= self.gap_threshold
+                    and score_delta >= self.score_change_threshold
+                    and not in_cooldown):
+                a = self._make_alert(asset, AlertType.GAP_THRESHOLD, now)
+                if self._passes_severity(a):
+                    alerts.append(a)
+
+            # ── HORIZON_COLLAPSE ──────────────────────────────────────────
+            if (self.horizon_warn_tau is not None
+                    and asset.scan is not None
+                    and not in_cooldown):
+                try:
+                    tau_h = asset.scan.latest.odw_result.tau_h_plus
+                    if tau_h is not None and tau_h < self.horizon_warn_tau:
+                        a = self._make_alert(asset, AlertType.HORIZON_COLLAPSE, now)
+                        if self._passes_severity(a):
+                            alerts.append(a)
+                except Exception:
+                    pass
+
+        # Send all queued alerts
+        last_alert_time = now.isoformat() if alerts else None
         for alert in alerts:
             self._dispatch(alert)
 
-        self._prev_state = {
-            f"{a.ticker}|{a.timeframe}": a.regime_active
-            for a in watchlist_result.assets
-            if not a.error
-        }
+        # Update state
+        new_state: Dict[str, dict] = {}
+        for asset in watchlist_result.assets:
+            if asset.error:
+                continue
+            key = f"{asset.ticker}|{asset.timeframe}"
+            prev = self._prev_state.get(key, {})
+            fired_now = any(
+                a.ticker == asset.ticker and a.timeframe == asset.timeframe
+                for a in alerts
+            )
+            new_state[key] = {
+                "active":       asset.regime_active,
+                "score":        float(asset.latest_score),
+                "last_alert_ts": now.isoformat() if fired_now else prev.get("last_alert_ts"),
+            }
+        self._prev_state = new_state
         self._save_state()
         return alerts
+
+    # ── Severity filter ───────────────────────────────────────────────────────
+
+    def _passes_severity(self, alert: FAWPAlert) -> bool:
+        if self.min_severity is None:
+            return True
+        order = [AlertSeverity.LOW, AlertSeverity.MEDIUM,
+                 AlertSeverity.HIGH, AlertSeverity.CRITICAL]
+        return order.index(alert.severity) >= order.index(self.min_severity)
 
     def daily_summary(self, watchlist_result) -> FAWPAlert:
         """
@@ -493,6 +599,7 @@ class AlertEngine:
             odw_end    = asset.peak_odw_end,
             timestamp  = now,
             message    = msg,
+            severity   = _score_to_severity(float(asset.latest_score)),
         )
 
     def _dispatch(self, alert: FAWPAlert):
@@ -505,10 +612,18 @@ class AlertEngine:
                 else:
                     raise
 
-    def _load_state(self) -> Dict[str, bool]:
+    def _load_state(self) -> Dict[str, dict]:
         if self.state_path and self.state_path.exists():
             try:
-                return json.loads(self.state_path.read_text())
+                raw = json.loads(self.state_path.read_text())
+                # Migrate old format (Dict[str, bool]) → new format (Dict[str, dict])
+                migrated: Dict[str, dict] = {}
+                for k, v in raw.items():
+                    if isinstance(v, bool):
+                        migrated[k] = {"active": v, "score": 0.0, "last_alert_ts": None}
+                    elif isinstance(v, dict):
+                        migrated[k] = v
+                return migrated
             except Exception:
                 pass
         return {}
@@ -519,6 +634,7 @@ class AlertEngine:
                 self.state_path.write_text(json.dumps(self._prev_state, indent=2))
             except Exception as e:
                 print(f"[FAWP alert] Could not save state: {e}")
+
 
     @property
     def backends(self) -> List[str]:

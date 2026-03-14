@@ -32,7 +32,7 @@ class RiskWarningResult:
         status = "⚠️  FAWP WARNING ACTIVE" if self.warning_active else "✓ No warning"
         lines = [
             "=" * 55,
-            f"Risk Parity / Vol Target — FAWP Early Warning",
+            "Risk Parity / Vol Target — FAWP Early Warning",
             "=" * 55,
             f"Status:               {status}",
             f"Vol forecast MI:      {self.pred_mi_bits:.4f} bits",

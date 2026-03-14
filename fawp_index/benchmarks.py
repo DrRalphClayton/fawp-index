@@ -183,7 +183,8 @@ class BenchmarkResult:
             ax1.axvspan(r.odw_start, r.odw_end, alpha=0.15, color="green",
                         label="ODW")
         ax1.set_ylabel("MI (bits) / rate")
-        ax1.legend(fontsize=7); ax1.grid(True, alpha=0.25)
+        ax1.legend(fontsize=7)
+        ax1.grid(True, alpha=0.25)
         ax1.set_title(self.description, fontsize=8, style="italic")
 
         gap = self.pred_mi - self.steer_mi
@@ -194,7 +195,8 @@ class BenchmarkResult:
             ax2.axvspan(r.odw_start, r.odw_end, alpha=0.15, color="green")
         ax2.set_xlabel("Latency tau")
         ax2.set_ylabel("Gap (bits)")
-        ax2.legend(fontsize=7); ax2.grid(True, alpha=0.25)
+        ax2.legend(fontsize=7)
+        ax2.grid(True, alpha=0.25)
 
         exp = "YES" if self.expected_fawp else "NO"
         det = "YES" if r.fawp_found else "NO"
@@ -735,8 +737,10 @@ def _case_chart_b64(br: BenchmarkResult) -> str:
             ax.axvline(r.tau_h_plus, ls=":", lw=1, color="steelblue")
         if r.tau_f is not None:
             ax.axvline(r.tau_f, ls=":", lw=1, color="firebrick")
-        ax.set_xlabel("tau"); ax.set_ylabel("bits / rate")
-        ax.legend(fontsize=7, loc="upper right"); ax.grid(True, alpha=0.2)
+        ax.set_xlabel("tau")
+        ax.set_ylabel("bits / rate")
+        ax.legend(fontsize=7, loc="upper right")
+        ax.grid(True, alpha=0.2)
         plt.tight_layout()
 
         buf = io.BytesIO()
@@ -831,39 +835,78 @@ def _suite_html(suite: BenchmarkSuite) -> str:
 <style>
   body {{
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    max-width: 900px; margin: 0 auto; padding: 2em 1.5em;
-    background: #fafafa; color: #222; line-height: 1.6;
+    max-width: 900px
+    margin: 0 auto
+    padding: 2em 1.5em;
+    background: #fafafa
+    color: #222
+    line-height: 1.6;
   }}
   header {{
-    background: #0E2550; color: white; padding: 1.8em 2em 1.4em;
-    border-radius: 8px; margin-bottom: 1.5em;
+    background: #0E2550
+    color: white
+    padding: 1.8em 2em 1.4em;
+    border-radius: 8px
+    margin-bottom: 1.5em;
   }}
-  header h1 {{ margin: 0 0 0.3em; font-size: 1.5em; }}
-  header p  {{ margin: 0.2em 0; font-size: 0.88em; color: #aac; }}
+  header h1 {{ margin: 0 0 0.3em
+  font-size: 1.5em
+  }}
+  header p  {{ margin: 0.2em 0
+  font-size: 0.88em
+  color: #aac
+  }}
   .badge {{
-    display:inline-block; padding:0.4em 1.2em; border-radius:20px;
-    font-weight:700; font-size:1em; color:white;
-    background:{hdr_colour}; margin:0.8em 0;
+    display:inline-block
+    padding:0.4em 1.2em
+    border-radius:20px;
+    font-weight:700
+    font-size:1em
+    color:white;
+    background:{hdr_colour}
+    margin:0.8em 0;
   }}
-  h2 {{ color:#0E2550; border-bottom:2px solid #D4AF37; padding-bottom:4px; }}
-  table {{ width:100%; border-collapse:collapse; margin:1em 0;
-           box-shadow:0 1px 4px rgba(0,0,0,0.07); border-radius:6px;
-           overflow:hidden; }}
-  thead th {{ background:#0E2550; color:white; padding:9px 12px; text-align:left; }}
-  tbody tr:nth-child(even) {{ background:#f8f8f8; }}
-  tbody td {{ padding:7px 12px; }}
-  footer {{ margin-top:3em; padding-top:1em; border-top:1px solid #ddd;
-            font-size:0.8em; color:#888; }}
-  a {{ color:#0E2550; }}
-  code {{ background:#f4f4f4; padding:2px 5px; border-radius:3px;
-          font-size:0.9em; }}
+  h2 {{ color:#0E2550
+  border-bottom:2px solid #D4AF37
+  padding-bottom:4px
+  }}
+  table {{ width:100%
+  border-collapse:collapse
+  margin:1em 0;
+           box-shadow:0 1px 4px rgba(0,0,0,0.07)
+           border-radius:6px;
+           overflow:hidden
+           }}
+  thead th {{ background:#0E2550
+  color:white
+  padding:9px 12px
+  text-align:left
+  }}
+  tbody tr:nth-child(even) {{ background:#f8f8f8
+  }}
+  tbody td {{ padding:7px 12px
+  }}
+  footer {{ margin-top:3em
+  padding-top:1em
+  border-top:1px solid #ddd;
+            font-size:0.8em
+            color:#888
+            }}
+  a {{ color:#0E2550
+  }}
+  code {{ background:#f4f4f4
+  padding:2px 5px
+  border-radius:3px;
+          font-size:0.9em
+          }}
 </style>
 </head>
 <body>
 
 <header>
   <h1>fawp-index Benchmark Suite</h1>
-  <p>Generated {suite.generated_date} &bull; fawp-index v{_VERSION}</p>
+  <p>Generated {suite.generated_date} &bull
+  fawp-index v{_VERSION}</p>
   <p><a href="https://doi.org/10.5281/zenodo.18673949"
      style="color:#D4AF37">doi:10.5281/zenodo.18673949</a></p>
 </header>
@@ -879,7 +922,8 @@ def _suite_html(suite: BenchmarkSuite) -> str:
 </table>
 
 <p style="font-size:0.88em;color:#555">
-  Run from Python: <code>from fawp_index.benchmarks import run_all; run_all().verify_all()</code>
+  Run from Python: <code>from fawp_index.benchmarks import run_all
+  run_all().verify_all()</code>
 </p>
 
 <h2>Case Detail</h2>

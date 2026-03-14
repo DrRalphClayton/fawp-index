@@ -111,7 +111,7 @@ class TestSuite:
         assert data["n_passed"] == 5
         assert data["n_failed"] == 0
         assert len(data["cases"]) == 5
-        assert data["fawp_index_version"] == "0.10.0"
+        assert data["fawp_index_version"] == "0.11.0"
 
     def test_to_html(self, tmp_path):
         suite = run_all()
@@ -140,7 +140,7 @@ class TestSuite:
 
 class TestTopLevelAPI:
     def test_imported_from_package(self):
-        from fawp_index import (
+        from fawp_index import (  # noqa: F811
             run_benchmarks, BenchmarkSuite, BenchmarkResult,
             BenchmarkFailure, clean_control, prediction_only,
             control_only, noisy_false_positive, delayed_collapse,
@@ -149,6 +149,6 @@ class TestTopLevelAPI:
         assert callable(clean_control)
 
     def test_run_benchmarks_alias(self):
-        from fawp_index import run_benchmarks
+        from fawp_index import run_benchmarks  # noqa: F811
         suite = run_benchmarks()
         assert suite.n_passed == 5

@@ -307,7 +307,7 @@ signature of the Information-Control Exclusion Principle.
   author  = {Ralph Clayton},
   title   = {fawp-index: Information-Control Exclusion Principle detector},
   year    = {2026},
-  version = {0.10.0},
+  version = {0.11.0},
   url     = {https://github.com/DrRalphClayton/fawp-index},
   doi     = {10.5281/zenodo.18673949}
 }

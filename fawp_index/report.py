@@ -50,7 +50,7 @@ import io
 import json
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -147,8 +147,12 @@ def _figure_odw(odw_result, title: str = "Leverage Gap & Failure Cliff") -> byte
             ax.axvline(odw_result.tau_f, ls=":", lw=1.3, color="firebrick",
                        label=f"tau_f = {odw_result.tau_f}")
 
-    ax1.set_ylabel("MI (bits)"); ax1.legend(fontsize=7); ax1.grid(True, alpha=0.25)
-    ax2.set_ylabel("Leverage gap (bits)"); ax2.legend(fontsize=7); ax2.grid(True, alpha=0.25)
+    ax1.set_ylabel("MI (bits)")
+    ax1.legend(fontsize=7)
+    ax1.grid(True, alpha=0.25)
+    ax2.set_ylabel("Leverage gap (bits)")
+    ax2.legend(fontsize=7)
+    ax2.grid(True, alpha=0.25)
     ax2.axhline(0, lw=0.8, color="black")
     ax2.set_xlabel("Latency tau")
 
@@ -184,7 +188,9 @@ def _figure_alpha2(alpha_result, title: str = "Upgraded FAWP Alpha Index v2.1") 
     if alpha_result.odw_start is not None:
         ax1.axvspan(alpha_result.odw_start, alpha_result.odw_end,
                     alpha=0.12, color="green", label="ODW")
-    ax1.set_ylabel("MI (bits)"); ax1.legend(fontsize=7); ax1.grid(True, alpha=0.25)
+    ax1.set_ylabel("MI (bits)")
+    ax1.legend(fontsize=7)
+    ax1.grid(True, alpha=0.25)
 
     ax2.plot(tau, alpha2, lw=2.4, color="crimson", label="alpha_2(tau)")
     ax2.plot(tau, R_log, lw=1.2, ls=":", color="orange", alpha=0.8, label="R_log")
@@ -194,7 +200,9 @@ def _figure_alpha2(alpha_result, title: str = "Upgraded FAWP Alpha Index v2.1") 
         ax2.axvspan(alpha_result.odw_start, alpha_result.odw_end,
                     alpha=0.12, color="green")
     ax2.set_xlabel("Latency tau")
-    ax2.set_ylabel("alpha_2(tau)"); ax2.legend(fontsize=7); ax2.grid(True, alpha=0.25)
+    ax2.set_ylabel("alpha_2(tau)")
+    ax2.legend(fontsize=7)
+    ax2.grid(True, alpha=0.25)
 
     fig.text(0.99, 0.01, "fawp-index | Clayton (2026)", ha="right",
              fontsize=6, color="grey", style="italic")
@@ -267,7 +275,7 @@ def _diagnosis_text(result) -> str:
 
 def _make_styles():
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    from reportlab.lib.enums import TA_CENTER
     from reportlab.lib import colors
 
     base = getSampleStyleSheet()
@@ -442,7 +450,6 @@ def _build_key_numbers(story, styles, rows: list[tuple[str, str]], section_title
     fawp_row = next((r for r in rows if r[0] == "FAWP detected"), None)
     if fawp_row:
         detected = fawp_row[1] == "YES"
-        colour = colors.HexColor("#1B7D1B") if detected else colors.HexColor("#AA1111")
         label  = "FAWP DETECTED" if detected else "FAWP NOT DETECTED"
         story.append(Paragraph(
             f'<font color="{"#1B7D1B" if detected else "#AA1111"}"><b>{label}</b></font>',

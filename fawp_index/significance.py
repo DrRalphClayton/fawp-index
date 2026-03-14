@@ -66,7 +66,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -410,8 +410,10 @@ class SignificanceResult:
             ax.axvspan(lo, hi, alpha=0.15, color="#D4AF37",
                        label=f"{ci_pct}% CI [{lo:.1f}, {hi:.1f}]")
         ax.set_title("Bootstrap: tau_h+", fontsize=9)
-        ax.set_xlabel("tau_h+"); ax.set_ylabel("count")
-        ax.legend(fontsize=7); ax.grid(True, alpha=0.2)
+        ax.set_xlabel("tau_h+")
+        ax.set_ylabel("count")
+        ax.legend(fontsize=7)
+        ax.grid(True, alpha=0.2)
 
         # Panel 2 — peak gap bootstrap distribution
         ax = axes[1]
@@ -424,8 +426,10 @@ class SignificanceResult:
             ax.axvspan(lo, hi, alpha=0.15, color="#D4AF37",
                        label=f"{ci_pct}% CI [{lo:.3f}, {hi:.3f}]")
         ax.set_title("Bootstrap: Peak leverage gap", fontsize=9)
-        ax.set_xlabel("bits"); ax.set_ylabel("count")
-        ax.legend(fontsize=7); ax.grid(True, alpha=0.2)
+        ax.set_xlabel("bits")
+        ax.set_ylabel("count")
+        ax.legend(fontsize=7)
+        ax.grid(True, alpha=0.2)
 
         # Panel 3 — per-tau p-values (if available)
         if self.pred_p_values is not None:
@@ -440,9 +444,11 @@ class SignificanceResult:
                 ax.axvspan(r.odw_start, r.odw_end, alpha=0.12, color="green",
                            label="ODW")
             ax.set_title("Per-tau p-values", fontsize=9)
-            ax.set_xlabel("tau"); ax.set_ylabel("p-value")
+            ax.set_xlabel("tau")
+            ax.set_ylabel("p-value")
             ax.set_ylim(-0.05, 1.05)
-            ax.legend(fontsize=7); ax.grid(True, alpha=0.2)
+            ax.legend(fontsize=7)
+            ax.grid(True, alpha=0.2)
 
         fig.text(0.99, 0.01, "fawp-index | Clayton (2026)",
                  ha="right", fontsize=7, color="grey", style="italic")
@@ -682,8 +688,6 @@ class FAWPSignificance:
         # Per-tau null floors via shuffle null distribution
         pred_p_vals  = np.zeros(len(tau))
         steer_p_vals = np.zeros(len(tau))
-        pred_floors  = np.zeros(len(tau))
-        steer_floors = np.zeros(len(tau))
 
         # We don't have paired arrays, so we approximate the null distribution
         # by treating the raw MI value as the observation and comparing against
@@ -709,7 +713,6 @@ class FAWPSignificance:
             p_boot = pred_corr[idx]
             s_boot = steer_corr[idx]
             f_boot = fail_rate[idx]
-            t_boot = np.sort(idx)   # keep tau monotone
 
             det = _Det(epsilon=self.epsilon)
             r = det.detect(
@@ -1068,7 +1071,9 @@ def _sig_html(sig: SignificanceResult) -> str:
             ax1.axvspan(lo, hi, alpha=0.15, color="#D4AF37",
                         label=f"{ci_pct}% CI [{lo:.1f},{hi:.1f}]")
         ax1.set_title("Bootstrap: tau_h+", fontsize=9)
-        ax1.set_xlabel("tau_h+"); ax1.legend(fontsize=7); ax1.grid(True, alpha=0.2)
+        ax1.set_xlabel("tau_h+")
+        ax1.legend(fontsize=7)
+        ax1.grid(True, alpha=0.2)
 
         ax2.hist(sig.peak_gap_samples, bins=min(20, len(sig.peak_gap_samples)),
                  color="#C0111A", alpha=0.75, edgecolor="white")
@@ -1079,7 +1084,9 @@ def _sig_html(sig: SignificanceResult) -> str:
             ax2.axvspan(lo2, hi2, alpha=0.15, color="#D4AF37",
                         label=f"{ci_pct}% CI [{lo2:.3f},{hi2:.3f}]")
         ax2.set_title("Bootstrap: Peak gap (bits)", fontsize=9)
-        ax2.set_xlabel("bits"); ax2.legend(fontsize=7); ax2.grid(True, alpha=0.2)
+        ax2.set_xlabel("bits")
+        ax2.legend(fontsize=7)
+        ax2.grid(True, alpha=0.2)
 
         plt.tight_layout()
         buf = io.BytesIO()
@@ -1124,7 +1131,8 @@ def _sig_html(sig: SignificanceResult) -> str:
 <body>
 <header>
   <h1>FAWP Significance Test</h1>
-  <p>Generated {date.today().isoformat()} &bull; fawp-index v{_VERSION}</p>
+  <p>Generated {date.today().isoformat()} &bull
+  fawp-index v{_VERSION}</p>
   <p><a href="{_DOI}" style="color:#D4AF37">{_DOI}</a></p>
 </header>
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fawp-index"
-version = "0.10.0"
+version = "0.11.0"
 description = "FAWP Alpha Index — Information-Control Exclusion Principle detector"
 readme = "README.md"
 license = "MIT"
@@ -50,6 +50,7 @@ all     = ["matplotlib>=3.4", "reportlab>=4.0", "yfinance>=0.2",
 fawp-index     = "fawp_index.cli:main"
 fawp-dashboard = "fawp_index.dashboard_launcher:launch"
 fawp-scan      = "fawp_index.scan_cli:main"
+fawp-watchlist = "fawp_index.watchlist_cli:main"
 
 [project.urls]
 Homepage   = "https://github.com/DrRalphClayton/fawp-index"

@@ -427,8 +427,10 @@ def _alpha2_chart_html(result) -> str:
         if result.odw_start is not None:
             ax.axvspan(result.odw_start, result.odw_end,
                        alpha=0.15, color="green", label="ODW")
-        ax.set_xlabel("Latency τ"); ax.set_ylabel("bits / index")
-        ax.legend(fontsize=8); ax.grid(True, alpha=0.25)
+        ax.set_xlabel("Latency τ")
+        ax.set_ylabel("bits / index")
+        ax.legend(fontsize=8)
+        ax.grid(True, alpha=0.25)
         ax.set_title("α₂(τ) — Upgraded FAWP Alpha Index", fontsize=10)
         plt.tight_layout()
 

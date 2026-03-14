@@ -34,7 +34,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -185,10 +185,10 @@ class ComparisonResult:
         w = 0.35
 
         fig, ax = plt.subplots(figsize=(max(7, n * 1.4), 5))
-        bars_a = ax.bar(x - w/2, vals_a, w, label=self.label_a,
-                        color="#0E2550", alpha=0.85)
-        bars_b = ax.bar(x + w/2, vals_b, w, label=self.label_b,
-                        color="#C0111A", alpha=0.85)
+        ax.bar(x - w/2, vals_a, w, label=self.label_a,
+               color="#0E2550", alpha=0.85)
+        ax.bar(x + w/2, vals_b, w, label=self.label_b,
+               color="#C0111A", alpha=0.85)
 
         # Winner highlights
         for i, row in enumerate(numeric_rows):
@@ -578,7 +578,8 @@ def _cmp_html(cmp: ComparisonResult) -> str:
             vals_a = [float(r.val_a) for r in numeric]
             vals_b = [float(r.val_b) for r in numeric]
             n = len(labels)
-            x = np.arange(n); ww = 0.35
+            x = np.arange(n)
+            ww = 0.35
 
             fig, ax = plt.subplots(figsize=(max(6, n * 1.3), 4))
             ax.bar(x - ww/2, vals_a, ww, label=cmp.label_a,
@@ -592,7 +593,8 @@ def _cmp_html(cmp: ComparisonResult) -> str:
                     ax.bar(x[i] + ww/2, vals_b[i], ww, color="#D4AF37", alpha=0.35)
             ax.set_xticks(x)
             ax.set_xticklabels(labels, rotation=28, ha="right", fontsize=8)
-            ax.legend(fontsize=8); ax.grid(True, alpha=0.2, axis="y")
+            ax.legend(fontsize=8)
+            ax.grid(True, alpha=0.2, axis="y")
             ax.set_title(f"{cmp.label_a} vs {cmp.label_b}", fontsize=9)
             plt.tight_layout()
             buf = io.BytesIO()
@@ -642,7 +644,8 @@ def _cmp_html(cmp: ComparisonResult) -> str:
 <body>
 <header>
   <h1>FAWP Comparison: {cmp.label_a} vs {cmp.label_b}</h1>
-  <p>Generated {date.today().isoformat()} &bull; fawp-index v{_VERSION}</p>
+  <p>Generated {date.today().isoformat()} &bull
+  fawp-index v{_VERSION}</p>
   <p><a href="{_DOI}" style="color:#D4AF37">{_DOI}</a></p>
 </header>
 

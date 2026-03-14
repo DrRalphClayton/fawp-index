@@ -188,7 +188,6 @@ class EventStudyFAWP:
 
         for event_idx in valid_events:
             start = event_idx - self.pre_window
-            end = event_idx + self.post_window + 1
 
             for rel_pos in range(total):
                 abs_pos = start + rel_pos

@@ -77,6 +77,12 @@ def main():
     parser.add_argument("--top",        type=int, default=10, help="Show top N (default: 10)")
     parser.add_argument("--out",        default=None,    help="Save report (.html / .json / .csv)")
     parser.add_argument("--no-alerts",  action="store_true", help="Suppress FAWP active markers")
+    parser.add_argument("--leaderboard", action="store_true",
+                        help="Print ranked leaderboard categories after scan")
+    parser.add_argument("--leaderboard-out", default=None,
+                        help="Save leaderboard to file (.html / .json / .csv)")
+    parser.add_argument("--explain",    action="store_true",
+                        help="Print explain-score card for the top-ranked asset")
     parser.add_argument("--version",    action="version", version=f"fawp-scan {_VERSION}")
 
     args = parser.parse_args()
@@ -151,6 +157,29 @@ def main():
         print(f"  Gap        : {score['gap_bits']} bits")
         print(f"  ODW        : {score['odw']}")
 
+    # ── Leaderboard ───────────────────────────────────────────────────────────
+    if args.leaderboard:
+        from fawp_index.leaderboard import Leaderboard
+        lb = Leaderboard.from_watchlist(result)
+        print("\n" + lb.summary())
+        if args.leaderboard_out:
+            p_lb = Path(args.leaderboard_out)
+            ext = p_lb.suffix.lower().lstrip(".")
+            if ext == "html":
+                lb.to_html(p_lb)
+            elif ext == "csv":
+                lb.to_csv(p_lb)
+            elif ext == "json":
+                lb.to_json(p_lb)
+            else:
+                print(f"WARNING: unsupported leaderboard format '{p_lb.suffix}'")
+            print(f"Leaderboard saved -> {p_lb}")
+
+    # ── Explain top asset ─────────────────────────────────────────────────────
+    if args.explain and valid:
+        from fawp_index.explain import explain_asset
+        print("\n" + explain_asset(valid[0]))
+
     # ── Save output ───────────────────────────────────────────────────────────
     if args.out:
         p = Path(args.out)
@@ -159,15 +188,15 @@ def main():
         fn = dispatch.get(ext)
         if fn:
             fn(p)
-            print(f"\nSaved → {p}")
+            print(f"\nSaved -> {p}")
         else:
             print(f"\nWARNING: unsupported format '{p.suffix}' — use .html .json .csv")
 
     # ── Active regime count ───────────────────────────────────────────────────
     if result.n_flagged and not args.no_alerts:
-        print(f"\n⚠️  {result.n_flagged} asset(s) currently in FAWP regime")
+        print(f"\n{result.n_flagged} asset(s) currently in FAWP regime")
     else:
-        print(f"\n✓ {result.n_assets} asset(s) scanned — {result.n_flagged} flagged")
+        print(f"\n{result.n_assets} asset(s) scanned — {result.n_flagged} flagged")
 
 
 if __name__ == "__main__":
