@@ -5,7 +5,7 @@ DOI: https://doi.org/10.5281/zenodo.18663547
 """
 
 import numpy as np
-from typing import Tuple, Optional
+from fawp_index.constants import BETA_NULL_QUANTILE
 
 
 def mi_from_rho(rho: float) -> float:
@@ -26,7 +26,7 @@ def mi_from_arrays(x: np.ndarray, y: np.ndarray, min_n: int = 30) -> float:
     return mi_from_rho(rho)
 
 
-def null_shuffle(x, y, n_null=200, beta=0.99, rng=None, min_n=30):
+def null_shuffle(x, y, n_null=200, beta=BETA_NULL_QUANTILE, rng=None, min_n=30):
     if rng is None:
         rng = np.random.default_rng(42)
     x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
@@ -35,7 +35,7 @@ def null_shuffle(x, y, n_null=200, beta=0.99, rng=None, min_n=30):
     return float(np.mean(null_mis)), float(np.quantile(null_mis, beta))
 
 
-def null_shift(x, y, n_null=200, beta=0.99, rng=None, min_n=30):
+def null_shift(x, y, n_null=200, beta=BETA_NULL_QUANTILE, rng=None, min_n=30):
     if rng is None:
         rng = np.random.default_rng(43)
     x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
@@ -45,13 +45,13 @@ def null_shift(x, y, n_null=200, beta=0.99, rng=None, min_n=30):
     return float(np.mean(null_mis)), float(np.quantile(null_mis, beta))
 
 
-def conservative_null_floor(x, y, n_null=200, beta=0.99, rng=None, min_n=30):
+def conservative_null_floor(x, y, n_null=200, beta=BETA_NULL_QUANTILE, rng=None, min_n=30):
     _, q_shuf = null_shuffle(x, y, n_null=n_null, beta=beta, rng=rng, min_n=min_n)
     _, q_shift = null_shift(x, y, n_null=n_null, beta=beta, rng=rng, min_n=min_n)
     return max(q_shuf, q_shift)
 
 
-def null_corrected_mi(x, y, n_null=200, beta=0.99, rng=None, min_n=30):
+def null_corrected_mi(x, y, n_null=200, beta=BETA_NULL_QUANTILE, rng=None, min_n=30):
     raw = mi_from_arrays(x, y, min_n=min_n)
     floor = conservative_null_floor(x, y, n_null=n_null, beta=beta, rng=rng, min_n=min_n)
     return max(0.0, raw - floor), floor

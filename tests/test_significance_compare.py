@@ -3,7 +3,6 @@
 import json
 import pytest
 import numpy as np
-from pathlib import Path
 
 from fawp_index import ODWDetector, FAWPAlphaIndexV2
 from fawp_index.significance import fawp_significance, FAWPSignificance, SignificanceResult

@@ -14,7 +14,7 @@ Ralph Clayton (2026) — doi:10.5281/zenodo.18663547
 
 import numpy as np
 from dataclasses import dataclass
-from typing import Optional, List
+
 
 
 @dataclass

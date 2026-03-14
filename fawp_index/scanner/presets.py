@@ -9,7 +9,7 @@ All functions require yfinance (``pip install yfinance``).
 """
 
 from __future__ import annotations
-from typing import List, Optional, Union
+from typing import List, Optional
 
 # ── Preset ticker lists ───────────────────────────────────────────────────────
 

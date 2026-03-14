@@ -25,6 +25,10 @@ Default calibration from independent record-chain validation:
 """
 
 import numpy as np
+from fawp_index.constants import (
+    ETA_PRED_CORRECTED, EPSILON_STEERING_CORRECTED,
+    PERSISTENCE_WINDOW_M, KAPPA_RESONANCE, DELTA_LOG_SMOOTH,
+)
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -197,11 +201,11 @@ class FAWPAlphaIndexV2:
 
     def __init__(
         self,
-        m: int = 5,
-        eta: float = 1e-4,
-        epsilon: float = 1e-4,
-        kappa: float = 1.0,
-        delta: float = 1e-6,
+        m: int = PERSISTENCE_WINDOW_M,
+        eta: float = ETA_PRED_CORRECTED,
+        epsilon: float = EPSILON_STEERING_CORRECTED,
+        kappa: float = KAPPA_RESONANCE,
+        delta: float = DELTA_LOG_SMOOTH,
     ):
         self.m = m
         self.eta = eta

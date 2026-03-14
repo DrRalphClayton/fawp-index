@@ -72,6 +72,11 @@ from pathlib import Path
 from typing import List, Optional, Union
 
 import numpy as np
+from fawp_index.constants import (
+    EPSILON_STEERING_RAW, BETA_NULL_QUANTILE,
+    PERSISTENCE_RULE_M, PERSISTENCE_RULE_N,
+    FLAGSHIP_DELTA_PRED, MARKET_WINDOW, MARKET_STEP, MARKET_TAU_MAX,
+)
 import pandas as pd
 
 from fawp_index import __version__ as _VERSION
@@ -131,17 +136,17 @@ class MarketScanConfig:
         Use log returns instead of simple returns. Default True.
     """
     window:        int   = 252
-    step:          int   = 5
-    delta_pred:    int   = 20
+    step:          int   = MARKET_STEP
+    delta_pred:    int   = FLAGSHIP_DELTA_PRED
     tau_min:       int   = 1
     tau_max:       int   = 40
     tau_step:      int   = 1
-    epsilon:       float = 0.01
+    epsilon:       float = EPSILON_STEERING_RAW
     n_null:        int   = 0
-    beta_null:     float = 0.99
+    beta_null:     float = BETA_NULL_QUANTILE
     min_n:         int   = 30
-    persistence_m: int   = 3
-    persistence_n: int   = 4
+    persistence_m: int   = PERSISTENCE_RULE_M
+    persistence_n: int   = PERSISTENCE_RULE_N
     seed:          int   = 42
     close_col:     str   = "Close"
     volume_col:    Optional[str] = "Volume"

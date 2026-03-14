@@ -1,155 +1,89 @@
+# Changelog
+
+All notable changes to fawp-index are documented here.
+
+---
+
+## [0.13.0] — 2026-03-14
+
+### Added
+
+- **`fawp_index.viz.plotly_plots`** — interactive Plotly figures (install with `pip install "fawp-index[plotly]"`):
+  `plot_mi_curves()`, `plot_regime_score()`, `plot_leverage_gap_bar()`, `plot_heatmap()`, `plot_leaderboard()` — all dark-themed, full hover tooltips
+- **3 new benchmark cases** in `fawp_index.benchmarks`:
+  - `gradual_fade()` — case 6, FAWP expected, linear steering decay (tests slow-crowding pattern)
+  - `multi_regime()` — case 7, FAWP expected, two episodes + recovery (non-monotone trajectory)
+  - `spiky_false_positive()` — case 8, FAWP NOT expected, transient dips from news/volatility events
+  - All 8 cases now run via `run_all()`
+- **`_SlackBackend`** in `alerts.py` — rich Slack Block Kit messages with severity colour, 4 key fields, paper link; wire with `engine.add_slack(webhook_url)`
+- **Alert templates** — `_DEFAULT_TEMPLATES` dict + `engine.set_template(alert_type, template)`. Template fields: `{ticker}`, `{timeframe}`, `{score}`, `{gap}`, `{odw}`, `{severity}`, `{alert_type}`, `{timestamp}`, `{version}`
+- **`pyproject.toml`** — `plotly = ["plotly>=5.0"]` optional extra added; included in `all`
+- **GitHub Release workflow** — `publish.yml` now creates a GitHub Release with CHANGELOG notes and `.whl`/`.tar.gz` attachments on every version tag
+
+---
+
+## [0.12.0] — 2026-03-14
+
+### Added
+
+- **Dashboard full UI upgrade** (`dashboard/app.py` rewritten, 946 lines):
+  - Severity pills (FAWP / HIGH / WATCH / CLEAR) with pulsing crimson dot for active regimes
+  - Sparkline 6-bar score trend per asset with ▲/▼/— arrow
+  - ODW proportional bar showing window position within τ range
+  - Score colour-coding by severity tier
+  - Filter bar: All / FAWP only / Watching / Rising (client-side, no re-scan)
+  - Inline "Why flagged?" expanders using `explain_asset()` for FAWP and HIGH assets
+  - Mini leaderboard 2×2 grid in Scanner tab via `Leaderboard.from_watchlist()`
+  - Scan metadata line (timestamp, duration, ε, window, τmax)
+  - Download leaderboard button; leaderboard export (HTML/CSV/JSON) in Export tab
+  - Heatmap DRY refactor (`_heatmap()` helper)
+- **`dashboard/.streamlit/config.toml`** — dark theme + `server.headless=true` + `gatherUsageStats=false`
+- **`dashboard/README.md`** — Streamlit Cloud deploy instructions
+- **`README.md`** full rewrite — live demo link, PyPI downloads badge, CI badge, Python 3.9–3.12 badge, benchmarks quickstart with output, `explain_asset` example, leaderboard, saved watchlists, calibration constants section
+- **`docs/examples.md`** — 10 runnable end-to-end examples covering all major use cases
+
+---
+
 ## [0.11.0] — 2026-03-14
 
 ### Added
 
-**`fawp_index.leaderboard` — Market-wide ranked leaderboard**
+- **`fawp_index.leaderboard`** — `Leaderboard.from_watchlist(result)` → 4 ranked categories: `top_fawp`, `rising_risk`, `collapsing_control`, `strongest_odw`. HTML/CSV/JSON export.
+- **`fawp_index.watchlist_store`** — persistent named watchlists at `~/.fawp/watchlists.json` (or `$FAWP_STORE`). `store.create()`, `store.scan()`, `store.list()`, `store.show()`, `store.delete()`
+- **`fawp_index.watchlist_cli`** — `fawp-watchlist` CLI: `create / scan / list / show / delete` subcommands; `scan` supports `--leaderboard`, `--explain`, `--out`
+- **`explain_asset()`** added to `fawp_index.explain` — plain-English "Why flagged?" card with score (0–100), coupling tiers, gap assessment, bulleted reasons, recommendation
+- **`AlertEngine` upgraded**: `cooldown_hours`, `min_consecutive_windows`, `score_change_threshold`, `min_severity`
+- **`AlertSeverity` enum** (LOW/MEDIUM/HIGH/CRITICAL) added to all `FAWPAlert` objects
+- Alert state file auto-migrates from old boolean format
+- **`fawp-watchlist`** entry point added to `pyproject.toml`
+- **`fawp-scan`** upgraded: `--leaderboard`, `--leaderboard-out`, `--explain` flags
 
-`Leaderboard.from_watchlist(result)` derives four ranked categories from any
-`WatchlistResult`:
+---
 
-- `top_fawp` — active FAWP regimes ranked by score
-- `rising_risk` — fastest-increasing regime scores (OLS slope over last 10 windows)
-- `collapsing_control` — highest pred-MI / steer-MI ratio (pre-FAWP warning)
-- `strongest_odw` — widest Operational Detection Windows
-
-```python
-from fawp_index.leaderboard import Leaderboard
-lb = Leaderboard.from_watchlist(result)
-print(lb.summary())
-lb.to_html("leaderboard.html")
-lb.to_csv("leaderboard.csv")
-```
-
-Also exposed via `fawp-scan --leaderboard` and `fawp-watchlist scan --leaderboard`.
-
-**`fawp_index.watchlist_store` — Saved named watchlists**
-
-`WatchlistStore` persists named watchlists to `~/.fawp/watchlists.json`
-(or `$FAWP_STORE`). Rescan any saved list with one call.
-
-```python
-from fawp_index.watchlist_store import WatchlistStore
-store = WatchlistStore()
-store.create("tech", ["AAPL", "MSFT", "NVDA", "AMD"])
-result = store.scan("tech")
-```
-
-**`fawp-watchlist` CLI — new command**
-
-```bash
-fawp-watchlist create tech AAPL MSFT NVDA AMD
-fawp-watchlist scan tech
-fawp-watchlist scan tech --rank-by gap --leaderboard --explain --out tech.html
-fawp-watchlist list
-fawp-watchlist show tech
-fawp-watchlist delete tech
-```
-
-**`explain_asset()` — plain-English "Why flagged?" card**
-
-`explain_asset(asset)` produces a self-contained explanation card for any
-`AssetResult`, showing: FAWP Score (0–100), prediction/steering coupling tiers,
-leverage gap assessment, ODW presence, bulleted reasons the alert fired, and
-a recommended action.
-
-```python
-from fawp_index.explain import explain_asset
-print(explain_asset(result.rank_by("score")[0]))
-```
-
-Also exposed via `fawp-scan --explain` and `fawp-watchlist scan --explain`.
-
-**Upgraded `AlertEngine` — cooldown, severity, consecutive-window filters**
-
-Four new `AlertEngine` parameters:
-
-- `cooldown_hours` — suppress repeat alerts for the same asset within N hours
-- `min_consecutive_windows` — only fire `NEW_FAWP` after N consecutive flagged windows
-- `score_change_threshold` — only fire `GAP_THRESHOLD` if score changed by ≥ X
-- `min_severity` — suppress alerts below `AlertSeverity.LOW/MEDIUM/HIGH/CRITICAL`
-
-```python
-engine = AlertEngine(
-    gap_threshold=0.05,
-    cooldown_hours=4,
-    min_consecutive_windows=2,
-    score_change_threshold=0.02,
-    min_severity=AlertSeverity.MEDIUM,
-)
-```
-
-New `AlertSeverity` enum (`LOW/MEDIUM/HIGH/CRITICAL`) added to all `FAWPAlert`
-objects. State file format migrated automatically from v0.10 boolean format.
-
-**`fawp-scan` upgrades**
-
-```bash
-fawp-scan --preset equities --leaderboard
-fawp-scan --preset crypto --leaderboard --leaderboard-out lb.html
-fawp-scan SPY QQQ GLD --explain
-```
-
-### New exports
-
-```python
-from fawp_index import (
-    AlertSeverity,
-    Leaderboard, LeaderboardEntry,
-    WatchlistStore,
-)
-from fawp_index.explain import explain_asset
-from fawp_index.leaderboard import Leaderboard
-from fawp_index.watchlist_store import WatchlistStore
-```
-
-
+## [0.10.0] — 2026-03-14
 
 ### Added
 
-**`fawp_index.watchlist` — Multi-asset, multi-timeframe watchlist scanner**
+- **`fawp_index.constants`** — single source of truth for all paper-derived calibration anchors, imported by 7 core modules:
+  `EPSILON_STEERING_RAW=0.01`, `EPSILON_STEERING_CORRECTED=1e-4`, `BETA_NULL_QUANTILE=0.99`,
+  `PERSISTENCE_WINDOW_M=5`, `PERSISTENCE_RULE_M=3`, `PERSISTENCE_RULE_N=4` (E9.1 confirmed),
+  `FLAGSHIP_A=1.02`, `FLAGSHIP_K=0.8`, `TAU_PLUS_H_E9=31`, `TAU_F_E9=36`, `ODW_START_E9=31`,
+  `ODW_END_E9=33`, `PEAK_GAP_BITS_E9=1.55`
+- All 7 core modules now import from constants: `alpha_index.py`, `alpha_v2.py`, `estimators.py`, `odw.py`, `market.py`, `simulate.py`, `benchmarks.py`
+- **`simulate.py`** `n_trials` default: 100 → 400 (E8 flagship)
+- **`PRED_AT_CLIFF`** typo fixed: 1.1010 → 1.0110 (digits were transposed)
 
-`WatchlistScanner` / `scan_watchlist()` — scan a whole dict of DataFrames (or
-a list of tickers via yfinance) across multiple timeframes and rank by FAWP signal.
+### Fixed
 
-    from fawp_index.watchlist import scan_watchlist
-    result = scan_watchlist({"SPY": spy_df, "QQQ": qqq_df}, timeframes=["1d","1wk"])
-    result.rank_by("score")        # strongest signal first
-    result.rank_by("gap")          # widest leverage gap
-    result.rank_by("persistence")  # longest active regime
-    result.rank_by("freshness")    # most recent signal
-    result.active_regimes()        # only currently flagged assets
-    result.to_html("watchlist.html")
+- Lint cleanup: 111 → ~17 ruff issues
+  - Removed unused imports across 18 files (`field`, `warnings`, `np`, `timedelta`, `scan_fawp_market`, typing imports)
+  - Removed unused local `last_alert_time` in `alerts.py`
+  - Semicolons expanded, fake f-strings fixed, lambda→def in `features.py`
+- `cli.py` — 22 broken `{{...}}` f-strings fixed; `main()` parsed args twice → once
+- `dashboard/app.py` footer — was a plain string not an f-string; version never printed
+- `__init__.py` — 13 missing names added to `__all__`
 
-Supports yfinance auto-fetch, parallel scanning (`max_workers`),
-graceful error handling per asset, and full HTML/JSON/CSV export.
-
-**`fawp_index.alerts` — Multi-channel alert engine**
-
-`AlertEngine` — fire alerts when FAWP regimes change or thresholds are crossed.
-State-aware: tracks previous regime state to fire NEW_FAWP / REGIME_END diffs only.
-
-    engine = AlertEngine(gap_threshold=0.05, state_path="fawp_state.json")
-    engine.add_terminal()
-    engine.add_telegram(token="...", chat_id="...")
-    engine.add_discord(webhook_url="https://discord.com/api/webhooks/...")
-    engine.add_email(smtp_host="smtp.gmail.com", username="...", password="...")
-    engine.add_webhook("https://hooks.slack.com/services/...")
-    engine.add_callback(my_fn)
-
-    alerts = engine.check(watchlist_result)
-    engine.daily_summary(watchlist_result)
-
-Alert types: `NEW_FAWP`, `REGIME_END`, `GAP_THRESHOLD`, `HORIZON_COLLAPSE`, `DAILY_SUMMARY`
-
-**`dashboard/app.py` — Streamlit dashboard**
-
-Five-tab visual tool deployable locally or to Streamlit Cloud.
-
-    pip install fawp-index[plot] streamlit
-    cd dashboard && streamlit run app.py
-
-Tabs: Scanner (ranked table + alerts), Curves (MI curves + leverage gap per window),
-Heatmap (assets × timeframes), Significance (bootstrap test), Export (HTML/JSON/CSV).
+---
 
 ## [0.9.0] — 2026-03-13
 

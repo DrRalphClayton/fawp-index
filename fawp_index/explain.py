@@ -16,7 +16,7 @@ Ralph Clayton (2026) — doi:10.5281/zenodo.18673949
 """
 
 import numpy as np
-from typing import Optional, Union
+
 
 
 # ── Severity levels ────────────────────────────────────────────────────────
@@ -382,112 +382,6 @@ def explain_control_cliff(result, verbose: bool = True) -> str:
     return "\n".join(lines)
 
 
-def explain(result, verbose: bool = True) -> str:
-    """
-    Auto-detect result type and return a plain-English explanation.
-
-    Parameters
-    ----------
-    result : any fawp-index result object
-        FAWPResult, OATSResult, ControlCliffResult, or SimulationResult.
-    verbose : bool
-        Include interpretation guide at the end.
-
-    Returns
-    -------
-    str — human-readable diagnosis
-
-    Example
-    -------
-        from fawp_index import FAWPAlphaIndex
-        from fawp_index.explain import explain
-
-        result = FAWPAlphaIndex().compute(pred, future, action, obs)
-        print(explain(result))
-
-        from fawp_index.oats import AgencyHorizon
-        result = AgencyHorizon(P=1.0, alpha=0.001).compute()
-        print(explain(result))
-
-        from fawp_index.simulate import ControlCliff
-        result = ControlCliff.from_e5_data()
-        print(explain(result))
-    """
-    cls_name = type(result).__name__
-
-    if cls_name == 'FAWPResult':
-        return explain_fawp(result, verbose=verbose)
-    elif cls_name == 'OATSResult':
-        return explain_oats(result, verbose=verbose)
-    elif cls_name == 'ControlCliffResult':
-        return explain_control_cliff(result, verbose=verbose)
-    elif cls_name == 'SimulationResult':
-        # Wrap SimulationResult fields into a FAWPResult-like explain
-        return _explain_simulation(result, verbose=verbose)
-    else:
-        return (
-            f"explain() received a {cls_name}.\n"
-            f"Supported types: FAWPResult, OATSResult, "
-            f"ControlCliffResult, SimulationResult.\n"
-            f"Pass the result directly from .compute() or .from_*_data()."
-        )
-
-
-def _explain_simulation(result, verbose: bool = True) -> str:
-    """Explain a SimulationResult (E8-style)."""
-    tau_h = result.tau_h
-    peak_mi = result.peak_strat_mi
-    peak_tau = result.peak_strat_tau
-    cfg = result.config
-
-    in_fawp = result.fail_rate > 0.1
-    fawp_count = int(in_fawp.sum())
-
-    severity = 3 if peak_mi > 1.5 else 2 if peak_mi > 0.5 else 1 if peak_mi > 0 else 0
-
-    lines = [
-        "=" * 62,
-        f"  SIMULATION DIAGNOSIS  —  {SEVERITY_LABELS[severity]}",
-        "=" * 62,
-        "",
-        "WHAT IS HAPPENING:",
-        f"  Simulation of an unstable AR(1) system (a={cfg.get('a','?')},\n"
-        f"  K={cfg.get('K','?')}) across {len(result.tau_grid)} horizon values.\n"
-        f"  The FAWP regime was detected at {fawp_count}/{len(result.tau_grid)} horizons.",
-        "",
-        "KEY NUMBERS:",
-        f"  Agency horizon τ_h       : {tau_h}",
-        f"  Peak stratified pred MI  : {peak_mi:.4f} bits  (τ={peak_tau})",
-        f"  Max failure rate         : {result.fail_rate.max():.0%}",
-        "",
-        "WHAT THIS MEANS:",
-    ]
-
-    if tau_h is None:
-        lines.append("  No agency horizon detected in the simulated range.")
-    else:
-        lines.append(
-            f"  Control collapses at τ_h = {tau_h}. Beyond this horizon,\n"
-            f"  steering MI has decayed to near-zero while predictive MI\n"
-            f"  {'surges (resonance ridge detected)' if peak_tau and peak_tau > tau_h else 'persists'}.\n"
-            f"  Peak stratified MI = {peak_mi:.4f} bits at τ = {peak_tau}."
-        )
-
-    if verbose:
-        lines += [
-            "",
-            "─" * 62,
-            "This is the empirical signature of the Information-Control",
-            "Exclusion Principle (ICEP) — doi:10.5281/zenodo.18673949",
-        ]
-
-    lines.append("=" * 62)
-    return "\n".join(lines)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# explain_asset — plain-English "Why flagged?" card for an AssetResult
-# ─────────────────────────────────────────────────────────────────────────────
 
 def explain_asset(asset, verbose: bool = True) -> str:
     """

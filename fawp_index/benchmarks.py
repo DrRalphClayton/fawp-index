@@ -47,6 +47,9 @@ from pathlib import Path
 from typing import List, Optional, Union
 
 import numpy as np
+from fawp_index.constants import (
+    EPSILON_STEERING_RAW, FLAGSHIP_A, FLAGSHIP_K, FLAGSHIP_DELTA_PRED,
+)
 
 from fawp_index import __version__ as _VERSION
 
@@ -340,7 +343,7 @@ def _exp_decay(tau: np.ndarray, peak: float, rate: float) -> np.ndarray:
     return np.maximum(0.0, peak * np.exp(-rate * tau))
 
 
-def _run_detector(tau, pred, steer, fail, epsilon: float = 0.01):
+def _run_detector(tau, pred, steer, fail, epsilon: float = EPSILON_STEERING_RAW):
     """Run ODWDetector on arrays, return ODWResult."""
     from fawp_index.detection.odw import ODWDetector
     det = ODWDetector(epsilon=epsilon)
@@ -676,7 +679,7 @@ def _simulate_case(
 
 def run_all(simulate: bool = False, seed: int = 42) -> BenchmarkSuite:
     """
-    Run all five benchmark cases and return a BenchmarkSuite.
+    Run all eight benchmark cases and return a BenchmarkSuite.
 
     Parameters
     ----------
@@ -705,6 +708,9 @@ def run_all(simulate: bool = False, seed: int = 42) -> BenchmarkSuite:
         control_only(simulate=simulate, seed=seed),
         noisy_false_positive(simulate=simulate, seed=seed),
         delayed_collapse(simulate=simulate, seed=seed),
+        gradual_fade(simulate=simulate, seed=seed),
+        multi_regime(simulate=simulate, seed=seed),
+        spiky_false_positive(simulate=simulate, seed=seed),
     ]
     return BenchmarkSuite(results=cases)
 
@@ -937,3 +943,198 @@ def _suite_html(suite: BenchmarkSuite) -> str:
 </body>
 </html>
 """
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Additional benchmark cases (v0.13.0)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def gradual_fade(simulate: bool = False, seed: int = 42) -> BenchmarkResult:
+    """
+    Case 6 — Gradual control fade (FAWP expected).
+
+    Steering MI decays slowly and linearly rather than collapsing sharply.
+    This tests whether the detector can identify FAWP when the transition
+    is gradual rather than abrupt — a common real-world pattern (e.g.,
+    slow crowding, increasing latency, gradual regime shift).
+
+    Expected: FAWP detected. ODW may be narrower than clean_control.
+
+    Example
+    -------
+        from fawp_index.benchmarks import gradual_fade
+        r = gradual_fade()
+        r.verify()
+        r.plot()
+    """
+    name        = "gradual_fade"
+    description = ("Steering collapses gradually (linear decay) rather than sharply. "
+                   "Tests detector robustness to slow control erosion.")
+
+    if simulate:
+        return _simulate_case(
+            name=name, description=description, expected_fawp=True,
+            sim_kwargs=dict(a=1.02, K=0.8, delta_pred=20, n_trials=40,
+                            n_steps=600, seed=seed),
+            tau_grid=list(range(0, 40)),
+        )
+
+    rng = np.random.default_rng(seed)
+    tau = np.arange(0, 40)
+
+    # Steering: linear fade from ~1.5 to below epsilon
+    steer_raw = np.maximum(0, 1.5 - tau * 0.055) + rng.normal(0, 0.025, len(tau))
+    steer     = np.maximum(0, steer_raw)
+
+    # Prediction: stays elevated, mild late decay
+    pred = _exp_decay(tau, peak=1.6, rate=0.025) + rng.normal(0, 0.02, len(tau))
+    pred = np.maximum(0, pred)
+
+    # Failure: gradual onset
+    fail = _sigmoid(tau.astype(float), centre=32.0, steepness=0.4)
+
+    odw = _run_detector(tau, pred, steer, fail)
+
+    passed  = odw.fawp_found
+    verdict = (
+        f"ODW tau={odw.odw_start}-{odw.odw_end}, tau_h+={odw.tau_h_plus}, tau_f={odw.tau_f}"
+        if passed else "No ODW found — gradual fade may need lower epsilon"
+    )
+    return BenchmarkResult(
+        name=name, description=description, expected_fawp=True,
+        tau=tau, pred_mi=pred, steer_mi=steer, fail_rate=fail,
+        odw_result=odw, passed=passed, verdict=verdict,
+    )
+
+
+def multi_regime(simulate: bool = False, seed: int = 42) -> BenchmarkResult:
+    """
+    Case 7 — Multi-regime sequence (FAWP expected).
+
+    Simulates a realistic sequence: normal operation → FAWP regime →
+    partial recovery → second FAWP regime. Tests whether the detector
+    correctly identifies at least one ODW in a non-monotone MI trajectory.
+
+    Expected: FAWP detected (first or second window).
+
+    Example
+    -------
+        from fawp_index.benchmarks import multi_regime
+        r = multi_regime()
+        r.verify()
+        r.plot()
+    """
+    name        = "multi_regime"
+    description = ("Two FAWP episodes separated by partial recovery. "
+                   "Tests detection in non-monotone, realistic multi-regime trajectories.")
+
+    if simulate:
+        return _simulate_case(
+            name=name, description=description, expected_fawp=True,
+            sim_kwargs=dict(a=1.02, K=0.8, delta_pred=20, n_trials=40,
+                            n_steps=800, seed=seed),
+            tau_grid=list(range(0, 50)),
+        )
+
+    rng = np.random.default_rng(seed)
+    tau = np.arange(0, 50)
+
+    # Steering: collapses at tau~12, partially recovers, collapses again at tau~32
+    steer = (
+        _exp_decay(tau, peak=2.0, rate=0.20)                           # first decay
+        + 0.6 * np.exp(-0.5 * ((tau - 22) / 4.0) ** 2)                # recovery bump
+        - 0.5 * np.maximum(0, (tau - 30) / 8.0)                       # second fade
+        + rng.normal(0, 0.025, len(tau))
+    )
+    steer = np.maximum(0, steer)
+
+    # Prediction: two humps, stays mostly elevated
+    pred = (
+        0.8 * np.exp(-0.03 * tau)
+        + 0.6 * np.exp(-0.5 * ((tau - 15) / 6.0) ** 2)
+        + 0.4 * np.exp(-0.5 * ((tau - 38) / 5.0) ** 2)
+        + rng.normal(0, 0.02, len(tau))
+    )
+    pred = np.maximum(0, pred)
+
+    # Failure: two-stage onset
+    fail = np.minimum(1.0,
+        0.4 * _sigmoid(tau.astype(float), centre=20.0, steepness=0.5)
+        + 0.6 * _sigmoid(tau.astype(float), centre=40.0, steepness=0.7)
+    )
+
+    odw = _run_detector(tau, pred, steer, fail)
+
+    passed  = odw.fawp_found
+    verdict = (
+        f"ODW tau={odw.odw_start}-{odw.odw_end}, tau_h+={odw.tau_h_plus}, tau_f={odw.tau_f}"
+        if passed else "No ODW found in multi-regime sequence"
+    )
+    return BenchmarkResult(
+        name=name, description=description, expected_fawp=True,
+        tau=tau, pred_mi=pred, steer_mi=steer, fail_rate=fail,
+        odw_result=odw, passed=passed, verdict=verdict,
+    )
+
+
+def spiky_false_positive(simulate: bool = False, seed: int = 42) -> BenchmarkResult:
+    """
+    Case 8 — Spiky false-positive trap (FAWP NOT expected).
+
+    Simulates a system with intermittent high-variance spikes in steering MI
+    (e.g., news/volatility events) that temporarily suppress the steer channel
+    without constituting genuine collapse. Designed to test whether the
+    persistence filter and null-correction correctly reject transient drops.
+
+    Expected: FAWP NOT detected.
+
+    Example
+    -------
+        from fawp_index.benchmarks import spiky_false_positive
+        r = spiky_false_positive()
+        r.verify()
+        r.plot()
+    """
+    name        = "spiky_false_positive"
+    description = ("Intermittent steering spikes mimic collapse transiently. "
+                   "Persistence filter and null correction should reject false detection.")
+
+    if simulate:
+        return _simulate_case(
+            name=name, description=description, expected_fawp=False,
+            sim_kwargs=dict(a=0.97, K=0.6, delta_pred=20, n_trials=40,
+                            n_steps=600, seed=seed),
+            tau_grid=list(range(0, 35)),
+        )
+
+    rng = np.random.default_rng(seed)
+    tau = np.arange(0, 35)
+
+    # Steering: healthy baseline with intermittent spikes down
+    base_steer = 0.8 + rng.normal(0, 0.04, len(tau))
+    spikes = np.zeros(len(tau))
+    for spike_tau in [8, 18, 27]:          # three transient drops
+        spikes += -0.75 * np.exp(-0.5 * ((tau - spike_tau) / 1.2) ** 2)
+    steer = np.maximum(0, base_steer + spikes)
+
+    # Prediction: roughly constant, also spiky
+    pred = 0.6 + rng.normal(0, 0.04, len(tau))
+    pred = np.maximum(0, pred)
+
+    # Failure: stable system, no cliff
+    fail = np.full(len(tau), 0.02) + rng.normal(0, 0.005, len(tau))
+    fail = np.clip(fail, 0, 0.1)
+
+    odw = _run_detector(tau, pred, steer, fail)
+
+    passed  = not odw.fawp_found   # expect no detection
+    verdict = (
+        "Correctly rejected spiky false-positive — persistence filter held"
+        if passed else
+        f"False positive detected: ODW={odw.odw_start}-{odw.odw_end} — check epsilon/persistence"
+    )
+    return BenchmarkResult(
+        name=name, description=description, expected_fawp=False,
+        tau=tau, pred_mi=pred, steer_mi=steer, fail_rate=fail,
+        odw_result=odw, passed=passed, verdict=verdict,
+    )

@@ -62,19 +62,17 @@ from __future__ import annotations
 import json
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
-from datetime import date as _date, datetime, timedelta
+from dataclasses import dataclass
+from datetime import date as _date, datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
-import numpy as np
 import pandas as pd
 
 from .market import (
     FAWPMarketScanner,
     MarketScanConfig,
     MarketScanSeries,
-    scan_fawp_market,
 )
 
 from fawp_index import __version__ as _VERSION

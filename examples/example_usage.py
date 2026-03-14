@@ -11,7 +11,6 @@ Or via PyPI:
     python example_usage.py
 """
 
-import numpy as np
 from fawp_index import FAWPAlphaIndex
 from fawp_index.io.feeds import load_synthetic_demo
 

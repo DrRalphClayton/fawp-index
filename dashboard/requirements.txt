@@ -1,4 +1,4 @@
-fawp-index>=0.11.0
+fawp-index>=0.13.0
 streamlit>=1.30
 matplotlib>=3.4
 yfinance>=0.2

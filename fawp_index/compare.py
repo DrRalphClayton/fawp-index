@@ -31,7 +31,7 @@ Ralph Clayton (2026) · https://doi.org/10.5281/zenodo.18673949
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any, List, Optional, Tuple, Union

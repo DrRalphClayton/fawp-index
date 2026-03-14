@@ -28,14 +28,13 @@ Usage:
 """
 
 import argparse
-import numpy as np
 import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
 
 # Allow running from examples/ directly
 
-from fawp_index.data import E8_DATA, E8_CONFIRM_FULL, E8_SIGNIFICANCE
+from fawp_index.data import E8_DATA, E8_CONFIRM_FULL
 
 
 # ─── E8 configuration (from E8_final_config.py) ──────────────────────────────

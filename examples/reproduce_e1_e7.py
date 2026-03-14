@@ -8,7 +8,6 @@ Usage:
 Ralph Clayton (2026) — doi:10.5281/zenodo.18663547
 """
 
-import sys
 import argparse
 import numpy as np
 

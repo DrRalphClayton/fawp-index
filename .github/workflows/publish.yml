@@ -1,5 +1,6 @@
-# Publish to PyPI on every version tag: git tag v0.10.0 && git push --tags
-name: Publish to PyPI
+# Publishes to PyPI and creates a GitHub Release on every version tag.
+# Trigger: git tag v0.13.0 && git push --tags
+name: Publish
 
 on:
   push:
@@ -7,6 +8,7 @@ on:
       - "v*.*.*"
 
 jobs:
+  # ── 1. Run full test matrix ───────────────────────────────────────────────
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -26,15 +28,18 @@ jobs:
           pip install -e ".[test]"
           pytest tests/ -v --tb=short
 
-  build-and-publish:
+  # ── 2. Build, publish to PyPI, create GitHub Release ─────────────────────
+  release:
     needs: test
     runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write   # OIDC trusted publishing to PyPI
+      contents: write   # create GitHub Release
+
     environment:
       name: pypi
       url: https://pypi.org/project/fawp-index/
-
-    permissions:
-      id-token: write   # required for trusted publishing (OIDC)
 
     steps:
       - uses: actions/checkout@v4
@@ -53,5 +58,48 @@ jobs:
       - name: Check dist with twine
         run: twine check dist/*
 
-      - name: Publish to PyPI (trusted publishing)
+      - name: Publish to PyPI (trusted publishing / OIDC)
         uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Extract release notes from CHANGELOG.md
+        id: changelog
+        run: |
+          # Pull the version from the tag (strip leading 'v')
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+          # Extract the section for this version from CHANGELOG.md
+          # Section starts with "## [X.Y.Z]" and ends at the next "## [" or EOF
+          python3 - << 'PYEOF'
+          import re, os, sys
+
+          version = os.environ["GITHUB_REF_NAME"].lstrip("v")
+          changelog = open("CHANGELOG.md").read()
+
+          # Find the block for this version
+          pattern = rf"## \[{re.escape(version)}\].*?(?=\n## \[|\Z)"
+          match = re.search(pattern, changelog, re.DOTALL)
+
+          if match:
+              notes = match.group(0).strip()
+          else:
+              notes = f"Release v{version}.\n\nSee [CHANGELOG.md](CHANGELOG.md) for full details."
+
+          # Write to file so the next step can read it cleanly
+          with open("release_notes.md", "w") as f:
+              f.write(notes)
+
+          print(f"Extracted {len(notes)} chars of release notes for v{version}")
+          PYEOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "fawp-index ${{ github.ref_name }}"
+          body_path: release_notes.md
+          draft: false
+          prerelease: false
+          files: |
+            dist/*.whl
+            dist/*.tar.gz

@@ -5,7 +5,13 @@ Ralph Clayton (2026) — DOI: https://doi.org/10.5281/zenodo.18673949
 """
 
 import numpy as np
-from dataclasses import dataclass, field
+from fawp_index.constants import (
+    ETA_PRED_CORRECTED, EPSILON_STEERING_CORRECTED,
+    PERSISTENCE_WINDOW_M, KAPPA_RESONANCE,
+    BETA_NULL_QUANTILE, DELTA_LOG_SMOOTH, TAU_MIN,
+    FLAGSHIP_DELTA_PRED,
+)
+from dataclasses import dataclass
 from typing import Optional, List
 from .estimators import null_corrected_mi, mi_from_arrays
 
@@ -74,13 +80,13 @@ class FAWPAlphaIndex:
 
     def __init__(
         self,
-        eta: float = 1e-4,
-        epsilon: float = 1e-4,
-        m_persist: int = 5,
-        kappa: float = 1.0,
-        beta: float = 0.99,
+        eta: float = ETA_PRED_CORRECTED,
+        epsilon: float = EPSILON_STEERING_CORRECTED,
+        m_persist: int = PERSISTENCE_WINDOW_M,
+        kappa: float = KAPPA_RESONANCE,
+        beta: float = BETA_NULL_QUANTILE,
         n_null: int = 200,
-        delta: float = 1e-6,
+        delta: float = DELTA_LOG_SMOOTH,
         seed: int = 42,
     ):
         self.eta = eta
@@ -118,7 +124,7 @@ class FAWPAlphaIndex:
         action_series: np.ndarray,
         obs_series: np.ndarray,
         tau_grid: Optional[List[int]] = None,
-        delta_pred: int = 20,
+        delta_pred: int = FLAGSHIP_DELTA_PRED,
         verbose: bool = False,
     ) -> FAWPResult:
         """

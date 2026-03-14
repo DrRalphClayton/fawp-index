@@ -1,15 +1,17 @@
 # fawp-index
 
 [![PyPI version](https://badge.fury.io/py/fawp-index.svg)](https://badge.fury.io/py/fawp-index)
+[![PyPI downloads](https://img.shields.io/pypi/dm/fawp-index.svg)](https://pypi.org/project/fawp-index/)
+[![Python 3.9–3.12](https://img.shields.io/badge/python-3.9–3.12-blue.svg)](https://www.python.org/downloads/)
+[![CI](https://github.com/DrRalphClayton/fawp-index/actions/workflows/ci.yml/badge.svg)](https://github.com/DrRalphClayton/fawp-index/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18673949.svg)](https://doi.org/10.5281/zenodo.18673949)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
 ---
 
 ## Your model still predicts. But you've already lost control.
 
-**fawp-index** detects the moment when a system crosses into the
+**fawp-index** detects the moment a system crosses into the
 *Information-Control Exclusion Principle* regime — where **predictive
 information persists** but **the ability to act on it has collapsed**.
 
@@ -20,6 +22,13 @@ information persists** but **the ability to act on it has collapsed**.
 | 🌊 Weather / climate | Forecast skill | Intervention window |
 | 🌍 Seismic | Precursor signal | Stress release control |
 | 🤖 ML systems | Model predictions | Ability to retrain / intervene |
+
+---
+
+## Live demo
+
+**[fawp-scanner.info](https://fawp-scanner.info)** — interactive dashboard running on live data.
+No install required. Scan equities, crypto, and sectors in your browser.
 
 ---
 
@@ -34,32 +43,16 @@ pip install "fawp-index[all]"            # everything
 
 ---
 
-## What's in the package
-
-| Module | What it does |
-|--------|-------------|
-| `fawp_index` | Core FAWP detector, ODW detection, DataFrame API |
-| `fawp_index.market` | Rolling FAWP scan on price / volume data |
-| `fawp_index.watchlist` | Multi-asset, multi-timeframe watchlist scanner |
-| `fawp_index.alerts` | Telegram / Discord / email / webhook alert engine |
-| `fawp_index.significance` | Bootstrap significance testing |
-| `fawp_index.compare` | Side-by-side comparison of two detections |
-| `fawp_index.benchmarks` | Five canonical ground-truth benchmark cases |
-| `fawp_index.report` | PDF report generator |
-| `dashboard/app.py` | Streamlit visual dashboard |
-| `fawp-index` CLI | Six subcommands (detect / market / watchlist / significance / benchmarks / version) |
-
----
-
 ## 60-second quickstart
 
 ```python
 import numpy as np
 from fawp_index import FAWPAlphaIndex
 
+# Simulate: strong prediction, collapsed steering = FAWP
 pred   = np.random.randn(5000)
-future = pred[20:] + np.random.randn(4980) * 0.3
-action = np.random.randn(4980) * 0.001   # near-zero = FAWP
+future = pred[20:] + np.random.randn(4980) * 0.3   # forecastable
+action = np.random.randn(4980) * 0.001              # near-zero = no steering
 obs    = np.random.randn(4980) * 0.1
 
 result = FAWPAlphaIndex().compute(pred[:4980], future, action, obs)
@@ -67,11 +60,49 @@ print(result.summary())
 result.plot()   # pip install "fawp-index[plot]"
 ```
 
+Output:
+```
+==================================================
+FAWP Alpha Index v2.1 — Results Summary
+==================================================
+Agency Horizon (tau_h):  1
+Peak Alpha Index:        0.2847
+Peak Alpha at tau:       3
+FAWP regime detected:   YES
+FAWP tau range:          [1, 2, 3, 4, 5]
+==================================================
+```
+
+---
+
+## Run the benchmarks (zero data needed)
+
+The fastest way to see it work:
+
+```bash
+pip install "fawp-index[plot]"
+python -c "
+from fawp_index import run_benchmarks
+suite = run_benchmarks()
+print(suite.summary())
+suite.verify_all()
+"
+```
+
+```
+Case                  Expected   Detected   Result
+----------------------------------------------------
+clean_control         FAWP       FAWP       ✅ PASS
+prediction_only       none       none       ✅ PASS
+control_only          none       none       ✅ PASS
+noisy_false_positive  none       none       ✅ PASS
+delayed_collapse      FAWP       FAWP       ✅ PASS
+All 5 assertions passed.
+```
+
 ---
 
 ## Market scanner
-
-Scan a price CSV for FAWP regimes across a rolling window:
 
 ```python
 import pandas as pd
@@ -82,30 +113,22 @@ scan = scan_fawp_market(df, ticker="SPY", close_col="Close", volume_col="Volume"
 
 print(scan.summary())
 scan.plot(prices=df["Close"])
-scan.to_html("spy_fawp.html")   # self-contained HTML report
-scan.to_csv("spy_fawp.csv")
+scan.to_html("spy_fawp.html")
 ```
 
 **Financial interpretation:**
 - **pred channel** `I(returnₜ ; returnₜ₊Δ)` — is the market still forecastable?
 - **steer channel** `I(signed_flowₜ ; returnₜ₊τ)` — do your orders still move price?
-- **FAWP window** — yes you can forecast direction, but your orders no longer move price
-
-Works without volume (falls back to lagged-return autocorrelation).
+- **FAWP window** — you can forecast direction, but your orders no longer move price
 
 ---
 
 ## Watchlist scanner
 
-Scan a whole watchlist and rank every asset by FAWP signal:
-
 ```python
 from fawp_index.watchlist import scan_watchlist
 
-# With your own DataFrames:
-result = scan_watchlist({"SPY": spy_df, "QQQ": qqq_df, "GLD": gld_df, "BTC": btc_df})
-
-# Or fetch automatically with yfinance:
+# Fetch and scan automatically via yfinance:
 result = scan_watchlist(
     ["SPY", "QQQ", "GLD", "BTC-USD", "ETH-USD"],
     period     = "2y",
@@ -115,25 +138,92 @@ result = scan_watchlist(
 result.rank_by("score")        # strongest current regime score
 result.rank_by("gap")          # widest leverage gap (bits)
 result.rank_by("persistence")  # longest active regime
-result.rank_by("freshness")    # most recent new signal
 result.active_regimes()        # only currently flagged assets
 result.top_n(5, "score")
 
 result.to_html("watchlist.html")
-result.to_csv("watchlist.csv")
-result.to_json("watchlist.json")
+```
+
+---
+
+## Saved watchlists
+
+```bash
+# Create and persist named watchlists
+fawp-watchlist create tech AAPL MSFT NVDA AMD
+fawp-watchlist create crypto BTC-USD ETH-USD SOL-USD --period 1y
+fawp-watchlist scan tech --leaderboard --explain --out tech.html
+fawp-watchlist list
+fawp-watchlist show tech
+```
+
+---
+
+## Leaderboard
+
+```python
+from fawp_index.leaderboard import Leaderboard
+
+result = scan_watchlist(["SPY", "QQQ", "GLD", "BTC-USD"], period="2y")
+lb = Leaderboard.from_watchlist(result)
+
+print(lb.summary())
+lb.to_html("leaderboard.html")
+```
+
+Four ranked categories: **Top FAWP** · **Rising Risk** · **Collapsing Control** · **Strongest ODW**
+
+---
+
+## Explain score
+
+```python
+from fawp_index.explain import explain_asset
+
+result = scan_watchlist(["SPY", "QQQ"], period="2y")
+top = result.rank_by("score")[0]
+print(explain_asset(top))
+```
+
+```
+============================================================
+  SPY  [1d]
+============================================================
+  FAWP Score   : 81/100
+  Status       : 🔴 HIGH  —  FAWP ACTIVE  (12 days)
+------------------------------------------------------------
+  Prediction   : elevated (0.142 bits)
+  Steering     : collapsed (0.0001 bits ≈ zero)
+  Leverage gap : large (0.141 bits)
+  ODW          : detected (τ = 1–12)
+------------------------------------------------------------
+  Why flagged:
+    • FAWP active 12 days — score rising 3 consecutive windows
+    • Steering MI below ε at 11 of 12 tau values
+    • Leverage gap 0.141 bits
+    • ODW spans 12 tau steps (τ 1–12)
+------------------------------------------------------------
+  Recommendation:
+  Prediction persists but execution edge has collapsed.
+  Reduce size or investigate crowding / latency conditions.
+============================================================
 ```
 
 ---
 
 ## Alerts
 
-Fire alerts the moment a regime starts, ends, or crosses a threshold:
-
 ```python
-from fawp_index.alerts import AlertEngine
+from fawp_index.alerts import AlertEngine, AlertSeverity
 
-engine = AlertEngine(gap_threshold=0.05, state_path="fawp_state.json")
+engine = AlertEngine(
+    gap_threshold=0.05,
+    cooldown_hours=4,                        # suppress repeats within 4h
+    min_consecutive_windows=2,               # only fire after 2 flagged windows
+    score_change_threshold=0.02,             # only if score changed ≥ 0.02
+    min_severity=AlertSeverity.MEDIUM,       # ignore LOW signals
+    state_path="fawp_state.json",
+)
 engine.add_terminal()
 engine.add_telegram(token="BOT_TOKEN", chat_id="CHAT_ID")
 engine.add_discord(webhook_url="https://discord.com/api/webhooks/...")
@@ -142,18 +232,13 @@ engine.add_email(smtp_host="smtp.gmail.com", username="you@gmail.com",
 engine.add_webhook("https://hooks.slack.com/services/...")
 
 result = scan_watchlist(dfs)
-alerts = engine.check(result)       # NEW_FAWP / REGIME_END / GAP_THRESHOLD
-engine.daily_summary(result)        # condensed digest
+alerts = engine.check(result)
+engine.daily_summary(result)
 ```
-
-**State-aware:** `NEW_FAWP` fires once when a regime is first detected, not on
-every subsequent scan. Set `state_path` to persist state across runs.
 
 ---
 
 ## Significance testing
-
-Test whether a detected regime is statistically significant:
 
 ```python
 from fawp_index import ODWDetector, fawp_significance
@@ -164,23 +249,17 @@ sig = fawp_significance(odw, n_bootstrap=200)
 print(sig.summary())
 # p_fawp=1.000  p_null=0.145  significant=YES
 # ci_tau_h=[31,31]  ci_peak_gap=[1.538, 1.562] bits
-
-sig.to_html("significance.html")
-sig.plot()
 ```
 
 ---
 
 ## Benchmark suite
 
-Five canonical ground-truth cases that verify the detector is working:
-
 ```python
 from fawp_index import run_benchmarks
 
 suite = run_benchmarks()
-print(suite.summary())
-suite.verify_all()              # raises if any case fails
+suite.verify_all()
 suite.to_html("benchmarks.html")
 ```
 
@@ -196,19 +275,26 @@ suite.to_html("benchmarks.html")
 
 ## Dashboard
 
-Visual five-tab tool — Scanner, Curves, Heatmap, Significance, Export:
-
 ```bash
 pip install "fawp-index[dashboard]"
 fawp-dashboard                     # opens on http://localhost:8501
 
-# Or run directly from the repo:
+# Or from repo:
 cd dashboard && streamlit run app.py
 ```
 
+**Dashboard features (v0.13.0):**
+- Severity pills (FAWP / HIGH / WATCH / CLEAR) with pulsing indicators
+- Sparkline score trend per asset with ▲/▼ arrows
+- ODW proportional bar showing window position in τ range
+- Filter bar (All / FAWP only / Watching / Rising)
+- Inline "Why flagged?" explain cards
+- Mini leaderboard (Top FAWP · Rising Risk · Collapsing Control · Strongest ODW)
+- Scan metadata: timestamp, duration, ε, window, τmax
+
 ---
 
-## Command line
+## CLI
 
 ```bash
 # Detect FAWP in a CSV:
@@ -217,9 +303,15 @@ fawp-index detect   data.csv --state price --action trade_size --plot
 # Rolling market scan:
 fawp-index market   SPY.csv --close Close --volume Volume --out report.html
 
-# Scan a whole watchlist:
+# Scan a watchlist:
 fawp-index watchlist spy.csv qqq.csv gld.csv --labels SPY QQQ GLD --out wl.html
-fawp-index watchlist *.csv --rank-by gap --top 5
+
+# Scan with leaderboard + explain:
+fawp-scan --preset equities --leaderboard --explain
+
+# Saved watchlists:
+fawp-watchlist create tech AAPL MSFT NVDA AMD
+fawp-watchlist scan tech --rank-by gap --out tech.html
 
 # Significance test:
 fawp-index significance data.csv --state price --action trade
@@ -248,55 +340,45 @@ df_annotated[df_annotated["fawp_in_regime"]]
 
 ---
 
-## Sklearn compatible
+## Calibration constants
+
+All calibration anchors are in `fawp_index.constants`, derived directly from the published papers:
 
 ```python
-from fawp_index.sklearn_api import FAWPTransformer
-from sklearn.pipeline import Pipeline
-
-pipe = Pipeline([("fawp", FAWPTransformer(pred_col=0, action_col=1, delta=20))])
-pipe.fit(X)
-```
-
----
-
-## Reproduce published figures
-
-The E8 experimental data is bundled with the package:
-
-```python
-from fawp_index import ODWDetector
-odw = ODWDetector.from_e9_2_data()
-odw.plot()
-```
-
-To reproduce full figure sets, clone the repo and run from there:
-
-```bash
-git clone https://github.com/DrRalphClayton/fawp-index
-cd fawp-index
-python examples/reproduce_e8.py --save
-python examples/reproduce_e1_e7.py --save
+from fawp_index.constants import (
+    EPSILON_STEERING_RAW,      # 0.01 bits — raw steering threshold (E8/E9 standard)
+    EPSILON_STEERING_CORRECTED,# 1e-4 bits — post-null-correction threshold
+    BETA_NULL_QUANTILE,        # 0.99 — conservative null floor quantile
+    PERSISTENCE_WINDOW_M,      # 5 — Sm(τ) window width
+    PERSISTENCE_RULE_M,        # 3 — m-of-n gate (E9.1 confirmed)
+    PERSISTENCE_RULE_N,        # 4
+    FLAGSHIP_A,                # 1.02 — E8/E9 canonical unstable regime
+    FLAGSHIP_K,                # 0.8
+    TAU_PLUS_H_E9,             # 31 — E9.2 agency horizon
+    TAU_F_E9,                  # 36 — E9.2 functional cliff
+    PEAK_GAP_BITS_E9,          # 1.55 bits — E9.2 peak leverage gap
+)
 ```
 
 ---
 
 ## The mathematics
 
-The **FAWP Alpha Index v2.1**:
+The **FAWP Alpha Index v2.1** (SECRET Eq. 9):
 
 ```
-α₂(τ) = I[τ≥1] · g(τ) · (Sₘ(τ) − Ĩ_steer(τ)) · (1 + κ · R_log(τ))
+α₂(τ) = 𝟙[τ≥1] · g(τ) · (Sₘ(τ) − Ĩ_steer(τ)) · (1 + κ · R_log(τ))
 ```
 
-- `g(τ)` — gate: fires when pred MI > η AND steer MI ≤ ε
-- `Sₘ(τ)` — windowed-min corrected predictive MI (persistence)
+- `g(τ)` — gate: fires when `Sₘ(τ) > η` AND `Ĩ_steer(τ) ≤ ε`
+- `Sₘ(τ)` — windowed-min corrected predictive MI (multi-step persistence)
 - `Ĩ_steer(τ)` — null-corrected steering MI
 - `R_log(τ)` — log-slope resonance amplifier near the horizon
+- Calibrated: β=0.99, m=5, η=ε=10⁻⁴ bits, δ=10⁻⁶
 
 The **agency horizon τ_h** is where steering MI first falls below ε.
-Near τ_h, predictive MI does not fall — it surges. This is the empirical
-signature of the Information-Control Exclusion Principle.
+Near τ_h, predictive MI surges — the empirical signature of the
+Information-Control Exclusion Principle.
 
 ---
 
@@ -307,7 +389,7 @@ signature of the Information-Control Exclusion Principle.
   author  = {Ralph Clayton},
   title   = {fawp-index: Information-Control Exclusion Principle detector},
   year    = {2026},
-  version = {0.11.0},
+  version = {0.13.0},
   url     = {https://github.com/DrRalphClayton/fawp-index},
   doi     = {10.5281/zenodo.18673949}
 }
@@ -324,12 +406,13 @@ signature of the Information-Control Exclusion Principle.
 
 ## Links
 
+- 🌐 **Live demo:** [fawp-scanner.info](https://fawp-scanner.info)
 - 📦 **PyPI:** [pypi.org/project/fawp-index](https://pypi.org/project/fawp-index/)
 - 📂 **GitHub:** [github.com/DrRalphClayton/fawp-index](https://github.com/DrRalphClayton/fawp-index)
 - 📄 **Paper (E1–E7):** [doi:10.5281/zenodo.18663547](https://doi.org/10.5281/zenodo.18663547)
 - 📄 **Paper (E8):** [doi:10.5281/zenodo.18673949](https://doi.org/10.5281/zenodo.18673949)
 - 📗 **Book:** [*Forecasting Without Power*](https://www.amazon.com/dp/B0GS1ZVNM7/) — Ralph Clayton (2026)
-- 📊 **Docs:** [`docs/`](docs/) — market, watchlist, alerts, significance, benchmarks, dashboard
+- 📊 **Docs:** [`docs/`](docs/) — quickstart, examples, market, watchlist, alerts, significance, benchmarks, dashboard
 
 ---
 
@@ -337,10 +420,12 @@ signature of the Information-Control Exclusion Principle.
 
 | File | Contents |
 |------|---------|
-| [`docs/market.md`](docs/market.md) | Market scanner API + parameters |
+| [`docs/quickstart.md`](docs/quickstart.md) | Getting started guide |
+| [`docs/examples.md`](docs/examples.md) | Example gallery — common use cases |
+| [`docs/market.md`](docs/market.md) | Market scanner API |
 | [`docs/watchlist.md`](docs/watchlist.md) | Watchlist scanner + ranking |
 | [`docs/alerts.md`](docs/alerts.md) | Alert engine + channel setup |
-| [`docs/significance.md`](docs/significance.md) | Significance testing methods |
+| [`docs/significance.md`](docs/significance.md) | Significance testing |
 | [`docs/benchmarks.md`](docs/benchmarks.md) | Benchmark cases + verification |
 | [`docs/dashboard.md`](docs/dashboard.md) | Dashboard install + deploy |
 

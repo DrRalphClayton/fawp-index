@@ -13,9 +13,8 @@ Ralph Clayton (2026) — doi:10.5281/zenodo.18673949
 """
 
 import numpy as np
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, List
-import warnings
 
 
 @dataclass

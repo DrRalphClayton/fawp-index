@@ -1,6 +1,5 @@
 """tests/test_oats.py — AgencyHorizon, ControlCliff, CapacitySurface tests."""
 import numpy as np
-import pytest
 from fawp_index.oats import AgencyHorizon, DistributionalRobustness
 from fawp_index.capacity import CapacitySurface
 from fawp_index.simulate import ControlCliff

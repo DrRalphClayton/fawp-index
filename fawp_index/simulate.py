@@ -9,9 +9,13 @@ Ralph Clayton (2026) — doi:10.5281/zenodo.18673949
 """
 
 import numpy as np
-from dataclasses import dataclass, field
+from fawp_index.constants import (
+    FLAGSHIP_A, FLAGSHIP_K, FLAGSHIP_DELTA_PRED,
+    FLAGSHIP_N_TRIALS, FLAGSHIP_X_FAIL, FLAGSHIP_SIGMA_PROC,
+    FLAGSHIP_U_MAX, EPSILON_STEERING_RAW,
+)
+from dataclasses import dataclass
 from typing import Optional, List, Dict
-import warnings
 
 
 @dataclass
@@ -134,17 +138,17 @@ class FAWPSimulator:
 
     def __init__(
         self,
-        a: float = 1.02,
-        K: float = 0.8,
-        delta_pred: int = 20,
-        n_trials: int = 100,
+        a: float = FLAGSHIP_A,
+        K: float = FLAGSHIP_K,
+        delta_pred: int = FLAGSHIP_DELTA_PRED,
+        n_trials: int = FLAGSHIP_N_TRIALS,
         n_steps: int = 1000,
-        x_fail: float = 500.0,
-        sigma_proc: float = 1.0,
+        x_fail: float = FLAGSHIP_X_FAIL,
+        sigma_proc: float = FLAGSHIP_SIGMA_PROC,
         sigma_obs_base: float = 0.1,
         alpha_obs: float = 0.001,
-        u_max: float = 10.0,
-        epsilon: float = 0.01,
+        u_max: float = FLAGSHIP_U_MAX,
+        epsilon: float = EPSILON_STEERING_RAW,
         seed: int = 42,
     ):
         self.a = a
@@ -495,9 +499,9 @@ class ControlCliff:
 
     def __init__(
         self,
-        a: float = 1.02,
-        K: float = 0.8,
-        sigma_proc: float = 1.0,
+        a: float = FLAGSHIP_A,
+        K: float = FLAGSHIP_K,
+        sigma_proc: float = FLAGSHIP_SIGMA_PROC,
         sigma0_sq: float = 0.01,
         alpha: float = 0.001,
         P: float = 10.0,

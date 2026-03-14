@@ -15,6 +15,9 @@ Ralph Clayton (2026) — doi:10.5281/zenodo.18663547
 """
 
 import numpy as np
+from fawp_index.constants import (
+    EPSILON_STEERING_RAW, PERSISTENCE_RULE_M, PERSISTENCE_RULE_N,
+)
 import pandas as pd
 from dataclasses import dataclass
 from typing import Optional, Tuple
@@ -120,10 +123,10 @@ class ODWDetector:
 
     def __init__(
         self,
-        epsilon: float = 0.01,
+        epsilon: float = EPSILON_STEERING_RAW,
         fail_rate_cliff: float = 0.99,
-        persistence_m: int = 3,
-        persistence_n: int = 4,
+        persistence_m: int = PERSISTENCE_RULE_M,
+        persistence_n: int = PERSISTENCE_RULE_N,
         min_tau: int = 1,
     ):
         self.epsilon = epsilon
@@ -210,9 +213,9 @@ class ODWDetector:
     def from_e9_2_data(
         cls,
         steering: str = 'u',
-        epsilon: float = 0.01,
-        persistence_m: int = 3,
-        persistence_n: int = 4,
+        epsilon: float = EPSILON_STEERING_RAW,
+        persistence_m: int = PERSISTENCE_RULE_M,
+        persistence_n: int = PERSISTENCE_RULE_N,
     ) -> ODWResult:
         """
         Convenience: run ODW detection on bundled E9.2 aggregate curves.

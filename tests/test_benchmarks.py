@@ -1,13 +1,13 @@
-"""Tests for fawp_index.benchmarks — all five canonical cases."""
+"""Tests for fawp_index.benchmarks — eight canonical cases."""
 
 import json
 import pytest
-from pathlib import Path
 
 from fawp_index.benchmarks import (
-    run_all, BenchmarkSuite, BenchmarkResult, BenchmarkFailure,
+    run_all, BenchmarkSuite, BenchmarkFailure,
     clean_control, prediction_only, control_only,
     noisy_false_positive, delayed_collapse,
+    gradual_fade, multi_regime, spiky_false_positive,
 )
 
 
@@ -79,17 +79,39 @@ class TestCases:
         assert r.sim_result is None
 
 
+    def test_gradual_fade_passes(self):
+        r = gradual_fade()
+        assert r.passed
+        assert r.odw_result.fawp_found
+        assert r.expected_fawp is True
+        r.verify()
+
+    def test_multi_regime_passes(self):
+        r = multi_regime()
+        assert r.passed
+        assert r.odw_result.fawp_found
+        assert r.expected_fawp is True
+        r.verify()
+
+    def test_spiky_false_positive_passes(self):
+        r = spiky_false_positive()
+        assert r.passed
+        assert not r.odw_result.fawp_found
+        assert r.expected_fawp is False
+        r.verify()
+
+
 # ── BenchmarkSuite ───────────────────────────────────────────────────────────
 
 class TestSuite:
     def test_run_all_returns_suite(self):
         suite = run_all()
         assert isinstance(suite, BenchmarkSuite)
-        assert len(suite.results) == 5
+        assert len(suite.results) == 8
 
     def test_all_pass(self):
         suite = run_all()
-        assert suite.n_passed == 5
+        assert suite.n_passed == 8
         assert suite.n_failed == 0
 
     def test_verify_all(self):
@@ -101,17 +123,17 @@ class TestSuite:
         s = suite.summary()
         assert "clean_control" in s
         assert "PASS" in s
-        assert "5" in s
+        assert "8" in s  # 8 total cases
 
     def test_to_json(self, tmp_path):
         suite = run_all()
         p = tmp_path / "bench.json"
         suite.to_json(p)
         data = json.loads(p.read_text())
-        assert data["n_passed"] == 5
+        assert data["n_passed"] == 8
         assert data["n_failed"] == 0
-        assert len(data["cases"]) == 5
-        assert data["fawp_index_version"] == "0.11.0"
+        assert len(data["cases"]) == 8
+        assert data["fawp_index_version"] == "0.13.0"
 
     def test_to_html(self, tmp_path):
         suite = run_all()
@@ -141,7 +163,7 @@ class TestSuite:
 class TestTopLevelAPI:
     def test_imported_from_package(self):
         from fawp_index import (  # noqa: F811
-            run_benchmarks, BenchmarkSuite, BenchmarkResult,
+            run_benchmarks, BenchmarkSuite,
             BenchmarkFailure, clean_control, prediction_only,
             control_only, noisy_false_positive, delayed_collapse,
         )
@@ -151,4 +173,4 @@ class TestTopLevelAPI:
     def test_run_benchmarks_alias(self):
         from fawp_index import run_benchmarks  # noqa: F811
         suite = run_benchmarks()
-        assert suite.n_passed == 5
+        assert suite.n_passed == 8

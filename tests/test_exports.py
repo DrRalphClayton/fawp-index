@@ -1,7 +1,6 @@
 """Tests for fawp_index.exports — to_json, to_markdown, to_html."""
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -49,7 +48,7 @@ class TestODWExports:
         data = json.loads(p.read_text())
         assert data["result_type"] == "ODWResult"
         assert data["results"]["fawp_found"] is True
-        assert data["meta"]["fawp_index_version"] == "0.11.0"
+        assert data["meta"]["fawp_index_version"] == "0.13.0"
 
     def test_to_json_valid_json(self, odw, tmp_path):
         p = tmp_path / "odw_valid.json"

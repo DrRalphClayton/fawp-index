@@ -5,7 +5,6 @@ import json
 import pytest
 import numpy as np
 import pandas as pd
-from pathlib import Path
 
 from fawp_index.market import (
     FAWPMarketScanner,
@@ -204,7 +203,7 @@ class TestMarketScanSeries:
         p = tmp_path / "scan.json"
         fast_scan.to_json(p)
         d = json.loads(p.read_text())
-        assert d["meta"]["fawp_index_version"] == "0.11.0"
+        assert d["meta"]["fawp_index_version"] == "0.13.0"
         assert d["meta"]["ticker"] == "TEST"
         assert len(d["windows"]) == len(fast_scan.windows)
         assert "fawp_fraction" in d["summary"]

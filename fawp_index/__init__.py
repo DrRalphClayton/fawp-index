@@ -1,15 +1,40 @@
 """
-fawp-index v0.11.0
+fawp-index v0.13.0
 FAWP Alpha Index — Information-Control Exclusion Principle detector.
 Includes full E1-E9 experimental suite data.
 Ralph Clayton (2026) · doi:10.5281/zenodo.18673949
 """
 
-__version__ = "0.11.0"
+__version__ = "0.13.0"
 __author__ = "Ralph Clayton"
 __doi__ = "https://doi.org/10.5281/zenodo.18673949"
 __github__ = "https://github.com/DrRalphClayton/fawp-index"
 
+from .constants import (
+    BETA_NULL_QUANTILE,
+    EPSILON_STEERING_CORRECTED,
+    EPSILON_STEERING_RAW,
+    ETA_PRED_CORRECTED,
+    PERSISTENCE_WINDOW_M,
+    PERSISTENCE_RULE_M,
+    PERSISTENCE_RULE_N,
+    DELTA_LOG_SMOOTH,
+    KAPPA_RESONANCE,
+    TAU_MIN,
+    FLAGSHIP_A,
+    FLAGSHIP_K,
+    FLAGSHIP_DELTA_PRED,
+    FLAGSHIP_N_TRIALS,
+    TAU_PLUS_H_FLAGSHIP,
+    TAU_F_FLAGSHIP,
+    PEAK_PRED_BITS,
+    PRED_AT_CLIFF,
+    TAU_PLUS_H_E9,
+    TAU_F_E9,
+    ODW_START_E9,
+    ODW_END_E9,
+    PEAK_GAP_BITS_E9,
+)
 from .core.alpha_index import FAWPAlphaIndex, FAWPResult
 from .core.alpha_v2 import FAWPAlphaIndexV2, AlphaV2Result
 from .core.estimators import mi_from_arrays, null_corrected_mi, conservative_null_floor
@@ -46,6 +71,7 @@ from .benchmarks import (
     BenchmarkSuite, BenchmarkResult, BenchmarkFailure,
     clean_control, prediction_only, control_only,
     noisy_false_positive, delayed_collapse,
+    gradual_fade, multi_regime, spiky_false_positive,
 )
 from .exports import _inject_exports
 _inject_exports()
@@ -57,6 +83,16 @@ def _plot_result(self, **kwargs):
 FAWPResult.plot = _plot_result
 
 __all__ = [
+    # Calibration constants (paper-derived)
+    "BETA_NULL_QUANTILE",
+    "EPSILON_STEERING_CORRECTED", "EPSILON_STEERING_RAW",
+    "ETA_PRED_CORRECTED",
+    "PERSISTENCE_WINDOW_M", "PERSISTENCE_RULE_M", "PERSISTENCE_RULE_N",
+    "DELTA_LOG_SMOOTH", "KAPPA_RESONANCE", "TAU_MIN",
+    "FLAGSHIP_A", "FLAGSHIP_K", "FLAGSHIP_DELTA_PRED", "FLAGSHIP_N_TRIALS",
+    "TAU_PLUS_H_FLAGSHIP", "TAU_F_FLAGSHIP",
+    "PEAK_PRED_BITS", "PRED_AT_CLIFF",
+    "TAU_PLUS_H_E9", "TAU_F_E9", "ODW_START_E9", "ODW_END_E9", "PEAK_GAP_BITS_E9",
     # Core detector
     "FAWPAlphaIndex", "FAWPResult",
     "FAWPAlphaIndexV2", "AlphaV2Result",
@@ -81,7 +117,9 @@ __all__ = [
     "WatchlistScanner", "scan_watchlist",
     "WatchlistResult", "AssetResult",
     # Alerts
-    "AlertEngine", "FAWPAlert", "AlertType", "AlertSeverity",
+    "AlertEngine", "FAWPAlert", "AlertType", "AlertSeverity", "AlertSeverity",
+    "AlertSeverity",  # re-export
+    "gradual_fade", "multi_regime", "spiky_false_positive",
     # Leaderboard
     "Leaderboard", "LeaderboardEntry",
     # Saved watchlists
@@ -96,6 +134,7 @@ __all__ = [
     "run_benchmarks", "BenchmarkSuite", "BenchmarkResult", "BenchmarkFailure",
     "clean_control", "prediction_only", "control_only",
     "noisy_false_positive", "delayed_collapse",
+    "gradual_fade", "multi_regime", "spiky_false_positive",
     # MI estimators
     # (exports also injected onto result classes: .to_json / .to_markdown / .to_html / .to_dict)
     "mi_from_arrays", "null_corrected_mi", "conservative_null_floor",

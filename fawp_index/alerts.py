@@ -57,7 +57,7 @@ import json
 import smtplib
 import urllib.request
 import urllib.parse
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from email.mime.text import MIMEText
 from enum import Enum
@@ -274,6 +274,144 @@ class _WebhookBackend:
             raise RuntimeError(f"Webhook send failed: {e}") from e
 
 
+class _SlackBackend:
+    """
+    Slack Incoming Webhook backend.
+
+    Sends a rich Slack Block Kit message with severity colour, key numbers,
+    and a direct link to the paper.
+
+    Parameters
+    ----------
+    webhook_url : str
+        Slack Incoming Webhook URL from
+        https://api.slack.com/messaging/webhooks
+
+    Example
+    -------
+        engine = AlertEngine()
+        engine.add_slack("https://hooks.slack.com/services/T.../B.../xxx")
+    """
+    name = "slack"
+
+    _SEVERITY_COLORS = {
+        "CRITICAL": "#C0111A",
+        "HIGH":     "#D4AF37",
+        "MEDIUM":   "#4A7FCC",
+        "LOW":      "#1DB954",
+    }
+
+    def __init__(self, webhook_url: str):
+        self.url = webhook_url
+
+    def _build_blocks(self, alert: FAWPAlert) -> dict:
+        sev     = alert.severity.value if hasattr(alert.severity, "value") else str(alert.severity)
+        color   = self._SEVERITY_COLORS.get(sev, "#888888")
+        odw_str = (f"τ {alert.odw_start}–{alert.odw_end}"
+                   if alert.odw_start is not None else "—")
+        atype   = alert.alert_type.value if hasattr(alert.alert_type, "value") else str(alert.alert_type)
+
+        return {
+            "attachments": [{
+                "color": color,
+                "blocks": [
+                    {
+                        "type": "header",
+                        "text": {
+                            "type": "plain_text",
+                            "text": f"FAWP Alert — {atype}  [{sev}]",
+                        },
+                    },
+                    {
+                        "type": "section",
+                        "fields": [
+                            {"type": "mrkdwn", "text": f"*Asset*\n{alert.ticker} [{alert.timeframe}]"},
+                            {"type": "mrkdwn", "text": f"*Score*\n{alert.score:.4f}"},
+                            {"type": "mrkdwn", "text": f"*Gap*\n{alert.gap_bits:.4f} bits"},
+                            {"type": "mrkdwn", "text": f"*ODW*\n{odw_str}"},
+                        ],
+                    },
+                    {
+                        "type": "context",
+                        "elements": [{
+                            "type": "mrkdwn",
+                            "text": (
+                                f"fawp-index v{_VERSION}  ·  "
+                                f"{alert.timestamp.strftime('%Y-%m-%d %H:%M')}  ·  "
+                                f"<https://doi.org/10.5281/zenodo.18673949|Paper>"
+                            ),
+                        }],
+                    },
+                ],
+            }],
+        }
+
+    def send(self, alert: FAWPAlert):
+        payload = json.dumps(self._build_blocks(alert)).encode()
+        req = urllib.request.Request(
+            self.url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                if r.status not in (200, 201, 204):
+                    raise RuntimeError(f"Slack HTTP {r.status}")
+        except Exception as e:
+            raise RuntimeError(f"Slack send failed: {e}") from e
+
+
+# ── Alert message templates ────────────────────────────────────────────────
+
+_DEFAULT_TEMPLATES: Dict[str, str] = {
+    "NEW_FAWP": (
+        "🔴 NEW FAWP | {ticker} [{timeframe}] | "
+        "score={score:.4f} gap={gap:.4f}b | ODW {odw} | "
+        "severity={severity} | fawp-index v{version}"
+    ),
+    "REGIME_END": (
+        "🟢 REGIME END | {ticker} [{timeframe}] | "
+        "score={score:.4f} | fawp-index v{version}"
+    ),
+    "GAP_THRESHOLD": (
+        "⚡ GAP ALERT | {ticker} [{timeframe}] | "
+        "gap={gap:.4f}b ≥ threshold | score={score:.4f} | "
+        "severity={severity} | fawp-index v{version}"
+    ),
+    "HORIZON_COLLAPSE": (
+        "⚠️  HORIZON | {ticker} [{timeframe}] | "
+        "score={score:.4f} | fawp-index v{version}"
+    ),
+    "DAILY_SUMMARY": (
+        "📋 SUMMARY | {ticker} [{timeframe}] | "
+        "score={score:.4f} | fawp-index v{version}"
+    ),
+}
+
+
+def _render_template(template: str, alert: FAWPAlert) -> str:
+    """Render a message template with alert fields."""
+    odw_str = (f"τ {alert.odw_start}–{alert.odw_end}"
+               if alert.odw_start is not None else "—")
+    atype = alert.alert_type.value if hasattr(alert.alert_type, "value") else str(alert.alert_type)
+    sev   = alert.severity.value   if hasattr(alert.severity,   "value") else str(alert.severity)
+    try:
+        return template.format(
+            ticker    = alert.ticker,
+            timeframe = alert.timeframe,
+            score     = alert.score,
+            gap       = alert.gap_bits,
+            odw       = odw_str,
+            severity  = sev,
+            alert_type= atype,
+            timestamp = alert.timestamp.strftime("%Y-%m-%d %H:%M"),
+            version   = _VERSION,
+        )
+    except KeyError:
+        return alert.message  # fallback to default message
+
+
 class _CallbackBackend:
     """Call a Python function with the alert. Useful for custom integrations."""
     name = "callback"
@@ -334,7 +472,7 @@ class AlertEngine:
         horizon_warn_tau:        Optional[int] = None,
         state_path:              Optional[Union[str, Path]] = None,
         suppress_errors:         bool = True,
-        # ── New in v0.11.0 ───────────────────────────────────────────────
+        # ── New in v0.13.0 ───────────────────────────────────────────────
         cooldown_hours:          float = 0.0,
         min_consecutive_windows: int   = 1,
         score_change_threshold:  float = 0.0,
@@ -374,6 +512,7 @@ class AlertEngine:
         self.min_severity             = min_severity
         self._backends: list          = []
         self._prev_state: Dict[str, dict] = self._load_state()
+        self._templates: Dict[str, str]   = dict(_DEFAULT_TEMPLATES)
 
     # ── Backend registration ─────────────────────────────────────────────────
 
@@ -415,6 +554,58 @@ class AlertEngine:
     ) -> "AlertEngine":
         """POST JSON payload to any webhook URL (Slack, custom, etc.)."""
         self._backends.append(_WebhookBackend(url, headers))
+        return self
+
+    def add_slack(self, webhook_url: str) -> "AlertEngine":
+        """
+        Send rich Block Kit messages to a Slack channel.
+
+        Parameters
+        ----------
+        webhook_url : str
+            Slack Incoming Webhook URL.
+            Create one at https://api.slack.com/messaging/webhooks
+
+        Example
+        -------
+            engine.add_slack("https://hooks.slack.com/services/T.../B.../xxx")
+        """
+        self._backends.append(_SlackBackend(webhook_url))
+        return self
+
+    def set_template(self, alert_type: str, template: str) -> "AlertEngine":
+        """
+        Set a custom message template for an alert type.
+
+        Templates support the following fields::
+
+            {ticker}     — asset ticker symbol
+            {timeframe}  — timeframe string (e.g. "1d")
+            {score}      — regime score (float, use :.4f)
+            {gap}        — leverage gap in bits (float, use :.4f)
+            {odw}        — ODW range string (e.g. "τ 4–12")
+            {severity}   — severity tier (LOW/MEDIUM/HIGH/CRITICAL)
+            {alert_type} — alert type string
+            {timestamp}  — formatted timestamp (YYYY-MM-DD HH:MM)
+            {version}    — fawp-index version
+
+        Parameters
+        ----------
+        alert_type : str
+            One of: NEW_FAWP, REGIME_END, GAP_THRESHOLD,
+            HORIZON_COLLAPSE, DAILY_SUMMARY
+        template : str
+            Format string using the fields above.
+
+        Example
+        -------
+            engine.set_template(
+                "NEW_FAWP",
+                "FAWP detected on {ticker} [{timeframe}] — "
+                "gap {gap:.3f} bits, score {score:.3f}"
+            )
+        """
+        self._templates[alert_type] = template
         return self
 
     def add_callback(self, fn: Callable[[FAWPAlert], None]) -> "AlertEngine":
@@ -507,7 +698,6 @@ class AlertEngine:
                     pass
 
         # Send all queued alerts
-        last_alert_time = now.isoformat() if alerts else None
         for alert in alerts:
             self._dispatch(alert)
 
@@ -584,12 +774,11 @@ class AlertEngine:
     # ── Internals ────────────────────────────────────────────────────────────
 
     def _make_alert(self, asset, alert_type: AlertType, now: datetime) -> FAWPAlert:
-        msg = _fmt_alert(
-            asset.ticker, asset.timeframe, alert_type,
-            asset.latest_score, asset.peak_gap_bits,
-            asset.peak_odw_start, asset.peak_odw_end,
-        )
-        return FAWPAlert(
+        atype_str = alert_type.value if hasattr(alert_type, "value") else str(alert_type)
+        template  = self._templates.get(atype_str, _DEFAULT_TEMPLATES.get(atype_str, ""))
+        sev       = _score_to_severity(float(asset.latest_score))
+        # Build a preliminary alert so _render_template can format it
+        alert = FAWPAlert(
             ticker     = asset.ticker,
             timeframe  = asset.timeframe,
             alert_type = alert_type,
@@ -598,9 +787,15 @@ class AlertEngine:
             odw_start  = asset.peak_odw_start,
             odw_end    = asset.peak_odw_end,
             timestamp  = now,
-            message    = msg,
-            severity   = _score_to_severity(float(asset.latest_score)),
+            message    = "",   # filled below
+            severity   = sev,
         )
+        alert.message = _render_template(template, alert) if template else _fmt_alert(
+            asset.ticker, asset.timeframe, alert_type,
+            asset.latest_score, asset.peak_gap_bits,
+            asset.peak_odw_start, asset.peak_odw_end,
+        )
+        return alert
 
     def _dispatch(self, alert: FAWPAlert):
         for backend in self._backends:
