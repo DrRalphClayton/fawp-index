@@ -45,7 +45,9 @@ if _AUTH_ENABLED:
     require_auth()
 
 # Demo mode state
-_IS_DEMO = st.session_state.get("_demo_mode", False) or _DEMO_MODE
+import os as _os_early
+_FAWP_ENV_DEMO = _os_early.getenv("FAWP_DEMO", "0") in ("1", "true", "yes")
+_IS_DEMO = bool(st.session_state.get("_demo_mode", _FAWP_ENV_DEMO))
 
 _CSS = """
 <style>

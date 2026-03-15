@@ -50,7 +50,11 @@ from .sklearn_api import FAWPTransformer
 from .features import FAWPFeatureImportance
 from .multivariate import MultivariateFAWP, MultivariateFAWPResult
 from .simulate import FAWPSimulator, SimulationResult, ControlCliff, ControlCliffResult
-from .explain import explain, explain_fawp, explain_oats, explain_control_cliff
+from .explain import (
+    explain, explain_fawp, explain_oats, explain_control_cliff,
+    explain_asset, confidence_badge,
+    attribute_gap, attribute_windows, attribution_report,
+)
 from .report import generate_report, FAWPReport
 from .scanner import (
     scan_crypto, scan_equities, scan_sectors, scan_etfs, scan_macro,
@@ -119,6 +123,8 @@ __all__ = [
     "ControlCliff", "ControlCliffResult",
     # Explain / report
     "explain", "explain_fawp", "explain_oats", "explain_control_cliff",
+    "explain_asset", "confidence_badge",
+    "attribute_gap", "attribute_windows", "attribution_report",
     "generate_report", "FAWPReport",
     # Scanner presets
     "scan_crypto", "scan_equities", "scan_sectors", "scan_etfs", "scan_macro",

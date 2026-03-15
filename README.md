@@ -43,22 +43,31 @@ information persists** but **the ability to act on it has collapsed**.
 
 ## What it looks like
 
-**Scanner tab** — severity pills, sparklines, ODW bars:
+<!-- Add dashboard screenshot here: docs/images/scanner_tab.png -->
+<!-- To generate: sign in → run scan on SPY QQQ GLD BTC → screenshot Scanner tab -->
 
-> Each row shows the asset, severity tier (FAWP 🔴 / HIGH / WATCH / CLEAR),
-> a 6-window score sparkline with trend arrow, and a proportional ODW bar
-> showing where in the τ range the detection window sits.
->
-> Click any flagged asset to expand the **"Why flagged?"** card.
+**Scanner tab** — severity pills, sparklines, confidence badges, ODW bars
 
-**Leaderboard** — four ranked categories always visible below the table:
+Each asset row shows:
+- **Severity pill** — FAWP 🔴 / HIGH / WATCH / CLEAR
+- **Score** — regime score (0–1) colour-coded by tier  
+- **Sparkline** — 6-window score trend with ▲/▼ arrow
+- **Confidence badge** — HIGH / MED / LOW based on persistence + ODW concentration
+- **Gap (bits)** — leverage gap magnitude
+- **ODW bar** — proportional bar showing detection window within τ range
 
-> Top FAWP · Rising Risk · Collapsing Control · Strongest ODW
+Click any flagged asset → **"Why flagged?"** expander with full attribution.
 
-**Curves tab** — interactive MI curves, leverage gap fill, ODW shading:
+**Compare tab** — FAWP vs RSI, realised vol, momentum, MA slope
 
-> Select any asset + window. Pred MI (amber) vs Steer MI (blue dashed).
-> Red shading = ODW. Dotted line = ε threshold.
+Forward-return lift at 1 / 5 / 20 bars when each signal is in extreme zone.
+FAWP row highlighted in gold. Export to CSV.
+
+**Validation tab** — forward-return statistics after signal fires
+
+Hit rate · mean return · MAE · MFE · p5/p95 · FAWP vs baseline comparison.
+
+**History tab** — score timeline per asset across all saved scans
 
 ---
 
