@@ -18,7 +18,7 @@
 Scan any stock, ETF, or crypto in your browser.
 Enter tickers → Fetch data → See regime detection in real time.
 
-*Powered by fawp-index v0.18.0 · [pip install it](#install) for full local control*
+*Powered by fawp-index v0.20.0 · [pip install it](#install) for full local control*
 
 </div>
 
@@ -333,7 +333,7 @@ fawp-dashboard                     # opens on http://localhost:8501
 cd dashboard && streamlit run app.py
 ```
 
-**Dashboard features (v0.18.0):**
+**Dashboard features (v0.20.0):**
 - Severity pills (FAWP / HIGH / WATCH / CLEAR) with pulsing indicators
 - Sparkline score trend per asset with ▲/▼ arrows
 - ODW proportional bar showing window position in τ range
@@ -439,7 +439,7 @@ Information-Control Exclusion Principle.
   author  = {Ralph Clayton},
   title   = {fawp-index: Information-Control Exclusion Principle detector},
   year    = {2026},
-  version = {0.18.0},
+  version = {0.20.0},
   url     = {https://github.com/DrRalphClayton/fawp-index},
   doi     = {10.5281/zenodo.18673949}
 }

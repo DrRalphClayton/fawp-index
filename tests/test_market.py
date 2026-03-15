@@ -203,7 +203,7 @@ class TestMarketScanSeries:
         p = tmp_path / "scan.json"
         fast_scan.to_json(p)
         d = json.loads(p.read_text())
-        assert d["meta"]["fawp_index_version"] == "0.18.0"
+        assert d["meta"]["fawp_index_version"] == "0.20.0"
         assert d["meta"]["ticker"] == "TEST"
         assert len(d["windows"]) == len(fast_scan.windows)
         assert "fawp_fraction" in d["summary"]

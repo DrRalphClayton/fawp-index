@@ -4,7 +4,7 @@ All notable changes to fawp-index are documented here.
 
 ---
 
-## [0.18.0] — 2026-03-14
+## [0.20.0] — 2026-03-14
 
 ### Highlights
 - Dashboard UX overhaul — severity pills, sparklines, ODW bars, leaderboard, explain cards

@@ -78,3 +78,37 @@ pip install fawp-index[dashboard]   # no supabase
 Currently all users share the same scan history (`~/.fawp/history/`).
 For per-user isolation, extend `ScanHistory` to use
 `get_user_email()` as a subdirectory prefix.
+
+---
+
+## 6. Run database migrations
+
+In Supabase → SQL Editor → New query, paste and run the contents of:
+
+```
+dashboard/supabase/migrations.sql
+```
+
+This creates three tables with Row Level Security:
+- `fawp_scan_history` — per-user scan snapshots
+- `fawp_watchlists` — per-user named watchlists
+- `fawp_schedules` — scheduled scan configuration
+
+## 7. Set up scheduled scans (optional)
+
+In Render → your service → **Cron Jobs** → New Cron Job:
+
+| Field | Value |
+|-------|-------|
+| Name | FAWP Daily Scan |
+| Command | `python /app/dashboard/cron_scan.py` |
+| Schedule | `0 9 * * 1-5` (9am UTC Mon-Fri) |
+
+Requires `SUPABASE_SERVICE_ROLE_KEY` in environment variables.
+
+## 8. Email alerts (optional)
+
+Deploy a Supabase Edge Function named `send-alert-email`.
+Template: https://supabase.com/docs/guides/functions
+
+The function receives `{to, subject, body}` and sends via your configured SMTP.

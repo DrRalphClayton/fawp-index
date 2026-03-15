@@ -142,6 +142,7 @@ class WatchlistStore:
 
     def show(self, name: str) -> dict:
         """Return the metadata dict for a named watchlist."""
+        self.refresh()
         name = name.strip().lower()
         if name not in self._data:
             raise KeyError(f"Watchlist '{name}' not found.")
@@ -149,9 +150,15 @@ class WatchlistStore:
 
     def list(self) -> List[str]:
         """Return sorted list of all saved watchlist names."""
+        self.refresh()
         return sorted(self._data.keys())
 
+    def refresh(self) -> None:
+        """Reload data from disk (clears in-memory cache)."""
+        self._data = self._load()
+
     def exists(self, name: str) -> bool:
+        self.refresh()
         return name.strip().lower() in self._data
 
     # ── Scan ─────────────────────────────────────────────────────────────────
@@ -238,6 +245,7 @@ class WatchlistStore:
     # ── Summary ──────────────────────────────────────────────────────────────
 
     def summary(self) -> str:
+        self.refresh()
         names = self.list()
         if not names:
             return "No saved watchlists. Use WatchlistStore.create() or fawp-watchlist create."

@@ -1,9 +1,10 @@
 """
-FAWP Dashboard v0.18.0 — Streamlit app
+FAWP Dashboard v0.20.0 — Streamlit app
 ========================================
 Ralph Clayton (2026) · https://doi.org/10.5281/zenodo.18673949
 """
 
+import sys
 import time
 import tempfile
 from pathlib import Path
@@ -12,12 +13,29 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+# Make sibling imports work: streamlit run dashboard/app.py
+_THIS_DIR = Path(__file__).resolve().parent
+if str(_THIS_DIR) not in sys.path:
+    sys.path.insert(0, str(_THIS_DIR))
+
+try:
+    from auth import require_auth, get_user_email, sign_out
+    _AUTH_ENABLED = True
+except Exception:
+    _AUTH_ENABLED = False
+    def require_auth(): pass
+    def get_user_email(): return None
+    def sign_out(): pass
+
 st.set_page_config(
     page_title="FAWP Scanner",
     page_icon="📡",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+if _AUTH_ENABLED:
+    require_auth()
 
 _CSS = """
 <style>
@@ -219,6 +237,25 @@ try:
 except ImportError as e:
     st.error(f"fawp-index not installed: {e}\n\n`pip install fawp-index[plot]`")
     st.stop()
+
+# Per-user storage (Supabase when logged in, local filesystem fallback)
+try:
+    from supabase_store import get_store, send_alert_email
+    _HAS_SUPA_STORE = True
+except ImportError:
+    _HAS_SUPA_STORE = False
+    def get_store():
+        from fawp_index.scan_history import ScanHistory as _SH
+        class _FallbackStore:
+            def save_scan(self, r, label=''):
+                try: _SH().save(r)
+                except Exception: pass
+            def asset_timeline(self, t, tf='1d', last_n=0):
+                return _SH().asset_timeline(t, tf, last_n=last_n)
+            def all_assets(self): return _SH().all_assets()
+            def n_snapshots(self): return _SH().n_snapshots()
+        return _FallbackStore()
+    def send_alert_email(subject, body): return False
 
 
 # ── Dark matplotlib helper ─────────────────────────────────────────────────
@@ -572,14 +609,30 @@ if run_btn or "wl_result" not in st.session_state:
 
 wl             = st.session_state["wl_result"]
 ranked         = wl.rank_by("score")
-# Auto-save to scan history
+# Auto-save to per-user store (Supabase if logged in, local otherwise)
 try:
-    _hist = ScanHistory()
-    _hist.save(wl)
+    get_store().save_scan(wl)
 except Exception:
     pass
 scan_duration  = st.session_state.get("scan_duration", "—")
 scan_timestamp = st.session_state.get("scan_timestamp", "—")
+# Email alert if FAWP fired and user is logged in
+if _AUTH_ENABLED and wl.n_flagged > 0 and run_btn:
+    try:
+        _flagged = ', '.join(
+            f'{a.ticker}[{a.timeframe}]' for a in wl.active_regimes()[:5]
+        )
+        _subj = f'FAWP Alert — {wl.n_flagged} regime(s) active'
+        _body = (
+            f'FAWP Scanner detected {wl.n_flagged} active regime(s):\n\n'
+            f'{_flagged}\n\n'
+            f'Scanned: {scan_timestamp}\n'
+            f'View at: https://fawp-scanner.info\n\n'
+            f'fawp-index v{_FAWP_VERSION}'
+        )
+        send_alert_email(_subj, _body)
+    except Exception:
+        pass
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Tabs
@@ -1095,11 +1148,11 @@ with tab_history:
         "Select an asset to see how its score and regime state evolved."
     )
     try:
-        hist = ScanHistory()
+        hist = get_store()
         n_snaps = hist.n_snapshots()
         st.info(f"{n_snaps} snapshots stored · {hist._dir}")
 
-        all_assets_hist = hist.all_assets()
+        all_assets_hist = hist.all_assets() if hasattr(hist, 'all_assets') else []
         if not all_assets_hist:
             st.warning("No scan history yet. Run a scan to start recording.")
         else:
