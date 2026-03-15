@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fawp-index"
-version = "0.23.0"
+version = "0.27.0"
 description = "FAWP Alpha Index — Information-Control Exclusion Principle detector"
 readme = "README.md"
 license = "MIT"
@@ -39,7 +39,14 @@ plotly  = ["plotly>=5.0"]
 fast    = ["numba>=0.57"]
 report  = ["reportlab>=4.0", "matplotlib>=3.4"]
 finance = ["yfinance>=0.2"]
-weather = ["requests>=2.28"]
+weather = [
+    "requests>=2.28",
+    "openmeteo-requests>=0.3",
+    "requests-cache>=1.0",
+    "retry-requests>=1.0",
+    "xarray>=2023.1",
+    "netcdf4>=1.6",
+]
 sklearn = ["scikit-learn>=1.0"]
 dashboard = [
   "streamlit>=1.30",
@@ -60,6 +67,7 @@ fawp-dashboard = "fawp_index.dashboard_launcher:launch"
 fawp-scan      = "fawp_index.scan_cli:main"
 fawp-watchlist = "fawp_index.watchlist_cli:main"
 fawp-demo      = "fawp_index.demo_launcher:launch_demo"
+fawp-weather   = "fawp_index.weather_cli:main"
 
 [project.urls]
 Homepage   = "https://github.com/DrRalphClayton/fawp-index"
@@ -87,7 +95,7 @@ fawp_index = ["data/*.csv", "data/*.json"]
 
 [tool.ruff]
 line-length = 100
-target-version = "0.23.0"
+target-version = "py39"
 exclude = [
     "build",
     "dist",

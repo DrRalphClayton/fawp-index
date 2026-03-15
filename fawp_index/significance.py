@@ -507,7 +507,7 @@ class FAWPSignificance:
 
     def from_seed_curves(self, odw_result) -> SignificanceResult:
         """
-        Bootstrap significance from bundled E9.2 seed curves CSV.
+        Bootstrap significance from bundled E9.2 seed curves (SPHERE_15 confirmed) CSV.
 
         The seed curves CSV contains 20 independent replicates per tau step.
         For each bootstrap iteration, this method resamples those 20 per-tau
@@ -925,7 +925,7 @@ def fawp_significance(
     Test the significance of a FAWP detection result.
 
     Automatically selects the best method based on what data is provided:
-    - No extra data      → seed_bootstrap (uses bundled E9.2 seed curves)
+    - No extra data      → seed_bootstrap (uses bundled E9.2 seed curves (SPHERE_15 confirmed))
     - pred_raw + steer_raw given → mi_permutation
     - pred_pairs + steer_pairs given → array_permutation (most rigorous)
 

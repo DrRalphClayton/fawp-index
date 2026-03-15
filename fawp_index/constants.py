@@ -6,7 +6,7 @@ All values are derived directly from the published papers:
   VTM   — doi:10.5281/zenodo.18634216
   E1–E7 — doi:10.5281/zenodo.18663547  (Agency Horizon / FORECASTING)
   E8    — doi:10.5281/zenodo.18673949  (Secret Formula / FAWP confirmation)
-  E9    — SPHERE_14 confirmation suite
+  E9    — SPHERE_15 confirmation suite (doi:10.5281/zenodo.18693949 pending)
 
 Do NOT change these without a corresponding paper update.
 Use them as defaults throughout the package so every module
@@ -76,7 +76,7 @@ FLAGSHIP_U_MAX: float = 10.0      # action clip bound
 # Source: E8 table in FAWP paper; E9 SPHERE confirmation
 TAU_PLUS_H_FLAGSHIP: int = 4      # post-zero agency horizon τ⁺ₕ (E8)
 TAU_F_FLAGSHIP: int = 35          # functional failure cliff (E8: fail ≥ 0.99)
-PEAK_PRED_BITS: float = 2.2337    # peak stratified prediction (at τ=9)
+PEAK_PRED_BITS: float = 2.1964    # peak corrected stratified prediction (E9.2, τ=9)
 PRED_AT_CLIFF: float = 1.0110     # prediction at cliff (τ=35)  ← NOTE: 1.0110 not 1.1010
 
 # E9.2 / SPHERE confirmed values (20-seed aggregate, 400 trials/τ)
@@ -84,9 +84,57 @@ TAU_PLUS_H_E9: int = 31           # τ⁺ₕ for both u and ξ steering
 TAU_F_E9: int = 36                # functional cliff in E9
 ODW_START_E9: int = 31            # ODW start τ
 ODW_END_E9: int = 33              # ODW end τ  (width = 3 steps)
-PEAK_GAP_BITS_E9: float = 1.55    # peak leverage gap (E9.2 aggregate)
-MEAN_GAP_U_E9: float = 1.1410     # mean gap inside ODW, u-steering
-MEAN_GAP_XI_E9: float = 1.1256    # mean gap inside ODW, ξ-steering
+PEAK_GAP_BITS_E9_U:  float = 1.5489  # peak leverage gap, u-steering  (E9.2, τ=34)
+PEAK_GAP_BITS_E9_XI: float = 1.5524  # peak leverage gap, ξ-steering  (E9.2, τ=34)
+PEAK_GAP_TAU_E9:     int   = 34      # τ at peak gap                   (E9.2)
+MEAN_GAP_U_E9:   float = 1.1298   # mean gap inside ODW, u-steering  (E9.3 baseline)
+MEAN_GAP_XI_E9:  float = 1.1486   # mean gap inside ODW, ξ-steering  (E9.3 baseline)
+
+# ── E9 suite confirmed anchors (SPHERE_15) ────────────────────────────────
+# Source: E9.1 ablation on E8 seed data
+E91_TAU_PLUS_H: int    = 4       # post-zero horizon (E8 seed, E9.1 ablation)
+E91_TAU_F: int         = 35      # failure cliff
+E91_ODW_START: int     = 4       # ODW start τ
+E91_ODW_END: int       = 34      # ODW end τ  (width = 31 steps)
+E91_ODW_SIZE: int      = 31      # ODW width in delay steps
+E91_MEAN_LEAD: float   = 15.8    # mean lead time to cliff (delay steps)
+E91_FP_RATE: float     = 0.0     # false-positive rate (shuffle + shift nulls)
+
+# E9.3 persistence sweep — baseline 3-of-4 rule (20 seeds)
+E93_MEAN_ODW_START_U:  float = 30.9    # mean ODW start, u-steering
+E93_MEAN_ODW_START_XI: float = 31.0    # mean ODW start, ξ-steering
+E93_MEAN_ODW_END_U:    float = 33.1    # mean ODW end,   u-steering
+E93_MEAN_ODW_END_XI:   float = 33.3    # mean ODW end,   ξ-steering
+E93_MEAN_ODW_SIZE_U:   float = 3.2     # mean ODW width, u-steering
+E93_MEAN_ODW_SIZE_XI:  float = 3.3     # mean ODW width, ξ-steering
+E93_MEAN_TAU_H_U:      float = 30.15   # mean τ⁺ₕ, u-steering
+E93_MEAN_TAU_H_XI:     float = 30.35   # mean τ⁺ₕ, ξ-steering
+
+# E9.4 null-quantile portability — confirmed stable across β ∈ {0.90→0.995}
+E94_BETA_GRID: tuple   = (0.90, 0.95, 0.975, 0.99, 0.995)
+E94_FAWP_RATE: float   = 1.0    # detection rate across full beta grid
+E94_TAU_F: float       = 36.0   # cliff fixed across all β
+
+# E9.5 regime map — flagship basin (a=1.02, K=0.8)
+E95_FAWP_CONFIGS_U:  int   = 10   # FAWP-positive configs (u),  out of 30
+E95_FAWP_CONFIGS_XI: int   = 19   # FAWP-positive configs (ξ),  out of 30
+E95_FLAGSHIP_ODW_U:  tuple = (30.625, 33.5)   # mean ODW, u-steering
+E95_FLAGSHIP_ODW_XI: tuple = (31.0,   33.0)   # mean ODW, ξ-steering
+
+# E9.6 timing — flagship (E9.2 aggregate)
+E96_TAU_ALPHA: int    = 35    # detector peak
+E96_TAU_RISE:  int    = 35    # steepest failure-rate rise
+E96_TAU_F:     int    = 36    # failure cliff
+E96_LEAD_RISE: int    = 0     # lead to steepest rise (τrise − τα)
+E96_LEAD_CLIFF: int   = 1     # lead to cliff         (τf − τα)
+
+# E9.6 perfect-basin timing (5 configs, a=1.02, K∈{0.4,0.6,0.8,1.0,1.2})
+E96_BASIN_MEAN_LEAD_RISE_U:  float = 1.15    # mean lead to rise, u-steering
+E96_BASIN_MEAN_LEAD_RISE_XI: float = 1.025   # mean lead to rise, ξ-steering
+E96_BASIN_MEAN_LEAD_CLIFF_U: float = 2.15    # mean lead to cliff, u-steering
+E96_BASIN_MEAN_LEAD_CLIFF_XI:float = 2.025   # mean lead to cliff, ξ-steering
+E96_BASIN_BEFORE_RISE_RATE:  float = 1.0     # before-or-at-rise rate (both channels)
+E96_BASIN_BEFORE_CLIFF_RATE: float = 1.0     # before-cliff rate      (both channels)
 
 # ── Gaussian channel / OATS defaults ──────────────────────────────────────
 # Source: VTM Eq. 13–18, AgencyHorizon canonical example

@@ -1,16 +1,21 @@
 """
-fawp-index v0.23.0
+fawp-index v0.27.0
 FAWP Alpha Index — Information-Control Exclusion Principle detector.
 Includes full E1-E9 experimental suite data.
 Ralph Clayton (2026) · doi:10.5281/zenodo.18673949
 """
 
-__version__ = "0.23.0"
+__version__ = "0.27.0"
 __author__ = "Ralph Clayton"
 __doi__ = "https://doi.org/10.5281/zenodo.18673949"
 __github__ = "https://github.com/DrRalphClayton/fawp-index"
 
 from .validation import validate_signals, ValidationReport, HorizonStats
+from .weather import (
+    fawp_from_forecast, fawp_from_skill_series,
+    fawp_from_open_meteo, scan_weather_grid,
+    WeatherFAWPResult,
+)
 from .compare import compare_signals, CompareReport, compare_fawp, ComparisonResult
 from .scan_history import ScanHistory
 from .constants import (
@@ -36,7 +41,7 @@ from .constants import (
     TAU_F_E9,
     ODW_START_E9,
     ODW_END_E9,
-    PEAK_GAP_BITS_E9,
+    PEAK_GAP_BITS_E9_U, PEAK_GAP_BITS_E9_XI, PEAK_GAP_TAU_E9,
 )
 from .core.alpha_index import FAWPAlphaIndex, FAWPResult
 from .core.alpha_v2 import FAWPAlphaIndexV2, AlphaV2Result
@@ -94,6 +99,9 @@ FAWPResult.plot = _plot_result
 __all__ = [
     # Validation
     "validate_signals", "ValidationReport", "HorizonStats",
+    # Weather / climate
+    "fawp_from_forecast", "fawp_from_skill_series",
+    "fawp_from_open_meteo", "scan_weather_grid", "WeatherFAWPResult",
     "compare_signals", "CompareReport", "compare_fawp", "ComparisonResult",
     # Scan history
     "ScanHistory",
@@ -106,7 +114,7 @@ __all__ = [
     "FLAGSHIP_A", "FLAGSHIP_K", "FLAGSHIP_DELTA_PRED", "FLAGSHIP_N_TRIALS",
     "TAU_PLUS_H_FLAGSHIP", "TAU_F_FLAGSHIP",
     "PEAK_PRED_BITS", "PRED_AT_CLIFF",
-    "TAU_PLUS_H_E9", "TAU_F_E9", "ODW_START_E9", "ODW_END_E9", "PEAK_GAP_BITS_E9",
+    "TAU_PLUS_H_E9", "TAU_F_E9", "ODW_START_E9", "ODW_END_E9", "PEAK_GAP_BITS_E9_U", "PEAK_GAP_BITS_E9_XI", "PEAK_GAP_TAU_E9",
     # Core detector
     "FAWPAlphaIndex", "FAWPResult",
     "FAWPAlphaIndexV2", "AlphaV2Result",

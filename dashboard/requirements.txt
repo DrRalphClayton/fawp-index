@@ -1,7 +1,11 @@
-fawp-index>=0.13.0
+fawp-index>=0.26.0
 streamlit>=1.30
 matplotlib>=3.4
 yfinance>=0.2
 pandas>=1.3
 numpy>=1.21
 supabase>=2.0
+# Weather tab dependencies
+openmeteo-requests>=0.3
+requests-cache>=1.0
+retry-requests>=1.0

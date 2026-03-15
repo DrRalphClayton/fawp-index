@@ -1,5 +1,5 @@
 """
-FAWP Dashboard v0.23.0 — Streamlit app
+FAWP Dashboard v0.27.0 — Streamlit app
 ========================================
 Ralph Clayton (2026) · https://doi.org/10.5281/zenodo.18673949
 """
@@ -246,6 +246,8 @@ try:
     from fawp_index.scan_history import ScanHistory
     from fawp_index.validation import validate_signals
     from fawp_index.compare import compare_signals
+    from fawp_index.constants import EPSILON_STEERING_RAW as _EPS_STEER
+    from fawp_index.weather import fawp_from_open_meteo, scan_weather_grid, WeatherFAWPResult
     HAS_FAWP = True
 except ImportError as e:
     st.error(f"fawp-index not installed: {e}\n\n`pip install fawp-index[plot]`")
@@ -503,8 +505,15 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     st.markdown('<div class="sb-section">Data source</div>', unsafe_allow_html=True)
+    # Default: Demo data for demo bypass users, Enter tickers for signed-in users
+    _default_src_idx = 2 if st.session_state.get("_demo_bypass") else 1
     source = st.radio("", ["Upload CSV(s)", "Enter tickers (yfinance)", "Demo data"],
-                      index=2, label_visibility="collapsed")
+                      index=_default_src_idx, label_visibility="collapsed", key="data_source")
+    # Clear stale data if source changed
+    if st.session_state.get("_last_source") != source:
+        st.session_state["_last_source"] = source
+        st.session_state.pop("input_dfs", None)
+        st.session_state.pop("wl_result", None)
 
     st.markdown('<div class="sb-section">Scanner settings</div>', unsafe_allow_html=True)
     window  = st.slider("Rolling window (bars)",      60, 504, 252, step=10)
@@ -598,27 +607,24 @@ def _load_uploaded(files) -> dict:
 
 @st.cache_data(show_spinner="Fetching from yfinance…")
 def _load_yfinance(tickers_str: str, period: str) -> dict:
-    try:
-        import yfinance as yf
-    except ImportError:
-        st.error("yfinance not installed — `pip install yfinance`")
-        return {}
+    """Returns {ticker: df} dict. Raises ImportError if yfinance missing."""
+    import yfinance as yf
     dfs = {}
+    errors = {}
     for ticker in [t.strip().upper() for t in tickers_str.split(",") if t.strip()]:
         try:
             df = yf.download(ticker, period=period, progress=False, auto_adjust=True)
             if not df.empty:
                 df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
                 dfs[ticker] = df
+            else:
+                errors[ticker] = "empty response"
         except Exception as e:
-            st.warning(f"Failed to fetch {ticker}: {e}")
-    return dfs
+            errors[ticker] = str(e)
+    return dfs, errors
 
 
-@st.cache_data(
-    show_spinner="Running FAWP scanner…",
-    hash_funcs={dict: lambda d: str(sorted(d.keys()))},
-)
+@st.cache_data(show_spinner="Running FAWP scanner…")
 def _run_scan(dfs, window, step, tau_max, n_null, epsilon, timeframes):
     from fawp_index.watchlist import WatchlistScanner
     from fawp_index.market import MarketScanConfig
@@ -644,19 +650,21 @@ _DEMO_MODE    = _os.environ.get("FAWP_DEMO", "0") == "1" or st.session_state.get
 _DEMO_TICKERS = _os.environ.get("FAWP_DEMO_TICKERS", "")
 
 # ── Load data ──────────────────────────────────────────────────────────────
-dfs = {}
+if "input_dfs" not in st.session_state:
+    st.session_state["input_dfs"] = {}
 
 if _DEMO_MODE and not _DEMO_TICKERS and source != "Upload CSV(s)":
     source = "Demo data"
 elif _DEMO_MODE and _DEMO_TICKERS:
     source = "Enter tickers (yfinance)"
-# Also gate yfinance if demo bypass (not signed in)
+# Gate yfinance for demo bypass (not signed in)
 if st.session_state.get("_demo_bypass") and source == "Enter tickers (yfinance)":
     source = "Demo data"
     st.sidebar.caption("Sign up to scan real tickers.")
 
 if source == "Demo data":
-    dfs = _load_demo()
+    st.session_state["input_dfs"] = _load_demo()
+    dfs = st.session_state["input_dfs"]
     tickers_str = ", ".join(dfs.keys())
     n_bars = len(next(iter(dfs.values())))
     st.markdown(
@@ -664,25 +672,53 @@ if source == "Demo data":
         f'{tickers_str} &nbsp;·&nbsp; {n_bars} bars each</div>',
         unsafe_allow_html=True,
     )
+
 elif source == "Upload CSV(s)":
     uploaded = st.file_uploader(
         "Upload CSV files — one per asset. Needs a date column and a Close column.",
         type=["csv"], accept_multiple_files=True,
     )
     if uploaded:
-        dfs = _load_uploaded(uploaded)
+        st.session_state["input_dfs"] = _load_uploaded(uploaded)
+    dfs = st.session_state["input_dfs"]
+
 elif source == "Enter tickers (yfinance)":
     col1, col2 = st.columns([3, 1])
     with col1:
-        _default_tickers = _DEMO_TICKERS.replace(",", ", ") if _DEMO_TICKERS else "SPY, QQQ, GLD, BTC-USD"
+        _default_tickers = _DEMO_TICKERS.replace(",", ", ") if _DEMO_TICKERS else "SPY, QQQ, GLD"
         _max_t = get_limit("max_tickers") or 999
         if not is_pro() and _AUTH_ENABLED:
             st.caption(f"Free plan: up to {_max_t} tickers")
         ticker_str = st.text_input("Tickers (comma-separated)", _default_tickers)
     with col2:
         period = st.selectbox("Period", ["1y", "2y", "5y", "max"], index=1)
+    # Detect if inputs changed since last fetch
+    _fetch_key = f"{ticker_str.strip()}|{period}"
+    _last_key  = st.session_state.get("_fetched_key", "")
+    _has_data  = bool(st.session_state.get("input_dfs"))
+    if _has_data and _fetch_key != _last_key:
+        st.warning(
+            "⚠ Inputs changed — click **Fetch data** to refresh before scanning.",
+            icon=None,
+        )
+
     if st.button("Fetch data"):
-        dfs = _load_yfinance(ticker_str, period)
+        tickers = [t.strip().upper() for t in ticker_str.split(",") if t.strip()]
+        if not is_pro() and _AUTH_ENABLED and len(tickers) > _max_t:
+            st.error(f"Free plan supports up to {_max_t} tickers.")
+        else:
+            try:
+                _fetched, _fetch_errors = _load_yfinance(",".join(tickers), period)
+                for _t, _e in _fetch_errors.items():
+                    st.warning(f"Failed to fetch {_t}: {_e}")
+                st.session_state["input_dfs"]   = _fetched
+                st.session_state["_fetched_key"] = _fetch_key
+            except ImportError:
+                st.error("yfinance not installed — `pip install yfinance`")
+    dfs = st.session_state["input_dfs"]
+
+else:
+    dfs = st.session_state["input_dfs"]
 
 if not dfs:
     st.markdown(_empty_state("📡","No data loaded","Choose a source in the sidebar and press <b>▶ Run Scan</b>.","← Select source in sidebar"), unsafe_allow_html=True)
@@ -761,9 +797,9 @@ if _IS_DEMO and not st.session_state.get("_demo_banner_dismissed"):
         if st.button("✕", key="dismiss_demo_banner"):
             st.session_state["_demo_banner_dismissed"] = True
             st.rerun()
-tab_scanner, tab_curves, tab_heatmap, tab_significance, tab_validation, tab_history, tab_compare, tab_admin, tab_export = st.tabs([
+tab_scanner, tab_curves, tab_heatmap, tab_significance, tab_validation, tab_history, tab_compare, tab_weather, tab_admin, tab_export = st.tabs([
     "Scanner", "Curves", "Heatmap", "Significance",
-    "Validation", "History", "Compare", "⚙ Admin", "Export",
+    "Validation", "History", "Compare", "🌦 Weather", "⚙ Admin", "Export",
 ])
 
 
@@ -1512,6 +1548,149 @@ with tab_compare:
                 file_name=f"fawp_compare_{crpt.ticker}.csv",
                 mime="text/csv",
             )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Tab: Weather FAWP
+# ──────────────────────────────────────────────────────────────────────────
+with tab_weather:
+    st.markdown(_sec("Weather & Climate FAWP Detection"), unsafe_allow_html=True)
+    st.caption(
+        "Detect the Information-Control Exclusion Principle in atmospheric data. "
+        "Uses ERA5 reanalysis via Open-Meteo — free, no API key needed."
+    )
+
+    _W_VARS = {
+        "temperature_2m":             "Temperature 2m (°C)",
+        "precipitation_sum":          "Precipitation (mm/day)",
+        "wind_speed_10m":             "Wind Speed 10m (m/s)",
+        "surface_pressure":           "Surface Pressure (hPa)",
+        "cloud_cover":                "Cloud Cover (%)",
+        "shortwave_radiation":        "Shortwave Radiation (W/m²)",
+    }
+
+    # Initialise keys so presets can write to them before inputs render
+    if "w_lat_v" not in st.session_state:
+        st.session_state["w_lat_v"] = 51.5
+    if "w_lon_v" not in st.session_state:
+        st.session_state["w_lon_v"] = -0.1
+
+    # Quick presets — written BEFORE the inputs so the keys exist
+    st.caption("Presets:")
+    preset_cols = st.columns(5)
+    presets = [
+        ("London",   51.5,  -0.1),
+        ("New York", 40.7, -74.0),
+        ("Tokyo",    35.7, 139.7),
+        ("Sydney",  -33.9, 151.2),
+        ("Paris",    48.9,   2.4),
+    ]
+    for i, (name, lat, lon) in enumerate(presets):
+        with preset_cols[i]:
+            if st.button(name, key=f"preset_{name}"):
+                st.session_state["w_lat_v"] = lat
+                st.session_state["w_lon_v"] = lon
+                st.rerun()
+
+    col_w1, col_w2, col_w3 = st.columns(3)
+    with col_w1:
+        # Bind inputs to session_state keys so preset buttons actually update them
+        w_lat = st.number_input("Latitude",  min_value=-90.0,  max_value=90.0,
+                                step=0.1, format="%.2f", key="w_lat_v")
+        w_lon = st.number_input("Longitude", min_value=-180.0, max_value=180.0,
+                                step=0.1, format="%.2f", key="w_lon_v")
+        w_var = st.selectbox("Variable", list(_W_VARS.keys()),
+                             format_func=lambda k: _W_VARS[k])
+    with col_w2:
+        w_start = st.text_input("Start date", "2015-01-01")
+        w_end   = st.text_input("End date",   "2024-12-31")
+        w_horiz = st.slider("Forecast horizon (days)", 1, 30, 7)
+    with col_w3:
+        w_tau   = st.slider("Max tau", 5, 60, 30, step=5)
+        w_null  = st.slider("Null permutations", 0, 200, 50, step=10)
+        run_weather = st.button("🌦 Run Weather Scan", type="primary",
+                                use_container_width=True, key="run_weather")
+
+    if run_weather:
+        _w_deps_ok = True
+        try:
+            import openmeteo_requests  # noqa: F401
+        except ImportError:
+            st.error(
+                "Open-Meteo client not installed.\n\n"
+                "`pip install openmeteo-requests requests-cache retry-requests`"
+            )
+            _w_deps_ok = False
+
+        if _w_deps_ok:
+            with st.spinner(f"Fetching ERA5 {w_var} @ ({w_lat:.1f}, {w_lon:.1f})…"):
+                try:
+                    w_result = fawp_from_open_meteo(
+                        latitude     = w_lat,
+                        longitude    = w_lon,
+                        variable     = w_var,
+                        start_date   = w_start,
+                        end_date     = w_end,
+                        horizon_days = w_horiz,
+                        tau_max      = w_tau,
+                        n_null       = w_null,
+                    )
+                    st.session_state["w_result"] = w_result
+                except Exception as we:
+                    st.error(f"Weather scan failed: {we}")
+
+    if "w_result" in st.session_state:
+        wr = st.session_state["w_result"]
+        # KPI row
+        kc1, kc2, kc3, kc4 = st.columns(4)
+        kc1.metric("FAWP", "🔴 YES" if wr.fawp_found else "✅ NO")
+        kc2.metric("Peak gap", f"{wr.peak_gap_bits:.4f} bits")
+        kc3.metric("ODW",
+                   f"τ {wr.odw_start}–{wr.odw_end}" if wr.fawp_found else "—")
+        kc4.metric("Observations", f"{wr.n_obs:,}")
+
+        if wr.fawp_found:
+            st.success(
+                f"**FAWP detected** — {_W_VARS.get(wr.variable, wr.variable)} "
+                f"at {wr.location}. "
+                f"Predictive coupling persists (τ⁺ₕ={wr.odw_result.tau_h_plus}) "
+                f"while steering has collapsed. "
+                f"ODW: τ = {wr.odw_start}–{wr.odw_end}."
+            )
+        else:
+            st.info("No FAWP regime detected at this location/variable/period.")
+
+        # MI curves chart
+        if HAS_MPL and len(wr.tau) > 0:
+            import matplotlib.pyplot as plt
+            fig, ax = _dark_fig(10, 3.2)
+            ax.plot(wr.tau, wr.pred_mi,  color="#D4AF37", lw=1.8, label="Pred MI (forecast skill)")
+            ax.plot(wr.tau, wr.steer_mi, color="#4A7FCC", lw=1.5, ls="--", label="Steer MI (intervention)")
+            ax.axhline(_EPS_STEER, color="#3A4E70", ls=":", lw=1, label=f"ε = {EPSILON_STEERING_RAW}")
+            if wr.fawp_found and wr.odw_start:
+                ax.axvspan(wr.odw_start, wr.odw_end, alpha=0.15, color="#C0111A", label="ODW")
+            ax.set_xlabel("τ (delay)", fontsize=8, color="#7A90B8")
+            ax.set_ylabel("MI (bits)", fontsize=8, color="#7A90B8")
+            ax.legend(fontsize=7, facecolor="#0D1729", labelcolor="#EDF0F8",
+                      edgecolor="#182540")
+            plt.tight_layout(pad=0.4)
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)
+
+        # Download
+        import json as _json
+        st.download_button(
+            "Download result JSON",
+            data=_json.dumps(wr.to_dict(), indent=2).encode(),
+            file_name=f"fawp_weather_{wr.variable}_{wr.location.replace(' ','_')}.json",
+            mime="application/json",
+        )
+    elif not run_weather:
+        st.markdown(_empty_state(
+            "🌦", "No weather scan yet",
+            "Enter coordinates, pick a variable and date range,<br>then click Run Weather Scan.",
+            "Supports ERA5 data for any location on Earth"
+        ), unsafe_allow_html=True)
 
 
 # ──────────────────────────────────────────────────────────────────────────
