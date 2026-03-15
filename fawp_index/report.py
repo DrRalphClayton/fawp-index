@@ -44,15 +44,12 @@ I_steer, alpha_2.  Subscripts are rendered with ReportLab's <sub> tag.
 Figures (matplotlib) carry the proper symbols.
 """
 
-from __future__ import annotations
 
 import io
-import json
 from datetime import date
 from pathlib import Path
 from typing import Any, Optional, Union
 
-import numpy as np
 
 from fawp_index import __version__ as _VERSION
 

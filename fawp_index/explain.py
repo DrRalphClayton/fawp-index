@@ -594,3 +594,335 @@ def explain(result, verbose: bool = True) -> str:
     if isinstance(result, dict):
         return "\n".join(f"  {k}: {v}" for k, v in result.items())
     return f"No explain handler for type '{cls_name}'."
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Attribution — per-tau and per-window contribution analysis
+# ─────────────────────────────────────────────────────────────────────────────
+
+def attribute_gap(window, top_n: int = 5) -> dict:
+    """
+    Per-tau attribution of the leverage gap for a single scan window.
+
+    For each tau value, computes:
+      - gap(τ)      = pred_MI(τ) − steer_MI(τ)
+      - share(τ)    = gap(τ) / sum(gap) — fractional contribution to total gap
+      - pred_share  = pred_MI(τ) / sum(pred_MI) — pred contribution weight
+      - steer_share = steer_MI(τ) / sum(steer_MI) — steer contribution weight
+      - inside_odw  = bool — whether this tau is inside the ODW
+
+    The ``top_tau`` list identifies which specific lag values are driving
+    the divergence — the FAWP signal "hotspots".
+
+    Parameters
+    ----------
+    window : MarketWindowResult
+        A single scan window (e.g. ``asset.scan.latest``).
+    top_n : int
+        Number of top tau values to highlight.
+
+    Returns
+    -------
+    dict with keys:
+        tau           : list[int]
+        gap           : list[float]
+        share         : list[float]   — fractional contribution (sums to 1)
+        pred_share    : list[float]
+        steer_share   : list[float]
+        inside_odw    : list[bool]
+        top_tau       : list[int]     — top_n tau values by gap share
+        top_shares    : list[float]   — their share values
+        total_gap     : float
+        odw_share     : float         — fraction of gap inside ODW
+        peak_tau      : int           — single tau with largest gap
+
+    Example
+    -------
+    ::
+
+        from fawp_index.watchlist import scan_watchlist
+        from fawp_index.explain import attribute_gap
+
+        result = scan_watchlist(["SPY"], period="2y")
+        top_asset = result.rank_by("score")[0]
+        attr = attribute_gap(top_asset.scan.latest)
+
+        print(f"Peak gap at tau={attr['peak_tau']}")
+        print(f"ODW captures {attr['odw_share']*100:.1f}% of total gap")
+        for tau, share in zip(attr['top_tau'], attr['top_shares']):
+            print(f"  tau={tau:>3}  share={share*100:.1f}%")
+    """
+    import numpy as np
+
+    tau      = np.asarray(window.tau,      dtype=float)
+    pred_mi  = np.asarray(window.pred_mi,  dtype=float)
+    steer_mi = np.asarray(window.steer_mi, dtype=float)
+    gap      = np.maximum(0.0, pred_mi - steer_mi)
+
+    total_gap  = float(gap.sum())
+    total_pred = float(pred_mi.sum())
+    total_steer= float(steer_mi.sum())
+
+    eps = 1e-12
+    share       = gap       / (total_gap   + eps)
+    pred_share  = pred_mi   / (total_pred  + eps)
+    steer_share = steer_mi  / (total_steer + eps)
+
+    odw = window.odw_result
+    inside_odw = [
+        bool(odw.odw_start is not None
+             and odw.odw_start <= int(t) <= odw.odw_end)
+        for t in tau
+    ]
+    odw_share = float(gap[inside_odw].sum()) / (total_gap + eps) \
+                if any(inside_odw) else 0.0
+
+    # Top-N by gap share
+    order     = np.argsort(gap)[::-1]
+    top_idx   = order[:top_n]
+    top_tau   = [int(tau[i]) for i in top_idx]
+    top_shares= [float(share[i]) for i in top_idx]
+
+    peak_tau  = int(tau[int(np.argmax(gap))])
+
+    return {
+        "tau":         [int(t) for t in tau],
+        "gap":         [round(float(g), 6) for g in gap],
+        "share":       [round(float(s), 4) for s in share],
+        "pred_share":  [round(float(s), 4) for s in pred_share],
+        "steer_share": [round(float(s), 4) for s in steer_share],
+        "inside_odw":  inside_odw,
+        "top_tau":     top_tau,
+        "top_shares":  [round(s, 4) for s in top_shares],
+        "total_gap":   round(total_gap, 6),
+        "odw_share":   round(odw_share, 4),
+        "peak_tau":    peak_tau,
+    }
+
+
+def attribute_windows(asset, top_n: int = 5) -> dict:
+    """
+    Per-window attribution of the FAWP regime for an AssetResult.
+
+    Ranks every scan window by its regime score and measures how much
+    each window contributes to the overall FAWP signal.  Identifies
+    the onset window (first FAWP), peak window (highest score), and the
+    most recent window.
+
+    Parameters
+    ----------
+    asset : AssetResult
+    top_n : int
+        Number of top windows to return.
+
+    Returns
+    -------
+    dict with keys:
+        dates           : list[str]
+        scores          : list[float]
+        fawp_flags      : list[bool]
+        gap_bits        : list[float]
+        top_windows     : list[dict]  — top_n windows by score
+        onset_date      : str or None — first window where FAWP fired
+        peak_date       : str
+        peak_score      : float
+        n_fawp_windows  : int
+        n_total_windows : int
+        fawp_fraction   : float
+        score_slope     : float       — linear trend of last 10 windows
+
+    Example
+    -------
+    ::
+
+        from fawp_index.explain import attribute_windows
+
+        result = scan_watchlist(["SPY"], period="2y")
+        top = result.rank_by("score")[0]
+        attr = attribute_windows(top)
+
+        print(f"FAWP in {attr['n_fawp_windows']}/{attr['n_total_windows']} windows")
+        print(f"Onset: {attr['onset_date']}  Peak: {attr['peak_date']}")
+        print(f"Score trend: {attr['score_slope']:+.4f}/window")
+    """
+    import numpy as np
+
+    if asset.scan is None:
+        return {}
+
+    windows = asset.scan.windows
+    dates   = [str(w.date.date()) for w in windows]
+    scores  = [float(w.regime_score) for w in windows]
+    flags   = [bool(w.fawp_found)   for w in windows]
+    gaps    = [float(w.odw_result.peak_gap_bits) for w in windows]
+
+    n_total  = len(windows)
+    n_fawp   = sum(flags)
+    peak_idx = int(np.argmax(scores))
+
+    # Onset: first window where FAWP fired
+    onset_date = None
+    for w in windows:
+        if w.fawp_found:
+            onset_date = str(w.date.date())
+            break
+
+    # Score slope over last 10 windows
+    recent_scores = np.array(scores[-10:])
+    n_r = len(recent_scores)
+    if n_r >= 3:
+        x = np.arange(n_r, dtype=float)
+        score_slope = float(np.polyfit(x, recent_scores, 1)[0])
+    else:
+        score_slope = 0.0
+
+    # Top-N windows by score
+    order = np.argsort(scores)[::-1][:top_n]
+    top_windows = [
+        {
+            "date":  dates[i],
+            "score": round(scores[i], 4),
+            "fawp":  flags[i],
+            "gap":   round(gaps[i], 4),
+        }
+        for i in order
+    ]
+
+    return {
+        "dates":           dates,
+        "scores":          [round(s, 4) for s in scores],
+        "fawp_flags":      flags,
+        "gap_bits":        [round(g, 4) for g in gaps],
+        "top_windows":     top_windows,
+        "onset_date":      onset_date,
+        "peak_date":       dates[peak_idx],
+        "peak_score":      round(scores[peak_idx], 4),
+        "n_fawp_windows":  n_fawp,
+        "n_total_windows": n_total,
+        "fawp_fraction":   round(n_fawp / n_total, 4) if n_total else 0.0,
+        "score_slope":     round(score_slope, 6),
+    }
+
+
+def attribution_report(asset, top_n: int = 5) -> str:
+    """
+    Combined attribution report: per-tau gap + per-window timeline.
+
+    Builds a plain-English narrative of *why* a gap appeared:
+    which tau lags drove the divergence, which windows were most active,
+    when the regime started, and whether the signal is accelerating.
+
+    Parameters
+    ----------
+    asset : AssetResult
+    top_n : int
+
+    Returns
+    -------
+    str
+
+    Example
+    -------
+    ::
+
+        from fawp_index.explain import attribution_report
+
+        result = scan_watchlist(["SPY"], period="2y")
+        top = result.rank_by("score")[0]
+        print(attribution_report(top))
+    """
+    w = 62
+    lines = [
+        "=" * w,
+        f"  Attribution Report — {asset.ticker} [{asset.timeframe}]",
+        "=" * w,
+    ]
+
+    # ── Per-tau attribution (latest window) ──────────────────────────────
+    if asset.scan is not None:
+        attr_tau = attribute_gap(asset.scan.latest, top_n=top_n)
+        lines += [
+            "",
+            "TAU-LEVEL ATTRIBUTION  (latest window)",
+            f"  Total leverage gap : {attr_tau['total_gap']:.4f} bits",
+            f"  Peak tau           : τ = {attr_tau['peak_tau']}",
+            f"  ODW captures       : {attr_tau['odw_share']*100:.1f}% of total gap",
+            "",
+            f"  Top {top_n} tau values by gap contribution:",
+            f"  {'τ':>4}  {'Gap share':>9}  {'Pred share':>10}  {'Steer share':>11}  {'In ODW':>6}",
+            "  " + "-" * 50,
+        ]
+        tau_list   = attr_tau["tau"]
+        gap_list   = attr_tau["gap"]
+        share_list = attr_tau["share"]
+        ps_list    = attr_tau["pred_share"]
+        ss_list    = attr_tau["steer_share"]
+        odw_list   = attr_tau["inside_odw"]
+
+        for t, sh in zip(attr_tau["top_tau"], attr_tau["top_shares"]):
+            idx    = tau_list.index(t)
+            in_odw = "✓" if odw_list[idx] else "—"
+            bar    = "█" * max(1, int(sh * 30))
+            lines.append(
+                f"  {t:>4}  {sh*100:>8.1f}%  "
+                f"{ps_list[idx]*100:>9.1f}%  "
+                f"{ss_list[idx]*100:>10.1f}%  "
+                f"{in_odw:>6}  {bar}"
+            )
+
+        # Narrative
+        top_t = attr_tau["top_tau"][0]
+        top_s = attr_tau["top_shares"][0]
+        odw_s = attr_tau["odw_share"]
+        lines += [
+            "",
+            "  Narrative:",
+        ]
+        if odw_s > 0.5:
+            lines.append(
+                f"  The gap is concentrated inside the ODW "
+                f"({odw_s*100:.0f}% of signal). "
+                f"Tau={top_t} is the dominant lag."
+            )
+        elif odw_s > 0.2:
+            lines.append(
+                f"  The ODW captures {odw_s*100:.0f}% of the gap — "
+                f"moderate concentration. "
+                f"Signal spreads across multiple lags, peak at τ={top_t}."
+            )
+        else:
+            lines.append(
+                f"  Gap is diffuse across tau range. "
+                f"No single ODW lag dominates. "
+                f"Peak contribution at τ={top_t} ({top_s*100:.0f}%)."
+            )
+
+    # ── Per-window attribution ────────────────────────────────────────────
+    attr_win = attribute_windows(asset, top_n=top_n)
+    if attr_win:
+        slope     = attr_win["score_slope"]
+        slope_str = f"+{slope:.4f}/win ▲ accelerating" if slope > 1e-4 else (
+                    f"{slope:.4f}/win ▼ decelerating" if slope < -1e-4 else
+                    "~0 flat")
+        lines += [
+            "",
+            "WINDOW-LEVEL ATTRIBUTION",
+            f"  FAWP windows  : {attr_win['n_fawp_windows']} / {attr_win['n_total_windows']} "
+            f"({attr_win['fawp_fraction']*100:.0f}%)",
+            f"  Onset date    : {attr_win['onset_date'] or '—'}",
+            f"  Peak date     : {attr_win['peak_date']}  (score {attr_win['peak_score']:.4f})",
+            f"  Score trend   : {slope_str}",
+            "",
+            f"  Top {top_n} windows by score:",
+            f"  {'Date':<12} {'Score':>6}  {'Gap':>7}  FAWP",
+            "  " + "-" * 35,
+        ]
+        for win in attr_win["top_windows"]:
+            flag = "YES" if win["fawp"] else "—"
+            lines.append(
+                f"  {win['date']:<12} {win['score']:>6.4f}  "
+                f"{win['gap']:>7.4f}  {flag}"
+            )
+
+    lines += ["", "=" * w]
+    return "\n".join(lines)

@@ -1,5 +1,5 @@
 """
-FAWP Dashboard v0.13.0 — Streamlit app
+FAWP Dashboard v0.15.0 — Streamlit app
 ========================================
 Ralph Clayton (2026) · https://doi.org/10.5281/zenodo.18673949
 """
@@ -474,8 +474,18 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# ── Auto-detect demo mode from env (set by fawp-demo CLI) ────────────────
+import os as _os
+_DEMO_MODE    = _os.environ.get("FAWP_DEMO",         "0") == "1"
+_DEMO_TICKERS = _os.environ.get("FAWP_DEMO_TICKERS", "")
+
 # ── Load data ──────────────────────────────────────────────────────────────
 dfs = {}
+
+if _DEMO_MODE and not _DEMO_TICKERS and source != "Upload CSV(s)":
+    source = "Demo data"
+elif _DEMO_MODE and _DEMO_TICKERS:
+    source = "Enter tickers (yfinance)"
 
 if source == "Demo data":
     dfs = _load_demo()
@@ -496,7 +506,8 @@ elif source == "Upload CSV(s)":
 elif source == "Enter tickers (yfinance)":
     col1, col2 = st.columns([3, 1])
     with col1:
-        ticker_str = st.text_input("Tickers (comma-separated)", "SPY, QQQ, GLD, BTC-USD")
+        _default_tickers = _DEMO_TICKERS.replace(",", ", ") if _DEMO_TICKERS else "SPY, QQQ, GLD, BTC-USD"
+        ticker_str = st.text_input("Tickers (comma-separated)", _default_tickers)
     with col2:
         period = st.selectbox("Period", ["1y", "2y", "5y", "max"], index=1)
     if st.button("Fetch data"):

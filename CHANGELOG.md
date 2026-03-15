@@ -4,7 +4,34 @@ All notable changes to fawp-index are documented here.
 
 ---
 
-## [0.13.0] — 2026-03-14
+## [0.15.0] — 2026-03-14
+
+### Highlights
+- Dashboard UX overhaul — severity pills, sparklines, ODW bars, leaderboard, explain cards
+- Plotly interactive figures via `pip install "fawp-index[plotly]"`
+- Slack alerts with Block Kit messages
+- Alert message templates — customise per alert type
+- 8 benchmark cases (was 5) — gradual fade, multi-regime, spiky false-positive
+- Pre-commit hooks + expanded ruff config
+- GitHub issue templates (bug / detection / feature)
+- Attribution functions — `attribute_gap()`, `attribute_windows()`, `attribution_report()`
+- Calibration constants centralised in `fawp_index.constants`
+
+### Migration from 0.12.x
+- `AlertEngine` state file format migrated automatically (old bool → new dict).
+  No manual action needed.
+- `run_all()` now returns 8 cases instead of 5. Update any hardcoded `== 5` assertions.
+- `explain()` dispatcher now handles `AssetResult` and `dict` — previously only
+  handled `FAWPResult`, `OATSResult`, `ControlCliffResult`, `SimulationResult`.
+- `FAWPSimulator` default `n_trials` changed 100 → 400 to match E8 flagship.
+  Pass `n_trials=100` explicitly if you need the old fast behaviour.
+
+### Migration from 0.11.x
+- Dashboard `app.py` fully rewritten (946 lines). Copy from latest zip if you
+  have a local deployment.
+- `fawp_index.constants` is new — all calibration anchors now importable directly:
+  `from fawp_index.constants import FLAGSHIP_A, EPSILON_STEERING_RAW, ...`
+
 
 ### Added
 

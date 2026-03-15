@@ -236,3 +236,46 @@ X_annotated = pipe.transform(X_test)
 - [`docs/alerts.md`](alerts.md) — alert engine setup
 - [`docs/benchmarks.md`](benchmarks.md) — benchmark cases
 - [`docs/dashboard.md`](dashboard.md) — Streamlit dashboard
+
+---
+
+## 11. Per-tau attribution — which lags drive the gap?
+
+```python
+from fawp_index.watchlist import scan_watchlist
+from fawp_index.explain import attribute_gap, attribute_windows, attribution_report
+
+result = scan_watchlist(["SPY", "QQQ"], period="2y")
+top = result.rank_by("score")[0]
+
+# Per-tau: which specific lag values are driving the divergence?
+attr = attribute_gap(top.scan.latest, top_n=5)
+print(f"Peak gap at τ={attr['peak_tau']}")
+print(f"ODW captures {attr['odw_share']*100:.1f}% of total gap")
+for tau, share in zip(attr['top_tau'], attr['top_shares']):
+    print(f"  τ={tau:>3}  share={share*100:.1f}%")
+
+# Per-window: when was the regime most active?
+attr_w = attribute_windows(top)
+print(f"\nFAWP in {attr_w['n_fawp_windows']}/{attr_w['n_total_windows']} windows")
+print(f"Onset: {attr_w['onset_date']}  Peak: {attr_w['peak_date']}")
+print(f"Score trend: {attr_w['score_slope']:+.4f}/window")
+
+# Full combined report
+print(attribution_report(top))
+```
+
+Output:
+```
+Peak gap at τ=9
+ODW captures 78.3% of total gap
+  τ=  9  share=24.1%
+  τ= 10  share=19.8%
+  τ=  8  share=15.2%
+  τ= 11  share=12.7%
+  τ=  7  share=9.4%
+
+FAWP in 12/48 windows
+Onset: 2026-03-02  Peak: 2026-03-08
+Score trend: +0.0012/window
+```

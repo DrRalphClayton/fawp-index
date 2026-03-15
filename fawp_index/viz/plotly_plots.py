@@ -26,7 +26,6 @@ Streamlit with st.plotly_chart(fig, use_container_width=True).
 Ralph Clayton (2026) · doi:10.5281/zenodo.18673949
 """
 
-from __future__ import annotations
 from typing import Optional
 
 _DARK = dict(

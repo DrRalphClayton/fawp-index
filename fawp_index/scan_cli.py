@@ -98,8 +98,10 @@ def main():
 
     # ── Run scan ──────────────────────────────────────────────────────────────
     kwargs = {}
-    if args.window:  kwargs["window"]  = args.window
-    if args.tau_max: kwargs["tau_max"] = args.tau_max
+    if args.window:
+        kwargs["window"]  = args.window
+    if args.tau_max:
+        kwargs["tau_max"] = args.tau_max
     kwargs["n_null"]      = args.n_null
     kwargs["max_workers"] = 4
     kwargs["verbose"]     = True

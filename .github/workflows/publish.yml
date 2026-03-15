@@ -1,103 +1,77 @@
-# Publishes to PyPI and creates a GitHub Release on every version tag.
-# Trigger: git tag v0.13.0 && git push --tags
-name: Publish
+name: Publish to PyPI + Create GitHub Release
 
 on:
   push:
     tags:
       - "v*.*.*"
 
+permissions:
+  contents: write
+  id-token: write
+
 jobs:
-  # ── 1. Run full test matrix ───────────────────────────────────────────────
   test:
+    name: Test (${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-
-      - name: Install and test
+      - name: Install + test
         run: |
-          pip install --upgrade pip
-          pip install -e ".[test]"
-          pytest tests/ -v --tb=short
+          pip install -e ".[plot,report]"
+          pip install pytest
+          pytest tests/ -x -q
 
-  # ── 2. Build, publish to PyPI, create GitHub Release ─────────────────────
   release:
+    name: Build · Publish · Release
     needs: test
     runs-on: ubuntu-latest
-
-    permissions:
-      id-token: write   # OIDC trusted publishing to PyPI
-      contents: write   # create GitHub Release
-
-    environment:
-      name: pypi
-      url: https://pypi.org/project/fawp-index/
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Install build tools
-        run: pip install --upgrade pip build twine
+      - name: Build distributions
+        run: |
+          pip install build
+          python -m build
 
-      - name: Build sdist and wheel
-        run: python -m build
-
-      - name: Check dist with twine
-        run: twine check dist/*
-
-      - name: Publish to PyPI (trusted publishing / OIDC)
+      - name: Publish to PyPI (OIDC trusted publishing)
         uses: pypa/gh-action-pypi-publish@release/v1
 
-      - name: Extract release notes from CHANGELOG.md
+      - name: Extract CHANGELOG section
         id: changelog
         run: |
-          # Pull the version from the tag (strip leading 'v')
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-
-          # Extract the section for this version from CHANGELOG.md
-          # Section starts with "## [X.Y.Z]" and ends at the next "## [" or EOF
-          python3 - << 'PYEOF'
-          import re, os, sys
-
-          version = os.environ["GITHUB_REF_NAME"].lstrip("v")
-          changelog = open("CHANGELOG.md").read()
-
-          # Find the block for this version
-          pattern = rf"## \[{re.escape(version)}\].*?(?=\n## \[|\Z)"
-          match = re.search(pattern, changelog, re.DOTALL)
-
-          if match:
-              notes = match.group(0).strip()
-          else:
-              notes = f"Release v{version}.\n\nSee [CHANGELOG.md](CHANGELOG.md) for full details."
-
-          # Write to file so the next step can read it cleanly
-          with open("release_notes.md", "w") as f:
-              f.write(notes)
-
-          print(f"Extracted {len(notes)} chars of release notes for v{version}")
+          python3 << 'PYEOF'
+          import re, os
+          tag = os.environ["GITHUB_REF_NAME"]           # e.g. v0.13.0
+          version = tag.lstrip("v")
+          src = open("CHANGELOG.md").read()
+          # Match from "## [version]" to the next "## [" or end
+          pattern = rf"(## \[{re.escape(version)}\].*?)(?=\n## \[|\Z)"
+          m = re.search(pattern, src, re.DOTALL)
+          body = m.group(1).strip() if m else f"See CHANGELOG.md for v{version} notes."
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write("body<<EOF_BODY\n")
+              f.write(body + "\n")
+              f.write("EOF_BODY\n")
           PYEOF
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
           name: "fawp-index ${{ github.ref_name }}"
-          body_path: release_notes.md
+          tag_name: ${{ github.ref_name }}
+          body: ${{ steps.changelog.outputs.body }}
           draft: false
           prerelease: false
           files: |

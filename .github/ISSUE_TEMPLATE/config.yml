@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Real-world FAWP detections gallery
+    url: https://github.com/DrRalphClayton/fawp-index/discussions
+    about: Share your detection — help build the community gallery
+  - name: Documentation
+    url: https://github.com/DrRalphClayton/fawp-index/tree/main/docs
+    about: Docs for market scanner, watchlist, alerts, benchmarks, dashboard
+  - name: Paper (E1–E7)
+    url: https://doi.org/10.5281/zenodo.18663547
+    about: Forecasting Without Power — theory and experiments
+  - name: Paper (E8)
+    url: https://doi.org/10.5281/zenodo.18673949
+    about: E8 confirmation and Secret Formula

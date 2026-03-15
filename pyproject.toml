@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fawp-index"
-version = "0.13.0"
+version = "0.15.0"
 description = "FAWP Alpha Index — Information-Control Exclusion Principle detector"
 readme = "README.md"
 license = "MIT"
@@ -36,6 +36,7 @@ dependencies = [
 [project.optional-dependencies]
 plot    = ["matplotlib>=3.4"]
 plotly  = ["plotly>=5.0"]
+fast    = ["numba>=0.57"]
 report  = ["reportlab>=4.0", "matplotlib>=3.4"]
 finance = ["yfinance>=0.2"]
 weather = ["requests>=2.28"]
@@ -45,13 +46,15 @@ test    = ["pytest>=7.0", "pytest-cov>=4.0", "matplotlib>=3.4", "reportlab>=4.0"
 dev     = ["pytest>=7.0", "pytest-cov>=4.0", "matplotlib>=3.4", "reportlab>=4.0",
            "scikit-learn>=1.0", "twine>=4.0", "build>=0.10", "ruff>=0.1"]
 all     = ["matplotlib>=3.4", "reportlab>=4.0", "yfinance>=0.2",
-           "requests>=2.28", "scikit-learn>=1.0", "plotly>=5.0"]
+           "requests>=2.28", "scikit-learn>=1.0", "plotly>=5.0",
+           "numba>=0.57"]
 
 [project.scripts]
 fawp-index     = "fawp_index.cli:main"
 fawp-dashboard = "fawp_index.dashboard_launcher:launch"
 fawp-scan      = "fawp_index.scan_cli:main"
 fawp-watchlist = "fawp_index.watchlist_cli:main"
+fawp-demo      = "fawp_index.demo_launcher:launch_demo"
 
 [project.urls]
 Homepage   = "https://github.com/DrRalphClayton/fawp-index"
@@ -78,6 +81,8 @@ exclude = ["tests*", "examples*", "fawp_forge*"]
 fawp_index = ["data/*.csv", "data/*.json"]
 
 [tool.ruff]
+line-length = 100
+target-version = "py39"
 exclude = [
     "build",
     "dist",
@@ -88,4 +93,20 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-ignore = ["E501"]
+select = ["E", "F", "W", "I", "UP"]
+ignore = [
+    "E501",   # line too long — handled by formatter
+    "E741",   # ambiguous variable name — too noisy in scientific code
+    "F401",   # unused import — many re-exports in __init__.py
+    "UP007",  # use X|Y for union types — py3.9 compat
+]
+[tool.ruff.lint.per-file-ignores]
+"fawp_index/__init__.py" = ["F401"]
+"fawp_index/report.py"   = ["F401"]
+"tests/*"                = ["F401", "F811"]
+"examples/*"             = ["F401"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false

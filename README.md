@@ -9,6 +9,21 @@
 
 ---
 
+<div align="center">
+
+### 🔴 Try it live — no install needed
+
+**[→ fawp-scanner.info](https://fawp-scanner.info)**
+
+Scan any stock, ETF, or crypto in your browser.
+Enter tickers → Fetch data → See regime detection in real time.
+
+*Powered by fawp-index v0.15.0 · [pip install it](#install) for full local control*
+
+</div>
+
+---
+
 ## Your model still predicts. But you've already lost control.
 
 **fawp-index** detects the moment a system crosses into the
@@ -22,6 +37,28 @@ information persists** but **the ability to act on it has collapsed**.
 | 🌊 Weather / climate | Forecast skill | Intervention window |
 | 🌍 Seismic | Precursor signal | Stress release control |
 | 🤖 ML systems | Model predictions | Ability to retrain / intervene |
+
+
+---
+
+## What it looks like
+
+**Scanner tab** — severity pills, sparklines, ODW bars:
+
+> Each row shows the asset, severity tier (FAWP 🔴 / HIGH / WATCH / CLEAR),
+> a 6-window score sparkline with trend arrow, and a proportional ODW bar
+> showing where in the τ range the detection window sits.
+>
+> Click any flagged asset to expand the **"Why flagged?"** card.
+
+**Leaderboard** — four ranked categories always visible below the table:
+
+> Top FAWP · Rising Risk · Collapsing Control · Strongest ODW
+
+**Curves tab** — interactive MI curves, leverage gap fill, ODW shading:
+
+> Select any asset + window. Pred MI (amber) vs Steer MI (blue dashed).
+> Red shading = ODW. Dotted line = ε threshold.
 
 ---
 
@@ -38,8 +75,21 @@ No install required. Scan equities, crypto, and sectors in your browser.
 pip install fawp-index                   # core
 pip install "fawp-index[plot]"           # + matplotlib figures
 pip install "fawp-index[dashboard]"      # + Streamlit dashboard
+pip install "fawp-index[fast]"           # + Numba JIT (5–15× faster null scans)
 pip install "fawp-index[all]"            # everything
 ```
+
+---
+
+## One-command demo
+
+```bash
+pip install "fawp-index[dashboard]"
+fawp-demo                          # opens browser with synthetic data instantly
+fawp-demo --asset BTC-USD SPY QQQ  # real tickers via yfinance
+```
+
+No CSV. No API key. No config. Just install and run.
 
 ---
 
@@ -283,7 +333,7 @@ fawp-dashboard                     # opens on http://localhost:8501
 cd dashboard && streamlit run app.py
 ```
 
-**Dashboard features (v0.13.0):**
+**Dashboard features (v0.15.0):**
 - Severity pills (FAWP / HIGH / WATCH / CLEAR) with pulsing indicators
 - Sparkline score trend per asset with ▲/▼ arrows
 - ODW proportional bar showing window position in τ range
@@ -389,7 +439,7 @@ Information-Control Exclusion Principle.
   author  = {Ralph Clayton},
   title   = {fawp-index: Information-Control Exclusion Principle detector},
   year    = {2026},
-  version = {0.13.0},
+  version = {0.15.0},
   url     = {https://github.com/DrRalphClayton/fawp-index},
   doi     = {10.5281/zenodo.18673949}
 }

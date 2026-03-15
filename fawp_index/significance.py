@@ -60,7 +60,6 @@ Output
 Ralph Clayton (2026) · https://doi.org/10.5281/zenodo.18673949
 """
 
-from __future__ import annotations
 
 import json
 from dataclasses import dataclass
@@ -612,11 +611,11 @@ class FAWPSignificance:
             if r_null.fawp_found:
                 fawp_null_count += 1
 
-        tau_h_arr     = np.array(tau_h_samp)
-        odw_start_arr = np.array(odw_start_samp)
-        odw_end_arr   = np.array(odw_end_samp)
-        peak_gap_arr  = np.array(peak_gap_samp)
-        peak_tau_arr  = np.array(peak_gap_tau_samp)
+        tau_h_arr      = np.array(tau_h_samp)
+        odw_start_arr  = np.array(odw_start_samp)
+        odw_end_arr    = np.array(odw_end_samp)
+        peak_gap_arr   = np.array(peak_gap_samp)
+        peak_tau_arr   = np.array(peak_gap_tau_samp)
 
         return SignificanceResult(
             method          = "seed_bootstrap",
@@ -742,7 +741,6 @@ class FAWPSignificance:
                 fawp_null_count += 1
 
         tau_h_arr     = np.array(tau_h_samp)
-        odw_start_arr = np.array(odw_start_samp)
         peak_gap_arr  = np.array(peak_gap_samp)
         peak_tau_arr  = np.array(peak_gap_tau_samp)
 

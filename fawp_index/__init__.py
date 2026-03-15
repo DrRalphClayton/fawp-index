@@ -1,11 +1,11 @@
 """
-fawp-index v0.13.0
+fawp-index v0.15.0
 FAWP Alpha Index — Information-Control Exclusion Principle detector.
 Includes full E1-E9 experimental suite data.
 Ralph Clayton (2026) · doi:10.5281/zenodo.18673949
 """
 
-__version__ = "0.13.0"
+__version__ = "0.15.0"
 __author__ = "Ralph Clayton"
 __doi__ = "https://doi.org/10.5281/zenodo.18673949"
 __github__ = "https://github.com/DrRalphClayton/fawp-index"
@@ -37,7 +37,9 @@ from .constants import (
 )
 from .core.alpha_index import FAWPAlphaIndex, FAWPResult
 from .core.alpha_v2 import FAWPAlphaIndexV2, AlphaV2Result
-from .core.estimators import mi_from_arrays, null_corrected_mi, conservative_null_floor
+from .core.estimators import (
+    mi_from_arrays, null_corrected_mi, conservative_null_floor, has_numba,
+)
 from .detection.odw import ODWDetector, ODWResult
 from .io.csv_loader import load_csv, load_csv_simple, FAWPData
 from .dataframe_api import fawp_from_dataframe, fawp_rolling
@@ -55,6 +57,7 @@ from .watchlist import (
     WatchlistScanner, scan_watchlist,
     WatchlistResult, AssetResult,
 )
+from .alert_template_presets import TRADING_DESK, RESEARCH, MINIMAL, ALL_PRESETS
 from .alerts import (
     AlertEngine, FAWPAlert, AlertType, AlertSeverity,
 )
@@ -117,7 +120,8 @@ __all__ = [
     "WatchlistScanner", "scan_watchlist",
     "WatchlistResult", "AssetResult",
     # Alerts
-    "AlertEngine", "FAWPAlert", "AlertType", "AlertSeverity", "AlertSeverity",
+    "AlertEngine", "FAWPAlert", "AlertType", "AlertSeverity",
+    "TRADING_DESK", "RESEARCH", "MINIMAL", "ALL_PRESETS",
     "AlertSeverity",  # re-export
     "gradual_fade", "multi_regime", "spiky_false_positive",
     # Leaderboard
@@ -137,5 +141,5 @@ __all__ = [
     "gradual_fade", "multi_regime", "spiky_false_positive",
     # MI estimators
     # (exports also injected onto result classes: .to_json / .to_markdown / .to_html / .to_dict)
-    "mi_from_arrays", "null_corrected_mi", "conservative_null_floor",
+    "mi_from_arrays", "null_corrected_mi", "conservative_null_floor", "has_numba",
 ]
