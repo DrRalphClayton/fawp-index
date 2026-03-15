@@ -1,15 +1,17 @@
 """
-fawp-index v0.15.0
+fawp-index v0.18.0
 FAWP Alpha Index — Information-Control Exclusion Principle detector.
 Includes full E1-E9 experimental suite data.
 Ralph Clayton (2026) · doi:10.5281/zenodo.18673949
 """
 
-__version__ = "0.15.0"
+__version__ = "0.18.0"
 __author__ = "Ralph Clayton"
 __doi__ = "https://doi.org/10.5281/zenodo.18673949"
 __github__ = "https://github.com/DrRalphClayton/fawp-index"
 
+from .validation import validate_signals, ValidationReport, HorizonStats
+from .scan_history import ScanHistory
 from .constants import (
     BETA_NULL_QUANTILE,
     EPSILON_STEERING_CORRECTED,
@@ -86,6 +88,10 @@ def _plot_result(self, **kwargs):
 FAWPResult.plot = _plot_result
 
 __all__ = [
+    # Validation
+    "validate_signals", "ValidationReport", "HorizonStats",
+    # Scan history
+    "ScanHistory",
     # Calibration constants (paper-derived)
     "BETA_NULL_QUANTILE",
     "EPSILON_STEERING_CORRECTED", "EPSILON_STEERING_RAW",

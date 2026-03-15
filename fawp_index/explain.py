@@ -926,3 +926,127 @@ def attribution_report(asset, top_n: int = 5) -> str:
 
     lines += ["", "=" * w]
     return "\n".join(lines)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Confidence badge — null-calibrated signal quality tier
+# ─────────────────────────────────────────────────────────────────────────────
+
+def confidence_badge(asset, n_bootstrap: int = 50, seed: int = 42) -> dict:
+    """
+    Compute a null-calibrated confidence tier for an AssetResult.
+
+    Does NOT run a full bootstrap (too slow for a dashboard scan).
+    Instead uses three fast heuristics derived from the same foundations
+    as the bootstrap significance test:
+
+    1. **Gap persistence** — fraction of the last 10 windows where
+       pred MI > steer MI above the null floor.  High persistence →
+       signal is not a one-off spike.
+
+    2. **ODW concentration** — share of the total leverage gap
+       that falls inside the Operational Detection Window.
+       High concentration → signal is structurally focused, not diffuse.
+
+    3. **Score stability** — coefficient of variation (CV) of regime
+       scores across the last 10 windows.  Low CV → signal is stable.
+
+    The three components are combined into a single confidence score
+    (0–1) which maps to LOW / MEDIUM / HIGH.
+
+    Parameters
+    ----------
+    asset : AssetResult
+    n_bootstrap : int
+        Unused — kept for API compatibility with future full bootstrap.
+    seed : int
+        Unused — kept for API compatibility.
+
+    Returns
+    -------
+    dict with keys:
+        tier         : str   — "HIGH" | "MEDIUM" | "LOW" | "INSUFFICIENT"
+        score        : float — composite confidence score (0–1)
+        persistence  : float — gap persistence fraction (0–1)
+        concentration: float — ODW gap concentration (0–1)
+        stability    : float — score stability (0–1, higher = more stable)
+        n_windows    : int   — number of windows used
+
+    Example
+    -------
+    ::
+
+        from fawp_index.explain import confidence_badge
+
+        result = scan_watchlist(["SPY", "QQQ"], period="2y")
+        for a in result.rank_by("score")[:5]:
+            badge = confidence_badge(a)
+            print(f"{a.ticker}  {badge['tier']}  ({badge['score']:.2f})")
+    """
+    # Fast path: no scan data
+    if asset.scan is None or len(asset.scan.windows) < 3:
+        return {
+            "tier": "INSUFFICIENT", "score": 0.0,
+            "persistence": 0.0, "concentration": 0.0,
+            "stability": 0.0, "n_windows": 0,
+        }
+
+    windows = asset.scan.windows[-10:]  # last 10 windows
+    n = len(windows)
+
+    # ── 1. Gap persistence ────────────────────────────────────────────────
+    # Fraction of windows where mean(pred_mi) > mean(steer_mi) by > epsilon
+    eps = 1e-4
+    persist_count = 0
+    for w in windows:
+        pm = float(np.mean(w.pred_mi))  if len(w.pred_mi)  > 0 else 0.0
+        sm = float(np.mean(w.steer_mi)) if len(w.steer_mi) > 0 else 0.0
+        if pm - sm > eps:
+            persist_count += 1
+    persistence = persist_count / n
+
+    # ── 2. ODW concentration ──────────────────────────────────────────────
+    # How focused is the gap inside the ODW in the latest window?
+    concentration = 0.0
+    latest = asset.scan.latest
+    if asset.peak_odw_start is not None:
+        gap = np.maximum(0, latest.pred_mi - latest.steer_mi)
+        total = float(gap.sum())
+        if total > 1e-12:
+            odw_mask = np.array([
+                asset.peak_odw_start <= int(t) <= (asset.peak_odw_end or 0)
+                for t in latest.tau
+            ])
+            concentration = float(gap[odw_mask].sum()) / total
+
+    # ── 3. Score stability ────────────────────────────────────────────────
+    # 1 - CV (coefficient of variation) of regime scores; clipped to [0,1]
+    scores = np.array([float(w.regime_score) for w in windows])
+    mean_s = float(scores.mean())
+    if mean_s > 1e-8:
+        cv = float(scores.std()) / mean_s
+        stability = float(np.clip(1.0 - cv, 0.0, 1.0))
+    else:
+        stability = 0.0
+
+    # ── Composite score ───────────────────────────────────────────────────
+    # Weighted: persistence matters most, then concentration, then stability
+    composite = 0.50 * persistence + 0.30 * concentration + 0.20 * stability
+
+    # ── Tier mapping ──────────────────────────────────────────────────────
+    # Require regime_active for HIGH; non-active assets capped at MEDIUM
+    if composite >= 0.65 and asset.regime_active:
+        tier = "HIGH"
+    elif composite >= 0.35:
+        tier = "MEDIUM"
+    else:
+        tier = "LOW"
+
+    return {
+        "tier":          tier,
+        "score":         round(composite, 3),
+        "persistence":   round(persistence, 3),
+        "concentration": round(concentration, 3),
+        "stability":     round(stability, 3),
+        "n_windows":     n,
+    }

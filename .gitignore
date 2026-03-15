@@ -49,3 +49,6 @@ desktop.ini
 .ruff_cache/
 .coverage
 htmlcov/
+# Supabase secrets
+.streamlit/secrets.toml
+dashboard/.streamlit/secrets.toml

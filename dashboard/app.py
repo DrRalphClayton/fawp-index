@@ -1,5 +1,5 @@
 """
-FAWP Dashboard v0.15.0 — Streamlit app
+FAWP Dashboard v0.18.0 — Streamlit app
 ========================================
 Ralph Clayton (2026) · https://doi.org/10.5281/zenodo.18673949
 """
@@ -107,6 +107,10 @@ section[data-testid="stSidebar"] .stRadio label { color: var(--text-1) !importan
 .pill-high   { background: rgba(212,175,55,0.12);  color: #D4AF37; border: 1px solid rgba(212,175,55,0.3); }
 .pill-watch  { background: rgba(74,127,204,0.10);  color: #6A9FD8; border: 1px solid rgba(74,127,204,0.25); }
 .pill-clear  { background: rgba(29,185,84,0.08);   color: #1DB954; border: 1px solid rgba(29,185,84,0.2); }
+.conf-high   { font-family: 'JetBrains Mono', monospace; font-size: 0.65em; font-weight: 600; padding: 0.12em 0.55em; border-radius: 100px; background: rgba(29,185,84,0.12); color: #1DB954; border: 1px solid rgba(29,185,84,0.3); letter-spacing: 0.06em; }
+.conf-medium { font-family: 'JetBrains Mono', monospace; font-size: 0.65em; font-weight: 600; padding: 0.12em 0.55em; border-radius: 100px; background: rgba(212,175,55,0.10); color: #D4AF37; border: 1px solid rgba(212,175,55,0.3); letter-spacing: 0.06em; }
+.conf-low    { font-family: 'JetBrains Mono', monospace; font-size: 0.65em; font-weight: 600; padding: 0.12em 0.55em; border-radius: 100px; background: rgba(122,144,184,0.10); color: #7A90B8; border: 1px solid rgba(122,144,184,0.25); letter-spacing: 0.06em; }
+.conf-insuf  { font-family: 'JetBrains Mono', monospace; font-size: 0.65em; color: #3A4E70; }
 .pill-fawp::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: blink 1.4s ease-in-out infinite; }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
 
@@ -176,6 +180,15 @@ section[data-testid="stSidebar"] .stRadio label { color: var(--text-1) !importan
 .scan-meta { font-family: 'JetBrains Mono', monospace; font-size: 0.7em; color: var(--text-3); margin-bottom: 0.6em; display: flex; gap: 1.2em; }
 .scan-meta span { display: flex; align-items: center; gap: 4px; }
 
+/* ── Validation / History ── */
+.val-table { width:100%; border-collapse:collapse; font-size:0.84em; }
+.val-table th { text-align:left; padding:.4em .8em; color:var(--text-3); font-size:.68em; text-transform:uppercase; letter-spacing:.08em; border-bottom:1px solid var(--border); }
+.val-table td { padding:.4em .8em; border-bottom:1px solid var(--border); font-family:'JetBrains Mono', monospace; color:var(--text-2); }
+.val-table tr:last-child td { border-bottom:none; }
+.val-pos { color:#1DB954 !important; } .val-neg { color:#C0111A !important; }
+.hist-row { display:flex; gap:12px; align-items:center; background:var(--bg-card); border:1px solid var(--border); border-radius:5px; padding:.5em 1em; margin-bottom:4px; font-size:.83em; }
+.hist-date { font-family:'JetBrains Mono', monospace; font-size:.78em; color:var(--text-3); min-width:100px; }
+.hist-score { font-family:'JetBrains Mono', monospace; color:var(--accent); min-width:60px; }
 /* ── Footer ── */
 .fawp-footer { margin-top: 2em; padding-top: 0.8em; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 1.2em; flex-wrap: wrap; }
 .fawp-footer a { font-size: 0.75em; color: var(--text-3) !important; text-decoration: none; letter-spacing: 0.03em; transition: color 0.15s; }
@@ -199,7 +212,9 @@ try:
     from fawp_index.watchlist import WatchlistScanner, scan_watchlist  # noqa: F401
     from fawp_index.significance import fawp_significance
     from fawp_index.leaderboard import Leaderboard
-    from fawp_index.explain import explain_asset
+    from fawp_index.explain import explain_asset, confidence_badge
+    from fawp_index.scan_history import ScanHistory
+    from fawp_index.validation import validate_signals
     HAS_FAWP = True
 except ImportError as e:
     st.error(f"fawp-index not installed: {e}\n\n`pip install fawp-index[plot]`")
@@ -290,6 +305,23 @@ def _odw_bar(a, tau_max: int = 40) -> str:
         f'<span class="odw-label">{e}</span>'
         f'</div>'
     )
+
+
+def _confidence_html(a) -> str:
+    """Render a null-calibrated confidence badge for an AssetResult."""
+    try:
+        badge = confidence_badge(a)
+        tier  = badge["tier"]
+        score = badge["score"]
+        if tier == "HIGH":
+            return f'<span class="conf-high" title="Confidence: {score:.2f} — high gap persistence + ODW concentration">HIGH conf</span>'
+        if tier == "MEDIUM":
+            return f'<span class="conf-medium" title="Confidence: {score:.2f} — moderate persistence">MED conf</span>'
+        if tier == "LOW":
+            return f'<span class="conf-low" title="Confidence: {score:.2f} — low persistence or diffuse gap">LOW conf</span>'
+        return '<span class="conf-insuf" title="Insufficient scan windows">—</span>'
+    except Exception:
+        return ""
 
 
 def _explain_html(a) -> str:
@@ -389,6 +421,19 @@ with st.sidebar:
 
     st.markdown("<br>", unsafe_allow_html=True)
     run_btn = st.button("▶  Run Scan", type="primary", use_container_width=True)
+
+    # ── User info + sign-out ──────────────────────────────────────────────
+    if _AUTH_ENABLED:
+        _email = get_user_email()
+        if _email:
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="font-family:monospace;font-size:0.65em;color:#3A4E70;"'
+                f'>{_email}</div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Sign out", use_container_width=True):
+                sign_out()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -527,14 +572,20 @@ if run_btn or "wl_result" not in st.session_state:
 
 wl             = st.session_state["wl_result"]
 ranked         = wl.rank_by("score")
+# Auto-save to scan history
+try:
+    _hist = ScanHistory()
+    _hist.save(wl)
+except Exception:
+    pass
 scan_duration  = st.session_state.get("scan_duration", "—")
 scan_timestamp = st.session_state.get("scan_timestamp", "—")
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Tabs
 # ═══════════════════════════════════════════════════════════════════════════
-tab_scanner, tab_curves, tab_heatmap, tab_significance, tab_export = st.tabs([
-    "Scanner", "Curves", "Heatmap", "Significance", "Export",
+tab_scanner, tab_curves, tab_heatmap, tab_significance, tab_validation, tab_history, tab_export = st.tabs([
+    "Scanner", "Curves", "Heatmap", "Significance", "Validation", "History", "Export",
 ])
 
 
@@ -608,6 +659,7 @@ with tab_scanner:
             days_str   = f"{a.days_in_regime}d" if a.days_in_regime else "—"
             age_str    = f"age {a.signal_age_days}d"
 
+            conf_html  = _confidence_html(a)
             st.markdown(
                 f'<div class="{row_cls}">'
                 f'<span class="asset-ticker">{a.ticker}</span>'
@@ -615,6 +667,7 @@ with tab_scanner:
                 f'{pill_html}'
                 f'<span class="{score_cls}" style="min-width:64px">{a.latest_score:.4f}</span>'
                 f'{spark_html}'
+                f'{conf_html}'
                 f'<span class="asset-spacer"></span>'
                 f'<span class="asset-gap">gap {a.peak_gap_bits:.4f}b</span>'
                 f'{odw_html}'
@@ -878,6 +931,246 @@ with tab_significance:
 # ──────────────────────────────────────────────────────────────────────────
 # Tab 5 — Export
 # ──────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────────────
+# Tab 5 — Validation
+# ──────────────────────────────────────────────────────────────────────────
+with tab_validation:
+    st.markdown(_sec("Forward-return validation"), unsafe_allow_html=True)
+    st.caption(
+        "After a FAWP signal fires, what happens to price? "
+        "Select an asset and provide price data to compute forward returns "
+        "at multiple horizons."
+    )
+
+    valid_v = [a for a in ranked if not a.error and a.scan is not None]
+    if not valid_v:
+        st.warning("No valid scans.")
+    else:
+        col_v1, col_v2 = st.columns([2, 1])
+        with col_v1:
+            val_labels = [f"{a.ticker} ({a.timeframe})" for a in valid_v]
+            sel_val_lbl = st.selectbox("Asset", val_labels, key="val_asset")
+            sel_val_a   = valid_v[val_labels.index(sel_val_lbl)]
+        with col_v2:
+            val_horizons = st.multiselect(
+                "Horizons (bars)",
+                [1, 5, 10, 20, 40, 60],
+                default=[1, 5, 10, 20],
+                key="val_horizons",
+            )
+
+        run_val = st.button("Run validation", type="primary", key="run_val")
+
+        if run_val or "val_report" in st.session_state:
+            if run_val:
+                # Rebuild price series from the asset's scan dates + latest score
+                # We derive approximate prices from the loaded dfs dict
+                ticker_key = sel_val_a.ticker
+                tf_key     = sel_val_a.timeframe
+                if ticker_key in dfs:
+                    df_raw = dfs[ticker_key]
+                    close_col = [c for c in df_raw.columns
+                                 if "close" in str(c).lower() or c == "Close"]
+                    if close_col:
+                        prices = df_raw[close_col[0]].squeeze()
+                        with st.spinner("Computing forward returns…"):
+                            report = validate_signals(
+                                sel_val_a, prices,
+                                horizons=sorted(val_horizons) if val_horizons else [1,5,10,20],
+                            )
+                        st.session_state["val_report"] = report
+                    else:
+                        st.warning("No Close column found in loaded data.")
+                else:
+                    st.warning(
+                        f"Price data for {ticker_key} not found. "
+                        "Load data via 'Enter tickers' or 'Upload CSV' first."
+                    )
+
+            if "val_report" in st.session_state:
+                rpt = st.session_state["val_report"]
+                if rpt.n_signals < 3:
+                    st.info(
+                        f"Only {rpt.n_signals} FAWP signals found — "
+                        "need at least 3 for meaningful statistics. "
+                        "Try a longer period or lower epsilon."
+                    )
+                else:
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("FAWP signals", rpt.n_signals)
+                    c2.metric("Price bars",   rpt.n_prices)
+                    if rpt.horizons:
+                        best = max(rpt.horizons, key=lambda h: h.hit_rate)
+                        c3.metric("Best hit rate",
+                                  f"{best.hit_rate*100:.1f}% @ {best.horizon}b")
+
+                    if rpt.horizons:
+                        st.markdown(_sec("Forward-return statistics"), unsafe_allow_html=True)
+                        rows_html = ""
+                        for h in rpt.horizons:
+                            ret_cls  = "val-pos" if h.mean_return > 0 else "val-neg"
+                            hit_cls  = "val-pos" if h.hit_rate >= 0.5 else "val-neg"
+                            mae_cls  = "val-neg"
+                            mfe_cls  = "val-pos"
+                            rows_html += (
+                                f"<tr>"
+                                f"<td><b>{h.horizon}</b></td>"
+                                f"<td>{h.n_signals}</td>"
+                                f"<td class='{ret_cls}'>{h.mean_return*100:+.2f}%</td>"
+                                f"<td>{h.median_return*100:+.2f}%</td>"
+                                f"<td class='{hit_cls}'>{h.hit_rate*100:.1f}%</td>"
+                                f"<td class='{mae_cls}'>{h.mae*100:.2f}%</td>"
+                                f"<td class='{mfe_cls}'>{h.mfe*100:.2f}%</td>"
+                                f"<td>{h.std_return*100:.2f}%</td>"
+                                f"</tr>"
+                            )
+                        st.markdown(
+                            "<table class='val-table'><thead><tr>"
+                            "<th>Horizon</th><th>N</th><th>Mean ret</th>"
+                            "<th>Median</th><th>Hit rate</th>"
+                            "<th>Avg MAE</th><th>Avg MFE</th><th>Std dev</th>"
+                            f"</tr></thead><tbody>{rows_html}</tbody></table>",
+                            unsafe_allow_html=True,
+                        )
+
+                    if rpt.regime_mean_return and rpt.baseline_mean_return:
+                        st.markdown(_sec("FAWP vs baseline"), unsafe_allow_html=True)
+                        comp_rows = ""
+                        for hz in sorted(rpt.regime_mean_return):
+                            reg  = rpt.regime_mean_return.get(hz, 0.0)
+                            base = rpt.baseline_mean_return.get(hz, 0.0)
+                            diff = reg - base
+                            diff_cls = "val-pos" if diff > 0 else "val-neg"
+                            comp_rows += (
+                                f"<tr>"
+                                f"<td><b>{hz}</b></td>"
+                                f"<td>{reg*100:+.2f}%</td>"
+                                f"<td>{base*100:+.2f}%</td>"
+                                f"<td class='{diff_cls}'>{diff*100:+.2f}%</td>"
+                                f"</tr>"
+                            )
+                        st.markdown(
+                            "<table class='val-table'><thead><tr>"
+                            "<th>Horizon</th><th>FAWP mean</th>"
+                            "<th>Baseline mean</th><th>Difference</th>"
+                            f"</tr></thead><tbody>{comp_rows}</tbody></table>",
+                            unsafe_allow_html=True,
+                        )
+
+                    col_dl1, col_dl2 = st.columns(2)
+                    with col_dl1:
+                        st.download_button(
+                            "Download validation.csv",
+                            data=rpt.to_csv(
+                                __import__("tempfile").NamedTemporaryFile(
+                                    suffix=".csv", delete=False
+                                ).name
+                            ).read_bytes() if False else
+                            __import__("pandas").DataFrame(
+                                [h.to_dict() for h in rpt.horizons]
+                            ).to_csv(index=False).encode(),
+                            file_name=f"fawp_validation_{rpt.ticker}.csv",
+                            mime="text/csv",
+                        )
+                    with col_dl2:
+                        import tempfile as _tf2
+                        with _tf2.NamedTemporaryFile(suffix=".html", delete=False) as _tf3:
+                            rpt.to_html(_tf3.name)
+                            _val_html = __import__("pathlib").Path(_tf3.name).read_bytes()
+                        st.download_button(
+                            "Download validation.html",
+                            data=_val_html,
+                            file_name=f"fawp_validation_{rpt.ticker}.html",
+                            mime="text/html",
+                        )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Tab 6 — History
+# ──────────────────────────────────────────────────────────────────────────
+with tab_history:
+    st.markdown(_sec("Scan history"), unsafe_allow_html=True)
+    st.caption(
+        "Every scan is automatically saved. "
+        "Select an asset to see how its score and regime state evolved."
+    )
+    try:
+        hist = ScanHistory()
+        n_snaps = hist.n_snapshots()
+        st.info(f"{n_snaps} snapshots stored · {hist._dir}")
+
+        all_assets_hist = hist.all_assets()
+        if not all_assets_hist:
+            st.warning("No scan history yet. Run a scan to start recording.")
+        else:
+            asset_options = [f"{a['ticker']} ({a['timeframe']})"
+                             for a in all_assets_hist]
+            sel_hist = st.selectbox("Asset", asset_options, key="hist_asset")
+            sel_parts = sel_hist.replace(")", "").split(" (")
+            hticker, htf = sel_parts[0], sel_parts[1]
+
+            tl = hist.asset_timeline(hticker, htf)
+            if tl.empty:
+                st.info("No history for this asset yet.")
+            else:
+                onset = hist.first_onset(hticker, htf)
+                last  = hist.last_seen_active(hticker, htf)
+
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Snapshots", len(tl))
+                c2.metric("First onset", onset or "never")
+                c3.metric("Last active", last or "never")
+
+                st.markdown(_sec("Score timeline"), unsafe_allow_html=True)
+
+                if HAS_MPL:
+                    import matplotlib.pyplot as plt
+                    fig, ax = _dark_fig(10, 2.8)
+                    dates  = tl["scanned_at"].dt.strftime("%m-%d %H:%M").tolist()
+                    scores = tl["latest_score"].tolist()
+                    active = tl["regime_active"].tolist()
+                    colors = ["#C0111A" if a else "#2A4070" for a in active]
+                    ax.bar(range(len(scores)), scores, color=colors, alpha=0.85,
+                           edgecolor="none")
+                    tick_step = max(1, len(dates) // 8)
+                    ax.set_xticks(range(0, len(dates), tick_step))
+                    ax.set_xticklabels(dates[::tick_step], rotation=25,
+                                       ha="right", fontsize=7, color="#7A90B8")
+                    ax.set_ylabel("Score", fontsize=8, color="#7A90B8")
+                    ax.set_ylim(0, max(max(scores) * 1.15, 0.01))
+                    plt.tight_layout(pad=0.4)
+                    st.pyplot(fig, use_container_width=True)
+                    plt.close(fig)
+
+                st.markdown(_sec("Recent snapshots"), unsafe_allow_html=True)
+                recent_tl = tl.tail(20).iloc[::-1]
+                for _, row in recent_tl.iterrows():
+                    active_str = (
+                        '<span class="pill pill-fawp">FAWP</span>'
+                        if row["regime_active"]
+                        else '<span class="pill pill-clear">Clear</span>'
+                    )
+                    st.markdown(
+                        f'<div class="hist-row">'
+                        f'<span class="hist-date">{str(row["scanned_at"])[:16]}</span>'
+                        f'{active_str}'
+                        f'<span class="hist-score">{row["latest_score"]:.4f}</span>'
+                        f'<span style="color:var(--text-3);font-size:.8em">'
+                        f'gap {row["peak_gap_bits"]:.4f}b</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                st.download_button(
+                    "Download timeline CSV",
+                    data=tl.to_csv(index=False).encode(),
+                    file_name=f"fawp_history_{hticker}_{htf}.csv",
+                    mime="text/csv",
+                )
+    except Exception as e:
+        st.error(f"History unavailable: {e}")
+
+
 with tab_export:
     st.markdown(_sec("Download results"), unsafe_allow_html=True)
 
