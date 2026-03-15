@@ -161,7 +161,7 @@ class TestWatchlistResult:
     def test_to_json(self, fast_wl, tmp_path):
         p = fast_wl.to_json(tmp_path / "wl.json")
         d = json.loads(p.read_text())
-        assert d["meta"]["fawp_index_version"] == "0.20.0"
+        assert d["meta"]["fawp_index_version"] == "0.23.0"
         assert d["summary"]["n_assets"] == fast_wl.n_assets
         assert len(d["assets"]) == fast_wl.n_assets
 

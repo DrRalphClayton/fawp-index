@@ -472,11 +472,13 @@ class AlertEngine:
         horizon_warn_tau:        Optional[int] = None,
         state_path:              Optional[Union[str, Path]] = None,
         suppress_errors:         bool = True,
-        # ── New in v0.20.0 ───────────────────────────────────────────────
+        # ── New in v0.23.0 ───────────────────────────────────────────────
         cooldown_hours:          float = 0.0,
         min_consecutive_windows: int   = 1,
         score_change_threshold:  float = 0.0,
         min_severity:            Optional[AlertSeverity] = None,
+        digest_mode:             bool  = False,
+        confirmation_scans:      int   = 1,
     ):
         """
         Parameters
@@ -501,6 +503,13 @@ class AlertEngine:
         min_severity : AlertSeverity or None
             Suppress any alert below this severity tier.
             None = no suppression (default).
+        digest_mode : bool
+            If True, queue all alerts and send one combined digest
+            per check() call instead of individual messages.
+        confirmation_scans : int
+            Only fire NEW_FAWP after the asset has been flagged in
+            this many consecutive scans (not windows). Requires
+            persistent state_path. 1 = fire immediately (default).
         """
         self.gap_threshold            = gap_threshold
         self.horizon_warn_tau         = horizon_warn_tau
@@ -510,6 +519,9 @@ class AlertEngine:
         self.min_consecutive_windows  = max(1, int(min_consecutive_windows))
         self.score_change_threshold   = score_change_threshold
         self.min_severity             = min_severity
+        self.digest_mode              = digest_mode
+        self.confirmation_scans       = max(1, int(confirmation_scans))
+        self._digest_queue: List[FAWPAlert] = []
         self._backends: list          = []
         self._prev_state: Dict[str, dict] = self._load_state()
         self._templates: Dict[str, str]   = dict(_DEFAULT_TEMPLATES)
@@ -697,9 +709,24 @@ class AlertEngine:
                 except Exception:
                     pass
 
-        # Send all queued alerts
-        for alert in alerts:
-            self._dispatch(alert)
+        # ── Confirmation-scan gate ────────────────────────────────────────
+        if self.confirmation_scans > 1:
+            confirmed = []
+            for alert in alerts:
+                key = f"{alert.ticker}|{alert.timeframe}"
+                prev = self._prev_state.get(key, {})
+                consec = prev.get("consec_active", 0) + 1
+                self._prev_state.setdefault(key, {})["consec_active"] = consec
+                if consec >= self.confirmation_scans:
+                    confirmed.append(alert)
+            alerts = confirmed
+
+        # Send or queue alerts
+        if self.digest_mode:
+            self._digest_queue.extend(alerts)
+        else:
+            for alert in alerts:
+                self._dispatch(alert)
 
         # Update state
         new_state: Dict[str, dict] = {}
@@ -729,6 +756,51 @@ class AlertEngine:
         order = [AlertSeverity.LOW, AlertSeverity.MEDIUM,
                  AlertSeverity.HIGH, AlertSeverity.CRITICAL]
         return order.index(alert.severity) >= order.index(self.min_severity)
+
+    def flush_digest(self) -> int:
+        """
+        Send a single combined digest of all queued alerts and clear the queue.
+
+        Only useful when digest_mode=True. Call once after all check() calls.
+
+        Returns
+        -------
+        int — number of alerts in the digest
+        """
+        if not self._digest_queue:
+            return 0
+        n      = len(self._digest_queue)
+        now    = datetime.now()
+        fawp_q = [a for a in self._digest_queue
+                  if a.alert_type == AlertType.NEW_FAWP]
+        end_q  = [a for a in self._digest_queue
+                  if a.alert_type == AlertType.REGIME_END]
+        lines  = [f"📋 DIGEST — {n} alert(s) at {now.strftime('%H:%M')}"]
+        if fawp_q:
+            lines.append(
+                "  🔴 NEW FAWP: " +
+                ", ".join(f"{a.ticker}[{a.timeframe}] {a.score:.3f}"
+                          for a in fawp_q[:5])
+            )
+        if end_q:
+            lines.append(
+                "  🟢 CLEARED: " +
+                ", ".join(f"{a.ticker}[{a.timeframe}]" for a in end_q[:5])
+            )
+        ref = self._digest_queue[0]
+        digest_alert = FAWPAlert(
+            ticker     = "DIGEST",
+            timeframe  = "all",
+            alert_type = AlertType.DAILY_SUMMARY,
+            score      = max(a.score for a in self._digest_queue),
+            gap_bits   = max(a.gap_bits for a in self._digest_queue),
+            odw_start  = None, odw_end = None,
+            timestamp  = now,
+            message    = "\n".join(lines),
+        )
+        self._dispatch(digest_alert)
+        self._digest_queue.clear()
+        return n
 
     def daily_summary(self, watchlist_result) -> FAWPAlert:
         """

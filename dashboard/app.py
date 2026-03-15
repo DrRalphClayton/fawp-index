@@ -1,5 +1,5 @@
 """
-FAWP Dashboard v0.20.0 — Streamlit app
+FAWP Dashboard v0.23.0 — Streamlit app
 ========================================
 Ralph Clayton (2026) · https://doi.org/10.5281/zenodo.18673949
 """
@@ -19,13 +19,20 @@ if str(_THIS_DIR) not in sys.path:
     sys.path.insert(0, str(_THIS_DIR))
 
 try:
-    from auth import require_auth, get_user_email, sign_out
+    from auth import (
+        require_auth, get_user_email, sign_out,
+        get_plan, get_limit, is_pro, is_admin,
+    )
     _AUTH_ENABLED = True
 except Exception:
     _AUTH_ENABLED = False
     def require_auth(): pass
     def get_user_email(): return None
     def sign_out(): pass
+    def get_plan(): return "free"
+    def get_limit(f): return None
+    def is_pro(): return True
+    def is_admin(): return False
 
 st.set_page_config(
     page_title="FAWP Scanner",
@@ -36,6 +43,9 @@ st.set_page_config(
 
 if _AUTH_ENABLED:
     require_auth()
+
+# Demo mode state
+_IS_DEMO = st.session_state.get("_demo_mode", False) or _DEMO_MODE
 
 _CSS = """
 <style>
@@ -233,6 +243,7 @@ try:
     from fawp_index.explain import explain_asset, confidence_badge
     from fawp_index.scan_history import ScanHistory
     from fawp_index.validation import validate_signals
+    from fawp_index.compare import compare_signals
     HAS_FAWP = True
 except ImportError as e:
     st.error(f"fawp-index not installed: {e}\n\n`pip install fawp-index[plot]`")
@@ -278,6 +289,65 @@ def _kpi(val, label, alert=False):
     return (f'<div class="{cls}">'
             f'<div class="kpi-val">{val}</div>'
             f'<div class="kpi-lbl">{label}</div></div>')
+
+
+
+def _empty_state(icon, title, body, action=""):
+    a = f'<div style="margin-top:1.2em;color:#D4AF37;font-size:.85em;font-weight:600">{action}</div>' if action else ""
+    return (
+        '<div style="text-align:center;padding:3em 2em;background:#0D1729;'
+        'border:1px dashed #182540;border-radius:8px;max-width:480px;margin:2em auto">'
+        f'<div style="font-size:2.2em;margin-bottom:.4em">{icon}</div>'
+        f'<div style="font-family:sans-serif;font-size:1.05em;font-weight:700;'
+        f'color:#EDF0F8;margin-bottom:.5em">{title}</div>'
+        f'<div style="color:#7A90B8;font-size:.88em;line-height:1.5">{body}</div>'
+        + a + '</div>'
+    )
+
+
+def _add_notification(title, body, kind="info"):
+    """Queue an in-app notification."""
+    import pandas as _pd
+    notifs = st.session_state.get("_notifications", [])
+    notifs.insert(0, {
+        "title": title, "body": body, "kind": kind,
+        "ts":    _pd.Timestamp.now().strftime("%H:%M"),
+        "read":  False,
+    })
+    st.session_state["_notifications"] = notifs[:20]
+
+
+def _notification_bell():
+    """Render notification bell + dropdown in the sidebar."""
+    notifs  = st.session_state.get("_notifications", [])
+    n_unread = sum(1 for n in notifs if not n.get("read"))
+    badge_html = (
+        '<span class="notif-badge">' + str(n_unread) + "</span>"
+        if n_unread else ""
+    )
+    st.sidebar.markdown(
+        '<div class="notif-bell">🔔' + badge_html + "</div>",
+        unsafe_allow_html=True,
+    )
+    label = f"Alerts {'🔴' if n_unread else '·'} ({len(notifs)})"
+    with st.sidebar.expander(label, expanded=False):
+        if not notifs:
+            st.caption("No alerts yet.")
+        else:
+            if st.button("Mark all read", key="mark_all_read"):
+                for n in notifs:
+                    n["read"] = True
+                st.rerun()
+            for ntf in notifs[:10]:
+                kls  = ntf.get("kind", "info")
+                read = " style='opacity:.5'" if ntf.get("read") else ""
+                st.markdown(
+                    f'<div class="notif-item {kls}"{read}>'
+                    f'<b style="color:#EDF0F8">{ntf["title"]}</b>'
+                    f'<div style="color:#7A90B8;font-size:.88em">{ntf["body"]}</div>'
+                    f'<div class="notif-ts">{ntf["ts"]}</div></div>',
+                    unsafe_allow_html=True,
+                )
 
 
 def _sec(label):
@@ -469,8 +539,18 @@ with st.sidebar:
                 f'>{_email}</div>',
                 unsafe_allow_html=True,
             )
+            _plan = get_plan()
+            _plan_colors = {"free": "#3A4E70", "pro": "#D4AF37", "admin": "#C0111A"}
+            _pcol = _plan_colors.get(_plan, "#3A4E70")
+            st.markdown(
+                f'<div style="font-family:monospace;font-size:0.62em;'
+                f'color:{_pcol};font-weight:600;padding:.15em 0">'
+                f'{_plan.upper()} PLAN</div>',
+                unsafe_allow_html=True)
             if st.button("Sign out", use_container_width=True):
                 sign_out()
+
+    _notification_bell()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -558,7 +638,7 @@ st.markdown("""
 
 # ── Auto-detect demo mode from env (set by fawp-demo CLI) ────────────────
 import os as _os
-_DEMO_MODE    = _os.environ.get("FAWP_DEMO",         "0") == "1"
+_DEMO_MODE    = _os.environ.get("FAWP_DEMO", "0") == "1" or st.session_state.get("_demo_mode", False)
 _DEMO_TICKERS = _os.environ.get("FAWP_DEMO_TICKERS", "")
 
 # ── Load data ──────────────────────────────────────────────────────────────
@@ -568,6 +648,10 @@ if _DEMO_MODE and not _DEMO_TICKERS and source != "Upload CSV(s)":
     source = "Demo data"
 elif _DEMO_MODE and _DEMO_TICKERS:
     source = "Enter tickers (yfinance)"
+# Also gate yfinance if demo bypass (not signed in)
+if st.session_state.get("_demo_bypass") and source == "Enter tickers (yfinance)":
+    source = "Demo data"
+    st.sidebar.caption("Sign up to scan real tickers.")
 
 if source == "Demo data":
     dfs = _load_demo()
@@ -589,6 +673,9 @@ elif source == "Enter tickers (yfinance)":
     col1, col2 = st.columns([3, 1])
     with col1:
         _default_tickers = _DEMO_TICKERS.replace(",", ", ") if _DEMO_TICKERS else "SPY, QQQ, GLD, BTC-USD"
+        _max_t = get_limit("max_tickers") or 999
+        if not is_pro() and _AUTH_ENABLED:
+            st.caption(f"Free plan: up to {_max_t} tickers")
         ticker_str = st.text_input("Tickers (comma-separated)", _default_tickers)
     with col2:
         period = st.selectbox("Period", ["1y", "2y", "5y", "max"], index=1)
@@ -596,24 +683,44 @@ elif source == "Enter tickers (yfinance)":
         dfs = _load_yfinance(ticker_str, period)
 
 if not dfs:
-    st.warning("No data loaded. Choose a source and press **Run Scan**.")
+    st.markdown(_empty_state("📡","No data loaded","Choose a source in the sidebar and press <b>▶ Run Scan</b>.","← Select source in sidebar"), unsafe_allow_html=True)
     st.stop()
 
 # ── Run scan ───────────────────────────────────────────────────────────────
-if run_btn or "wl_result" not in st.session_state:
+if run_btn:
     _t0 = time.time()
     with st.spinner("Scanning…"):
         st.session_state["wl_result"]      = _run_scan(dfs, window, step, tau_max, n_null, epsilon, tuple(timeframes))
         st.session_state["scan_duration"]  = round(time.time() - _t0, 1)
         st.session_state["scan_timestamp"] = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")
+    # Auto-save to per-user store
+    try:
+        get_store().save_scan(st.session_state["wl_result"])
+    except Exception:
+        pass
+    # Fire in-app notifications
+    _wl_snap = st.session_state["wl_result"]
+    if _wl_snap.n_flagged > 0:
+        _active = _wl_snap.active_regimes()[:3]
+        _tickers = ", ".join(f"{a.ticker}[{a.timeframe}]" for a in _active)
+        _add_notification(
+            f"🔴 FAWP — {_wl_snap.n_flagged} regime(s) active",
+            _tickers,
+            kind="fawp",
+        )
+    else:
+        _add_notification(
+            f"✅ Scan complete — {_wl_snap.n_assets} assets clear",
+            f"No FAWP regimes detected",
+            kind="clear",
+        )
 
-wl             = st.session_state["wl_result"]
-ranked         = wl.rank_by("score")
-# Auto-save to per-user store (Supabase if logged in, local otherwise)
-try:
-    get_store().save_scan(wl)
-except Exception:
-    pass
+wl = st.session_state.get("wl_result")
+if wl is None:
+    st.info("Load data and click ▶ Run Scan to start.")
+    st.stop()
+
+ranked = wl.rank_by("score")
 scan_duration  = st.session_state.get("scan_duration", "—")
 scan_timestamp = st.session_state.get("scan_timestamp", "—")
 # Email alert if FAWP fired and user is logged in
@@ -637,8 +744,24 @@ if _AUTH_ENABLED and wl.n_flagged > 0 and run_btn:
 # ═══════════════════════════════════════════════════════════════════════════
 # Tabs
 # ═══════════════════════════════════════════════════════════════════════════
-tab_scanner, tab_curves, tab_heatmap, tab_significance, tab_validation, tab_history, tab_export = st.tabs([
-    "Scanner", "Curves", "Heatmap", "Significance", "Validation", "History", "Export",
+# ── Demo mode banner ────────────────────────────────────────────────────
+if _IS_DEMO and not st.session_state.get("_demo_banner_dismissed"):
+    col_db1, col_db2 = st.columns([5, 1])
+    with col_db1:
+        st.markdown(
+            '<div style="background:#1A2E10;border:1px solid #2A4A1A;'
+            'border-radius:6px;padding:.6em 1em;font-size:.85em;color:#7ABF5E">'
+            '🎮 <b>Demo mode</b> — synthetic data only. '
+            '<a href="#" style="color:#D4AF37">Sign up free</a> for real scans.'
+            '</div>',
+            unsafe_allow_html=True)
+    with col_db2:
+        if st.button("✕", key="dismiss_demo_banner"):
+            st.session_state["_demo_banner_dismissed"] = True
+            st.rerun()
+tab_scanner, tab_curves, tab_heatmap, tab_significance, tab_validation, tab_history, tab_compare, tab_admin, tab_export = st.tabs([
+    "Scanner", "Curves", "Heatmap", "Significance",
+    "Validation", "History", "Compare", "⚙ Admin", "Export",
 ])
 
 
@@ -646,6 +769,65 @@ tab_scanner, tab_curves, tab_heatmap, tab_significance, tab_validation, tab_hist
 # Tab 1 — Scanner
 # ──────────────────────────────────────────────────────────────────────────
 with tab_scanner:
+    # ── Onboarding — show on first use ───────────────────────────────────────
+    if "wl_result" not in st.session_state:
+        _plan = get_plan() if _AUTH_ENABLED else "free"
+        _max_t = get_limit("max_tickers") or 3 if not is_pro() else 999
+        st.markdown("""
+<div style="background:#0D1729;border:1px solid #182540;border-top:3px solid #D4AF37;
+border-radius:8px;padding:2em 2.2em 1.8em;max-width:640px;margin:2em auto">
+<div style="font-family:'Syne',sans-serif;font-size:1.25em;font-weight:800;
+color:#D4AF37;margin-bottom:.3em">Welcome to FAWP Scanner</div>
+<div style="color:#7A90B8;font-size:.88em;margin-bottom:1.4em">
+Detecting the Information-Control Exclusion Principle in real-time.<br>
+Follow these steps to run your first scan:
+</div>
+<div style="display:flex;flex-direction:column;gap:.8em">
+<div style="display:flex;align-items:flex-start;gap:.9em">
+  <div style="background:#D4AF37;color:#07101E;font-weight:800;font-size:.8em;
+  min-width:24px;height:24px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center">1</div>
+  <div><b style="color:#EDF0F8">Enter tickers</b>
+  <span style="color:#7A90B8;font-size:.88em"> — type comma-separated symbols in the sidebar
+  (e.g. SPY, QQQ, GLD)</span></div>
+</div>
+<div style="display:flex;align-items:flex-start;gap:.9em">
+  <div style="background:#D4AF37;color:#07101E;font-weight:800;font-size:.8em;
+  min-width:24px;height:24px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center">2</div>
+  <div><b style="color:#EDF0F8">Set period</b>
+  <span style="color:#7A90B8;font-size:.88em"> — 2y is a good default for daily data</span></div>
+</div>
+<div style="display:flex;align-items:flex-start;gap:.9em">
+  <div style="background:#D4AF37;color:#07101E;font-weight:800;font-size:.8em;
+  min-width:24px;height:24px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center">3</div>
+  <div><b style="color:#EDF0F8">Click ▶ Run Scan</b>
+  <span style="color:#7A90B8;font-size:.88em"> — results appear here with severity tiers,
+  sparklines, and confidence badges</span></div>
+</div>
+<div style="display:flex;align-items:flex-start;gap:.9em">
+  <div style="background:#2A4070;color:#EDF0F8;font-weight:800;font-size:.8em;
+  min-width:24px;height:24px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center">4</div>
+  <div><b style="color:#EDF0F8">Explore flagged assets</b>
+  <span style="color:#7A90B8;font-size:.88em"> — click any FAWP or HIGH asset to see
+  the "Why flagged?" explanation card</span></div>
+</div>
+</div>
+</div>
+""", unsafe_allow_html=True)
+
+        st.markdown(
+            '<div style="text-align:center;margin-top:1em">'
+            '<a href="https://github.com/DrRalphClayton/fawp-index" '
+            'style="color:#3A4E70;font-size:.8em;text-decoration:none">'
+            'Docs &nbsp;·&nbsp; GitHub &nbsp;·&nbsp; '
+            'doi:10.5281/zenodo.18673949</a></div>',
+            unsafe_allow_html=True,
+        )
+        st.stop()
+
 
     # KPI row
     n_active   = wl.n_flagged
@@ -700,7 +882,7 @@ with tab_scanner:
     st.markdown(_sec(f"Results — {len(filtered)} asset(s)"), unsafe_allow_html=True)
 
     if not filtered:
-        st.info("No assets match the current filter.")
+        st.markdown(_empty_state("🔍","No assets match","Try switching to <b>All</b> in the filter, or run a scan with more tickers."), unsafe_allow_html=True)
     else:
         for a in filtered:
             pill_html  = _severity_pill(a)
@@ -780,7 +962,7 @@ with tab_scanner:
 with tab_curves:
     valid_assets = [a for a in ranked if not a.error and a.scan is not None]
     if not valid_assets:
-        st.warning("No valid scans available.")
+        st.markdown(_empty_state("📈","No scan data","Run a scan first, then explore MI curves here.","→ Go to Scanner tab"), unsafe_allow_html=True)
     else:
         asset_labels = [f"{a.ticker}  ({a.timeframe})" for a in valid_assets]
         sel_label    = st.selectbox("Asset", asset_labels, key="curve_asset")
@@ -1154,7 +1336,7 @@ with tab_history:
 
         all_assets_hist = hist.all_assets() if hasattr(hist, 'all_assets') else []
         if not all_assets_hist:
-            st.warning("No scan history yet. Run a scan to start recording.")
+            st.markdown(_empty_state("🕐","No scan history yet","Every scan is saved here automatically. Run your first scan to start.","→ Scanner tab"), unsafe_allow_html=True)
         else:
             asset_options = [f"{a['ticker']} ({a['timeframe']})"
                              for a in all_assets_hist]
@@ -1164,7 +1346,7 @@ with tab_history:
 
             tl = hist.asset_timeline(hticker, htf)
             if tl.empty:
-                st.info("No history for this asset yet.")
+                st.markdown(_empty_state("📊","No history for this asset","Include it in your next scan to start tracking."), unsafe_allow_html=True)
             else:
                 onset = hist.first_onset(hticker, htf)
                 last  = hist.last_seen_active(hticker, htf)
@@ -1222,6 +1404,184 @@ with tab_history:
                 )
     except Exception as e:
         st.error(f"History unavailable: {e}")
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Compare tab
+# ──────────────────────────────────────────────────────────────────────────
+with tab_compare:
+    st.markdown(_sec("FAWP vs classic signals"), unsafe_allow_html=True)
+    st.caption(
+        "Compare FAWP regime score against RSI, realised volatility, "
+        "momentum and MA slope. Each row shows forward-return lift "
+        "when the signal is in its extreme zone (top 20%)."
+    )
+    valid_cmp = [a for a in ranked if not a.error and a.scan is not None]
+    if not valid_cmp:
+        st.markdown(_empty_state(
+            "📊", "No scan data",
+            "Run a scan first, then come back here to compare signals.",
+            "Go to Scanner tab"
+        ), unsafe_allow_html=True)
+    else:
+        col_c1, col_c2 = st.columns([2, 1])
+        with col_c1:
+            cmp_labels = [f"{a.ticker} ({a.timeframe})" for a in valid_cmp]
+            sel_cmp    = st.selectbox("Asset", cmp_labels, key="cmp_asset")
+            sel_cmp_a  = valid_cmp[cmp_labels.index(sel_cmp)]
+        with col_c2:
+            run_cmp = st.button("Run comparison", type="primary", key="run_cmp")
+
+        if run_cmp:
+            ticker_cmp = sel_cmp_a.ticker
+            if ticker_cmp in dfs:
+                df_cmp    = dfs[ticker_cmp]
+                close_col = [c for c in df_cmp.columns if "close" in str(c).lower()]
+                if close_col:
+                    with st.spinner("Computing comparisons…"):
+                        cmp_rpt = compare_signals(sel_cmp_a, df_cmp[close_col[0]].squeeze())
+                    st.session_state["cmp_report"] = cmp_rpt
+                else:
+                    st.warning("No Close column found.")
+            else:
+                st.warning(f"Price data for {ticker_cmp} not loaded.")
+
+        if "cmp_report" in st.session_state:
+            crpt = st.session_state["cmp_report"]
+            st.markdown(_sec("Forward-return lift at extreme signal"), unsafe_allow_html=True)
+
+            def _ret_cls(v):
+                return "val-pos" if v > 0 else "val-neg"
+
+            rows_html = (
+                f"<tr style='border-left:3px solid #D4AF37'>"
+                f"<td><b>FAWP score</b></td><td style='color:#7A90B8'>—</td>"
+                f"<td class='{_ret_cls(crpt.fawp_fwd_return_1)}'>{crpt.fawp_fwd_return_1*100:+.2f}%</td>"
+                f"<td class='{_ret_cls(crpt.fawp_fwd_return_5)}'>{crpt.fawp_fwd_return_5*100:+.2f}%</td>"
+                f"<td class='{_ret_cls(crpt.fawp_fwd_return_20)}'>{crpt.fawp_fwd_return_20*100:+.2f}%</td>"
+                f"<td class='{_ret_cls(crpt.fawp_hit_rate_20 - 0.5)}'>{crpt.fawp_hit_rate_20*100:.1f}%</td>"
+                f"</tr>"
+            )
+            for s in crpt.signals:
+                rows_html += (
+                    f"<tr><td>{s.name}</td>"
+                    f"<td style='font-family:monospace;color:#7A90B8'>{s.correlation:+.3f}</td>"
+                    f"<td class='{_ret_cls(s.fwd_return_1)}'>{s.fwd_return_1*100:+.2f}%</td>"
+                    f"<td class='{_ret_cls(s.fwd_return_5)}'>{s.fwd_return_5*100:+.2f}%</td>"
+                    f"<td class='{_ret_cls(s.fwd_return_20)}'>{s.fwd_return_20*100:+.2f}%</td>"
+                    f"<td class='{_ret_cls(s.hit_rate_20 - 0.5)}'>{s.hit_rate_20*100:.1f}%</td>"
+                    f"</tr>"
+                )
+            st.markdown(
+                "<table class='val-table'><thead><tr>"
+                "<th>Signal</th><th>Corr(FAWP)</th>"
+                "<th>Ret@1</th><th>Ret@5</th><th>Ret@20</th><th>Hit%@20</th>"
+                f"</tr></thead><tbody>{rows_html}</tbody></table>",
+                unsafe_allow_html=True,
+            )
+
+            if HAS_MPL and crpt.signals:
+                import matplotlib.pyplot as plt
+                labels = ["FAWP"] + [s.name for s in crpt.signals]
+                ret20  = [crpt.fawp_fwd_return_20*100] + [s.fwd_return_20*100 for s in crpt.signals]
+                hit20  = [crpt.fawp_hit_rate_20*100]   + [s.hit_rate_20*100   for s in crpt.signals]
+                colors = ["#D4AF37"] + ["#2A4070"] * len(crpt.signals)
+                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 3.4))
+                fig.patch.set_facecolor("#07101E")
+                for ax, vals, title in [
+                    (ax1, ret20, "20-bar fwd return (%)"),
+                    (ax2, hit20, "Hit rate at 20 bars (%)"),
+                ]:
+                    ax.set_facecolor("#0D1729")
+                    ax.bar(labels, vals, color=colors, alpha=0.85, edgecolor="none")
+                    ax.axhline(0, color="#182540", lw=1)
+                    ax.set_title(title, fontsize=8, color="#7A90B8", pad=4)
+                    ax.tick_params(colors="#7A90B8", labelsize=7)
+                    ax.set_xticklabels(labels, rotation=18, ha="right", fontsize=7)
+                    for sp in ax.spines.values():
+                        sp.set_edgecolor("#182540")
+                plt.tight_layout(pad=0.5)
+                st.pyplot(fig, use_container_width=True)
+                plt.close(fig)
+
+            st.download_button(
+                "Download comparison CSV",
+                data=crpt.to_dataframe().to_csv(index=False).encode(),
+                file_name=f"fawp_compare_{crpt.ticker}.csv",
+                mime="text/csv",
+            )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Admin tab — manage users and plans
+# ──────────────────────────────────────────────────────────────────────────
+with tab_admin:
+    if not _AUTH_ENABLED or not is_admin():
+        st.info("Admin access required.")
+    else:
+        st.markdown(_sec("Admin Panel"), unsafe_allow_html=True)
+        st.caption("Manage user plans. Only visible to admin accounts.")
+
+        # ── Upgrade a user ────────────────────────────────────────────────
+        st.markdown(_sec("Set user plan"), unsafe_allow_html=True)
+        with st.form("admin_set_plan"):
+            _admin_email = st.text_input("User email")
+            _admin_plan  = st.selectbox("Plan", ["free", "pro", "admin"])
+            _admin_sub   = st.form_submit_button("Update plan", type="primary")
+        if _admin_sub and _admin_email:
+            try:
+                import os as _os
+                from supabase import create_client as _cc
+                _surl = _os.environ.get("SUPABASE_URL", "")
+                _skey = _os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+                _adm  = _cc(_surl, _skey)
+                # Find user by email via admin API
+                _users = _adm.auth.admin.list_users()
+                _uid   = None
+                for _u in _users:
+                    if getattr(_u, "email", "") == _admin_email.strip():
+                        _uid = getattr(_u, "id", None)
+                        break
+                if _uid:
+                    _adm.table("profiles").upsert({
+                        "id":    _uid,
+                        "email": _admin_email.strip(),
+                        "plan":  _admin_plan,
+                    }).execute()
+                    st.success(f"Updated {_admin_email} → {_admin_plan}")
+                else:
+                    st.error(f"User not found: {_admin_email}")
+            except Exception as _ae:
+                st.error(f"Admin action failed: {_ae}")
+
+        # ── User list ─────────────────────────────────────────────────────
+        st.markdown(_sec("All users"), unsafe_allow_html=True)
+        try:
+            import os as _os2
+            from supabase import create_client as _cc2
+            _surl2 = _os2.environ.get("SUPABASE_URL", "")
+            _skey2 = _os2.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+            if _surl2 and _skey2:
+                _adm2 = _cc2(_surl2, _skey2)
+                _pres = _adm2.table("profiles").select("email, plan, created_at").execute()
+                _rows = _pres.data or []
+                if _rows:
+                    _rows_html = "".join(
+                        f"<tr><td>{r.get('email','?')}</td>"
+                        f"<td style='color:#D4AF37;font-weight:600'>{r.get('plan','free').upper()}</td>"
+                        f"<td style='color:#3A4E70'>{str(r.get('created_at',''))[:10]}</td></tr>"
+                        for r in _rows
+                    )
+                    st.markdown(
+                        "<table class='val-table'><thead><tr>"
+                        "<th>Email</th><th>Plan</th><th>Joined</th>"
+                        f"</tr></thead><tbody>{_rows_html}</tbody></table>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.caption("No users yet.")
+        except Exception as _ue:
+            st.caption(f"Could not load users: {_ue}")
 
 
 with tab_export:

@@ -1,16 +1,17 @@
 """
-fawp-index v0.20.0
+fawp-index v0.23.0
 FAWP Alpha Index — Information-Control Exclusion Principle detector.
 Includes full E1-E9 experimental suite data.
 Ralph Clayton (2026) · doi:10.5281/zenodo.18673949
 """
 
-__version__ = "0.20.0"
+__version__ = "0.23.0"
 __author__ = "Ralph Clayton"
 __doi__ = "https://doi.org/10.5281/zenodo.18673949"
 __github__ = "https://github.com/DrRalphClayton/fawp-index"
 
 from .validation import validate_signals, ValidationReport, HorizonStats
+from .compare import compare_signals, CompareReport, compare_fawp, ComparisonResult
 from .scan_history import ScanHistory
 from .constants import (
     BETA_NULL_QUANTILE,
@@ -70,7 +71,6 @@ from .market import (
     MarketScanConfig, MarketScanSeries, MarketWindowResult,
 )
 from .significance import fawp_significance, FAWPSignificance, SignificanceResult
-from .compare import compare_fawp, ComparisonResult
 from .benchmarks import (
     run_all as run_benchmarks,
     BenchmarkSuite, BenchmarkResult, BenchmarkFailure,
@@ -90,6 +90,7 @@ FAWPResult.plot = _plot_result
 __all__ = [
     # Validation
     "validate_signals", "ValidationReport", "HorizonStats",
+    "compare_signals", "CompareReport", "compare_fawp", "ComparisonResult",
     # Scan history
     "ScanHistory",
     # Calibration constants (paper-derived)
@@ -139,7 +140,6 @@ __all__ = [
     "MarketScanConfig", "MarketScanSeries", "MarketWindowResult",
     # Significance / compare
     "fawp_significance", "FAWPSignificance", "SignificanceResult",
-    "compare_fawp", "ComparisonResult",
     # Benchmarks
     "run_benchmarks", "BenchmarkSuite", "BenchmarkResult", "BenchmarkFailure",
     "clean_control", "prediction_only", "control_only",

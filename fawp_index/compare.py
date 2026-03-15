@@ -1,408 +1,417 @@
 """
-fawp_index.compare — Side-by-side FAWP result comparison
-=========================================================
+fawp_index.compare — Benchmark comparison: FAWP vs classic signals.
 
-Compare two FAWP detection results: two assets, two time windows,
-two parameter sets, or two experiments.
+Computes FAWP regime score alongside RSI, realised volatility,
+momentum (rolling return), and moving-average slope, then measures
+correlation and forward-return lift for each.
 
-Quick start
------------
-    from fawp_index import ODWDetector, compare_fawp
+Usage::
 
-    odw_a = ODWDetector.from_e9_2_data(steering='u')
-    odw_b = ODWDetector.from_e9_2_data(steering='xi')
+    from fawp_index.watchlist import scan_watchlist
+    from fawp_index.compare import compare_signals
 
-    cmp = compare_fawp(odw_a, odw_b, label_a="u-steering", label_b="xi-steering")
-    print(cmp.summary())
-    cmp.to_html("comparison.html")
-    cmp.to_json("comparison.json")
-    cmp.plot()
-
-Also works with AlphaV2Result, BenchmarkResult, or any mix::
-
-    from fawp_index import FAWPAlphaIndexV2
-    alpha_a = FAWPAlphaIndexV2.from_e9_2_data(steering='u')
-    alpha_b = FAWPAlphaIndexV2.from_e9_2_data(steering='xi')
-    cmp = compare_fawp(alpha_a, alpha_b, label_a="u", label_b="xi")
-
-Ralph Clayton (2026) · https://doi.org/10.5281/zenodo.18673949
+    prices = pd.Series(...)   # Close price series
+    result = scan_watchlist({"SPY": df}, period="2y")
+    asset  = result.rank_by("score")[0]
+    report = compare_signals(asset, prices)
+    print(report.summary())
 """
 
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass
-from datetime import date
-from pathlib import Path
-from typing import Any, List, Optional, Tuple, Union
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 
 import numpy as np
-
-from fawp_index import __version__ as _VERSION
-_DOI     = "https://doi.org/10.5281/zenodo.18673949"
-_GITHUB  = "https://github.com/DrRalphClayton/fawp-index"
+import pandas as pd
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Row dataclass
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Signal builders ────────────────────────────────────────────────────────────
+
+def _rsi(prices: pd.Series, window: int = 14) -> pd.Series:
+    delta = prices.diff()
+    gain  = delta.clip(lower=0).rolling(window).mean()
+    loss  = (-delta.clip(upper=0)).rolling(window).mean()
+    rs    = gain / loss.replace(0, np.nan)
+    return 100 - (100 / (1 + rs))
+
+
+def _realised_vol(prices: pd.Series, window: int = 21) -> pd.Series:
+    return prices.pct_change().rolling(window).std() * (252 ** 0.5)
+
+
+def _momentum(prices: pd.Series, window: int = 20) -> pd.Series:
+    return prices.pct_change(window)
+
+
+def _ma_slope(prices: pd.Series, window: int = 20) -> pd.Series:
+    ma = prices.rolling(window).mean()
+    return ma.diff(5) / ma.shift(5)
+
+
+# ── CompareReport ──────────────────────────────────────────────────────────────
 
 @dataclass
-class ComparisonRow:
-    """One row in a comparison table."""
-    field:     str          # e.g. "tau_h+"
-    val_a:     Any          # value for result A
-    val_b:     Any          # value for result B
-    delta:     Any          # B - A (or None if not numeric)
-    winner:    str          # "A", "B", "tie", or "—"
-    direction: str          # "lower_better", "higher_better", "—"
-    note:      str = ""     # optional annotation
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# ComparisonResult
-# ─────────────────────────────────────────────────────────────────────────────
-
-@dataclass
-class ComparisonResult:
-    """
-    Output of compare_fawp().
-
-    Attributes
-    ----------
-    label_a, label_b : str
-        Names for the two results.
-    result_a, result_b : ODWResult or AlphaV2Result
-        The two result objects.
-    result_type : str
-        'ODW' or 'AlphaV2'.
-    rows : list of ComparisonRow
-        One row per comparable field.
-    winner_overall : str
-        'A', 'B', or 'tie'.
-    score_a, score_b : int
-        Number of fields won by each side.
-    """
-
-    label_a: str
-    label_b: str
-    result_a: object
-    result_b: object
-    result_type: str
-    rows: List[ComparisonRow]
-    winner_overall: str
-    score_a: int
-    score_b: int
-
-    # ── summary ──────────────────────────────────────────────────────────────
-
-    def summary(self) -> str:
-        w = self.winner_overall
-        win_label = (
-            f"{self.label_a}" if w == "A"
-            else f"{self.label_b}" if w == "B"
-            else "tie"
-        )
-
-        col_a = max(len(self.label_a), 10)
-        col_b = max(len(self.label_b), 10)
-        col_f = 26
-
-        header = (
-            f"  {'Field':<{col_f}} {self.label_a:>{col_a}} "
-            f"{self.label_b:>{col_b}}  {'Delta':>10}  {'Winner':>6}"
-        )
-        sep = "  " + "-" * (col_f + col_a + col_b + 28)
-
-        lines = [
-            "=" * (col_f + col_a + col_b + 32),
-            f"  FAWP Comparison: {self.label_a!r} vs {self.label_b!r}",
-            "=" * (col_f + col_a + col_b + 32),
-            header, sep,
-        ]
-
-        for row in self.rows:
-            def _fmt(v):
-                if v is None:
-                    return "—"
-                if isinstance(v, bool):
-                    return "YES" if v else "NO"
-                if isinstance(v, float):
-                    return f"{v:.4f}"
-                return str(v)
-
-            delta_str = ""
-            if row.delta is not None and isinstance(row.delta, (int, float)):
-                sign = "+" if row.delta > 0 else ""
-                delta_str = f"{sign}{row.delta:.3f}"
-            elif row.delta is not None:
-                delta_str = str(row.delta)
-
-            arrow = {"A": "← A", "B": "B →", "tie": "=", "—": ""}
-            lines.append(
-                f"  {row.field:<{col_f}} {_fmt(row.val_a):>{col_a}} "
-                f"{_fmt(row.val_b):>{col_b}}  {delta_str:>10}  "
-                f"{arrow.get(row.winner, ''):>6}"
-            )
-
-        lines += [
-            sep,
-            f"  Score: {self.label_a}={self.score_a}  {self.label_b}={self.score_b}",
-            f"  Overall winner: {win_label}",
-            "=" * (col_f + col_a + col_b + 32),
-        ]
-        return "\n".join(lines)
-
-    # ── plot ─────────────────────────────────────────────────────────────────
-
-    def plot(self, show: bool = True, save_path: Optional[str] = None):
-        """
-        Radar/bar chart comparison of key metrics.
-
-        Returns matplotlib Figure.
-        """
-        try:
-            import matplotlib
-            matplotlib.use("Agg" if not show else matplotlib.get_backend())
-            import matplotlib.pyplot as plt
-        except ImportError:
-            raise ImportError("pip install fawp-index[plot]")
-
-        # Pick numeric rows for bar chart
-        numeric_rows = [
-            r for r in self.rows
-            if isinstance(r.val_a, (int, float)) and isinstance(r.val_b, (int, float))
-            and r.val_a is not None and r.val_b is not None
-        ]
-        if not numeric_rows:
-            return None
-
-        labels    = [r.field for r in numeric_rows]
-        vals_a    = [float(r.val_a) for r in numeric_rows]
-        vals_b    = [float(r.val_b) for r in numeric_rows]
-        n = len(labels)
-        x = np.arange(n)
-        w = 0.35
-
-        fig, ax = plt.subplots(figsize=(max(7, n * 1.4), 5))
-        ax.bar(x - w/2, vals_a, w, label=self.label_a,
-               color="#0E2550", alpha=0.85)
-        ax.bar(x + w/2, vals_b, w, label=self.label_b,
-               color="#C0111A", alpha=0.85)
-
-        # Winner highlights
-        for i, row in enumerate(numeric_rows):
-            if row.winner == "A":
-                ax.bar(x[i] - w/2, vals_a[i], w, color="#D4AF37", alpha=0.35)
-            elif row.winner == "B":
-                ax.bar(x[i] + w/2, vals_b[i], w, color="#D4AF37", alpha=0.35)
-
-        ax.set_xticks(x)
-        ax.set_xticklabels(labels, rotation=25, ha="right", fontsize=8)
-        ax.set_ylabel("Value")
-        ax.set_title(
-            f"FAWP Comparison: {self.label_a!r} vs {self.label_b!r}\n"
-            f"Score: {self.label_a}={self.score_a}  {self.label_b}={self.score_b}  "
-            f"Overall: {self.winner_overall}",
-            fontsize=9,
-        )
-        ax.legend(fontsize=8)
-        ax.grid(True, alpha=0.2, axis="y")
-        fig.text(0.99, 0.01, "fawp-index | Clayton (2026)",
-                 ha="right", fontsize=7, color="grey", style="italic")
-        plt.tight_layout()
-
-        if save_path:
-            fig.savefig(save_path, dpi=150, bbox_inches="tight")
-        if show:
-            try:
-                plt.show()
-            except Exception:
-                pass
-        return fig
-
-    # ── exports ──────────────────────────────────────────────────────────────
+class SignalStats:
+    name:          str
+    correlation:   float   # Pearson r with FAWP score
+    fwd_return_1:  float   # mean fwd return when signal is extreme (top 20%)
+    fwd_return_5:  float   # mean fwd return at 5-bar horizon
+    fwd_return_20: float   # mean fwd return at 20-bar horizon
+    hit_rate_20:   float   # % of extreme-signal bars where 20-bar return > 0
+    n_obs:         int
 
     def to_dict(self) -> dict:
-        def _ser(v):
-            if v is None:
-                return None
-            if isinstance(v, (bool, np.bool_)):
-                return bool(v)
-            if isinstance(v, (int, np.integer)):
-                return int(v)
-            if isinstance(v, (float, np.floating)):
-                return float(v) if np.isfinite(v) else None
-            return v
-
         return {
-            "meta": {
-                "generated_date": date.today().isoformat(),
-                "fawp_index_version": _VERSION,
-                "doi": _DOI,
-            },
-            "label_a": self.label_a,
-            "label_b": self.label_b,
-            "result_type": self.result_type,
-            "winner_overall": self.winner_overall,
-            "score_a": self.score_a,
-            "score_b": self.score_b,
-            "rows": [
-                {
-                    "field":     row.field,
-                    "val_a":     _ser(row.val_a),
-                    "val_b":     _ser(row.val_b),
-                    "delta":     _ser(row.delta),
-                    "winner":    row.winner,
-                    "direction": row.direction,
-                    "note":      row.note,
-                }
-                for row in self.rows
-            ],
+            "signal":       self.name,
+            "corr_fawp":    round(self.correlation,   3),
+            "fwd_ret_1":    round(self.fwd_return_1,  4),
+            "fwd_ret_5":    round(self.fwd_return_5,  4),
+            "fwd_ret_20":   round(self.fwd_return_20, 4),
+            "hit_rate_20":  round(self.hit_rate_20,   3),
+            "n_obs":        self.n_obs,
         }
 
-    def to_json(self, path: Union[str, Path], indent: int = 2) -> Path:
-        """Write comparison to JSON."""
-        p = Path(path)
-        p.write_text(json.dumps(self.to_dict(), indent=indent))
-        return p
 
-    def to_html(self, path: Union[str, Path]) -> Path:
-        """Write comparison to a self-contained HTML file."""
-        p = Path(path)
-        p.write_text(_cmp_html(self))
-        return p
+@dataclass
+class CompareReport:
+    ticker:     str
+    timeframe:  str
+    signals:    List[SignalStats]
+    fawp_fwd_return_1:  float
+    fawp_fwd_return_5:  float
+    fawp_fwd_return_20: float
+    fawp_hit_rate_20:   float
+    n_obs:      int
 
-    def to_pdf(self, path: Union[str, Path], **kwargs) -> Path:
-        """Write comparison as a PDF via fawp_index.report."""
-        from fawp_index.report import generate_report
-        return generate_report(
-            {self.label_a: self.result_a, self.label_b: self.result_b},
-            path,
-            title=f"Comparison: {self.label_a} vs {self.label_b}",
-            **kwargs,
+    def summary(self) -> str:
+        w = 68
+        lines = [
+            "=" * w,
+            f"  Signal Comparison — {self.ticker} [{self.timeframe}]",
+            f"  {self.n_obs} observations",
+            "=" * w,
+            f"  {'Signal':<18} {'Corr(FAWP)':>10}  {'Ret@1':>7}  "
+            f"{'Ret@5':>7}  {'Ret@20':>7}  {'Hit%@20':>8}",
+            "  " + "-" * 60,
+        ]
+        # FAWP row
+        lines.append(
+            f"  {'FAWP score':<18} {'—':>10}  "
+            f"{self.fawp_fwd_return_1*100:>6.2f}%  "
+            f"{self.fawp_fwd_return_5*100:>6.2f}%  "
+            f"{self.fawp_fwd_return_20*100:>6.2f}%  "
+            f"{self.fawp_hit_rate_20*100:>7.1f}%"
+        )
+        for s in self.signals:
+            lines.append(
+                f"  {s.name:<18} {s.correlation:>+10.3f}  "
+                f"{s.fwd_return_1*100:>6.2f}%  "
+                f"{s.fwd_return_5*100:>6.2f}%  "
+                f"{s.fwd_return_20*100:>6.2f}%  "
+                f"{s.hit_rate_20*100:>7.1f}%"
+            )
+        lines += ["", "=" * w]
+        return "\n".join(lines)
+
+    def to_dataframe(self) -> pd.DataFrame:
+        rows = [{"signal": "FAWP score",
+                 "corr_fawp": None,
+                 "fwd_ret_1":  round(self.fawp_fwd_return_1,  4),
+                 "fwd_ret_5":  round(self.fawp_fwd_return_5,  4),
+                 "fwd_ret_20": round(self.fawp_fwd_return_20, 4),
+                 "hit_rate_20": round(self.fawp_hit_rate_20,  3),
+                 "n_obs": self.n_obs}]
+        rows += [s.to_dict() for s in self.signals]
+        return pd.DataFrame(rows)
+
+
+# ── Core function ──────────────────────────────────────────────────────────────
+
+def compare_signals(
+    asset,
+    prices: pd.Series,
+    horizons: Optional[List[int]] = None,
+    extreme_pct: float = 0.20,
+) -> CompareReport:
+    """
+    Compare FAWP regime score against RSI, vol, momentum, MA-slope.
+
+    Parameters
+    ----------
+    asset : AssetResult
+    prices : pd.Series   Close prices, DatetimeIndex
+    horizons : list of int, optional   Default [1, 5, 20]
+    extreme_pct : float   Top fraction to define "extreme" signal. Default 0.20.
+
+    Returns
+    -------
+    CompareReport
+    """
+    if horizons is None:
+        horizons = [1, 5, 20]
+
+    prices = prices.squeeze().sort_index().dropna()
+    if not isinstance(prices.index, pd.DatetimeIndex):
+        prices.index = pd.to_datetime(prices.index)
+
+    # ── FAWP score series from scan windows ──────────────────────────────────
+    if asset.scan is None:
+        return CompareReport(
+            ticker=asset.ticker, timeframe=asset.timeframe,
+            signals=[], n_obs=0,
+            fawp_fwd_return_1=0.0, fawp_fwd_return_5=0.0,
+            fawp_fwd_return_20=0.0, fawp_hit_rate_20=0.0,
         )
 
+    fawp_dates  = [pd.Timestamp(w.date).normalize() for w in asset.scan.windows]
+    fawp_scores = [float(w.regime_score) for w in asset.scan.windows]
+    fawp_s = pd.Series(fawp_scores, index=fawp_dates).sort_index()
+    fawp_s = fawp_s[~fawp_s.index.duplicated(keep="last")]
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Result extraction helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _extract_odw_fields(r) -> dict:
-    """Pull comparable fields from an ODWResult."""
-    return {
-        "FAWP detected":      bool(r.fawp_found),
-        "tau_h+":             r.tau_h_plus,
-        "tau_f":              r.tau_f,
-        "ODW start":          r.odw_start,
-        "ODW end":            r.odw_end,
-        "ODW size (steps)":   r.odw_size,
-        "Peak gap (bits)":    float(r.peak_gap_bits),
-        "Peak gap tau":       r.peak_gap_tau,
-        "Mean lead to cliff": (float(r.mean_lead_to_cliff)
-                               if r.mean_lead_to_cliff is not None else None),
+    # ── Build comparison signals on price index ──────────────────────────────
+    sigs: Dict[str, pd.Series] = {
+        "RSI-14":          _rsi(prices, 14),
+        "Realised vol-21": _realised_vol(prices, 21),
+        "Momentum-20":     _momentum(prices, 20),
+        "MA slope-20":     _ma_slope(prices, 20),
     }
 
+    # Align all to FAWP dates
+    def _align(s: pd.Series) -> pd.Series:
+        aligned = s.reindex(fawp_s.index, method="ffill")
+        return aligned
 
-def _extract_alpha2_fields(r) -> dict:
-    """Pull comparable fields from an AlphaV2Result."""
-    return {
-        "FAWP detected":  bool(r.fawp_detected),
-        "ODW start":      r.odw_start,
-        "ODW end":        r.odw_end,
-        "Peak alpha_2":   float(r.peak_alpha2),
-        "Peak alpha_2 tau": r.peak_tau2,
-        "Peak I_pred":    float(r.pred_mi_corr.max()),
-        "Param m":        r.params.get("m"),
-        "Param eta":      r.params.get("eta"),
-        "Param epsilon":  r.params.get("epsilon"),
-        "Param kappa":    r.params.get("kappa"),
-    }
+    aligned = {k: _align(v) for k, v in sigs.items()}
 
+    # ── Forward returns ───────────────────────────────────────────────────────
+    price_arr = prices.values.astype(float)
+    price_idx = prices.index
 
-def _extract_any(r) -> Tuple[dict, str]:
-    """Auto-detect result type and extract fields."""
-    if hasattr(r, "odw_result"):
-        # BenchmarkResult — use its ODWResult
-        return _extract_odw_fields(r.odw_result), "ODW"
-    if hasattr(r, "tau_h_plus") and hasattr(r, "odw_start"):
-        return _extract_odw_fields(r), "ODW"
-    if hasattr(r, "alpha2") and hasattr(r, "S_m"):
-        return _extract_alpha2_fields(r), "AlphaV2"
-    raise TypeError(
-        f"Cannot compare object of type {type(r).__name__}. "
-        "Expected ODWResult, AlphaV2Result, or BenchmarkResult."
+    def _fwd(dt: pd.Timestamp, h: int) -> Optional[float]:
+        pos = price_idx.searchsorted(dt)
+        if pos + h >= len(price_arr) or price_arr[pos] <= 0:
+            return None
+        return price_arr[pos + h] / price_arr[pos] - 1.0
+
+    fwd: Dict[int, List[float]] = {h: [] for h in horizons}
+    for dt in fawp_s.index:
+        for h in horizons:
+            v = _fwd(dt, h)
+            if v is not None:
+                fwd[h].append(v)
+
+    def _mean_safe(lst):
+        return float(np.mean(lst)) if lst else 0.0
+    def _hit_safe(lst):
+        return float(np.mean([r > 0 for r in lst])) if lst else 0.0
+
+    # FAWP extreme = top extreme_pct by score
+    fawp_arr = fawp_s.values
+    thresh   = np.quantile(fawp_arr, 1 - extreme_pct)
+    fawp_extreme_idx = np.where(fawp_arr >= thresh)[0]
+
+    def _extreme_fwd(scores_arr: np.ndarray, h: int) -> tuple:
+        ext_thresh = np.quantile(scores_arr[np.isfinite(scores_arr)], 1 - extreme_pct)
+        ext_idx    = np.where(scores_arr >= ext_thresh)[0]
+        rets       = []
+        for i in ext_idx:
+            if i < len(fawp_s.index):
+                v = _fwd(fawp_s.index[i], h)
+                if v is not None:
+                    rets.append(v)
+        return _mean_safe(rets), _hit_safe(rets), len(rets)
+
+    # ── Build SignalStats ─────────────────────────────────────────────────────
+    signal_stats = []
+    for name, sig in aligned.items():
+        sig_arr = sig.values.astype(float)
+        valid   = np.isfinite(sig_arr) & np.isfinite(fawp_arr)
+        if valid.sum() < 10:
+            continue
+        corr = float(np.corrcoef(fawp_arr[valid], sig_arr[valid])[0, 1])
+
+        r1,  h1,  n1  = _extreme_fwd(sig_arr, horizons[0])
+        r5,  h5,  n5  = _extreme_fwd(sig_arr, horizons[1] if len(horizons) > 1 else 5)
+        r20, h20, n20 = _extreme_fwd(sig_arr, horizons[2] if len(horizons) > 2 else 20)
+
+        signal_stats.append(SignalStats(
+            name          = name,
+            correlation   = corr,
+            fwd_return_1  = r1,
+            fwd_return_5  = r5,
+            fwd_return_20 = r20,
+            hit_rate_20   = h20,
+            n_obs         = n20,
+        ))
+
+    # FAWP extreme stats
+    fr1,  _,   _  = _extreme_fwd(fawp_arr, horizons[0])
+    fr5,  _,   _  = _extreme_fwd(fawp_arr, horizons[1] if len(horizons) > 1 else 5)
+    fr20, fh20, fn = _extreme_fwd(fawp_arr, horizons[2] if len(horizons) > 2 else 20)
+
+    return CompareReport(
+        ticker     = asset.ticker,
+        timeframe  = asset.timeframe,
+        signals    = signal_stats,
+        fawp_fwd_return_1  = fr1,
+        fawp_fwd_return_5  = fr5,
+        fawp_fwd_return_20 = fr20,
+        fawp_hit_rate_20   = fh20,
+        n_obs      = fn,
     )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Winner logic
+# Original ODW comparison API — compare_fawp / ComparisonResult
+# Compares two FAWP detection results side by side (ODW, AlphaV2, or Benchmark)
 # ─────────────────────────────────────────────────────────────────────────────
 
-# For each field: is lower or higher better?
-_FIELD_DIRECTION = {
-    "FAWP detected":      None,             # boolean — no direction
-    "tau_h+":             "lower_better",   # earlier horizon is more sensitive
-    "tau_f":              "higher_better",  # later cliff → more time
-    "ODW start":          "lower_better",   # earlier detection
-    "ODW end":            "higher_better",  # longer window
-    "ODW size (steps)":   "higher_better",  # larger window
-    "Peak gap (bits)":    "higher_better",  # bigger gap = clearer signal
-    "Peak gap tau":       None,             # informational
-    "Mean lead to cliff": "higher_better",  # more lead time
-    "Peak alpha_2":       "higher_better",
-    "Peak alpha_2 tau":   None,
-    "Peak I_pred":        "higher_better",
-    "Param m":            None,
-    "Param eta":          None,
-    "Param epsilon":      None,
-    "Param kappa":        None,
-}
+import json as _json
+from pathlib import Path as _Path
+from typing import Union as _Union
 
 
-def _determine_winner(
-    field: str,
-    val_a: Any,
-    val_b: Any,
-) -> Tuple[str, str]:
-    """Return (winner, direction) for one field."""
-    direction = _FIELD_DIRECTION.get(field, None)
-
-    # Both None
-    if val_a is None and val_b is None:
-        return "tie", direction or "—"
-    if val_a is None:
-        return "B", direction or "—"
-    if val_b is None:
-        return "A", direction or "—"
-
-    # Boolean
-    if isinstance(val_a, bool) and isinstance(val_b, bool):
-        if val_a == val_b:
-            return "tie", "—"
-        return "—", "—"
-
-    # Numeric
-    if isinstance(val_a, (int, float)) and isinstance(val_b, (int, float)):
-        if direction == "lower_better":
-            if val_a < val_b:
-                return "A", direction
-            if val_b < val_a:
-                return "B", direction
-            return "tie", direction
-        if direction == "higher_better":
-            if val_a > val_b:
-                return "A", direction
-            if val_b > val_a:
-                return "B", direction
-            return "tie", direction
-
-    return "—", direction or "—"
+@dataclass
+class ComparisonRow:
+    """One metric row in a side-by-side comparison."""
+    field:   str
+    value_a: str
+    value_b: str
+    winner:  str   # "A", "B", "tie", or ""
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Main comparison builder
-# ─────────────────────────────────────────────────────────────────────────────
+@dataclass
+class ComparisonResult:
+    """
+    Side-by-side comparison of two FAWP detection results.
+
+    Attributes
+    ----------
+    label_a, label_b : str
+        Display names for the two results.
+    result_type : str
+        "ODW", "AlphaV2", or "Benchmark".
+    rows : list of ComparisonRow
+        Per-metric comparison rows.
+    winner_overall : str
+        "A", "B", or "tie".
+    score_a, score_b : int
+        Count of metrics won by each side.
+    """
+    label_a:        str
+    label_b:        str
+    result_type:    str
+    rows:           list
+    winner_overall: str
+    score_a:        int
+    score_b:        int
+
+    def summary(self) -> str:
+        w = 60
+        lines = [
+            "=" * w,
+            f"  FAWP Comparison: {self.label_a}  vs  {self.label_b}",
+            f"  Type: {self.result_type}",
+            "=" * w,
+            f"  {'Metric':<24} {'A':>12} {'B':>12} {'Winner':>6}",
+            "  " + "-" * 56,
+        ]
+        for r in self.rows:
+            lines.append(
+                f"  {r.field:<24} {r.value_a:>12} {r.value_b:>12} "
+                f"{'→'+r.winner if r.winner else '':>6}"
+            )
+        lines += [
+            "  " + "-" * 56,
+            f"  Score   {self.label_a}: {self.score_a}  "
+            f"{self.label_b}: {self.score_b}",
+            f"  Winner overall: {self.winner_overall}",
+            "=" * w,
+        ]
+        return "\n".join(lines)
+
+    def to_dict(self) -> dict:
+        return {
+            "label_a":        self.label_a,
+            "label_b":        self.label_b,
+            "result_type":    self.result_type,
+            "winner_overall": self.winner_overall,
+            "score_a":        self.score_a,
+            "score_b":        self.score_b,
+            "rows": [
+                {"field": r.field, "value_a": r.value_a,
+                 "value_b": r.value_b, "winner": r.winner}
+                for r in self.rows
+            ],
+        }
+
+    def to_json(self, path: _Union[str, _Path], indent: int = 2) -> _Path:
+        p = _Path(path)
+        p.write_text(_json.dumps(self.to_dict(), indent=indent))
+        return p
+
+    def to_html(self, path: _Union[str, _Path]) -> _Path:
+        p = _Path(path)
+        p.write_text(_comparison_html(self))
+        return p
+
+
+def _odw_rows(a, b) -> list:
+    """Build comparison rows from two ODW results."""
+    import numpy as _np
+
+    def _fmt_bool(v): return "YES" if v else "NO"
+    def _fmt_opt(v, fmt="{:.4f}"): return fmt.format(v) if v is not None else "—"
+
+    rows  = []
+    score_a, score_b = 0, 0
+
+    def _row(field, va, vb, winner=""):
+        rows.append(ComparisonRow(field=field, value_a=va, value_b=vb, winner=winner))
+        return winner
+
+    # fawp_found
+    fa = a.fawp_found if hasattr(a, "fawp_found") else False
+    fb = b.fawp_found if hasattr(b, "fawp_found") else False
+    w  = "A" if fa and not fb else ("B" if fb and not fa else "tie")
+    _row("FAWP found", _fmt_bool(fa), _fmt_bool(fb), w)
+    if w == "A": score_a += 1
+    elif w == "B": score_b += 1
+
+    # peak_gap_bits
+    ga = getattr(a, "peak_gap_bits", None) or 0.0
+    gb = getattr(b, "peak_gap_bits", None) or 0.0
+    w  = "A" if ga > gb else ("B" if gb > ga else "tie")
+    _row("Peak gap (bits)", f"{ga:.4f}", f"{gb:.4f}", w)
+    if w == "A": score_a += 1
+    elif w == "B": score_b += 1
+
+    # tau_h_plus
+    tha = getattr(a, "tau_h_plus", getattr(a, "odw_result", a))
+    thb = getattr(b, "tau_h_plus", getattr(b, "odw_result", b))
+    tha = getattr(tha, "tau_h_plus", None) if not isinstance(tha, (int, float, type(None))) else tha
+    thb = getattr(thb, "tau_h_plus", None) if not isinstance(thb, (int, float, type(None))) else thb
+    w   = "A" if (tha or 0) > (thb or 0) else ("B" if (thb or 0) > (tha or 0) else "tie")
+    _row("τ⁺ₕ (agency horizon)", _fmt_opt(tha, "{:.0f}"), _fmt_opt(thb, "{:.0f}"), w)
+    if w == "A": score_a += 1
+    elif w == "B": score_b += 1
+
+    # ODW width
+    def _width(x):
+        s = getattr(x, "odw_start", None)
+        e = getattr(x, "odw_end",   None)
+        if s is not None and e is not None: return e - s + 1
+        return None
+    wa = _width(a) or _width(getattr(a, "odw_result", a))
+    wb = _width(b) or _width(getattr(b, "odw_result", b))
+    w  = "A" if (wa or 0) > (wb or 0) else ("B" if (wb or 0) > (wa or 0) else "tie")
+    _row("ODW width (τ)", _fmt_opt(wa, "{:.0f}"), _fmt_opt(wb, "{:.0f}"), w)
+    if w == "A": score_a += 1
+    elif w == "B": score_b += 1
+
+    return rows, score_a, score_b
+
 
 def compare_fawp(
     result_a,
@@ -413,278 +422,139 @@ def compare_fawp(
     """
     Compare two FAWP detection results side by side.
 
-    Accepts ODWResult, AlphaV2Result, or BenchmarkResult (or any mix).
-    Auto-detects result type.
+    Accepts ODWResult, ODWDetector, FAWPAlphaIndexV2, or BenchmarkResult objects.
+    Both results must be of the same type.
 
     Parameters
     ----------
-    result_a : ODWResult | AlphaV2Result | BenchmarkResult
-    result_b : same type as result_a
-    label_a : str — display name for result A (default 'A')
-    label_b : str — display name for result B (default 'B')
+    result_a, result_b : FAWP result objects
+    label_a, label_b : str   Display names.
 
     Returns
     -------
     ComparisonResult
 
-    Examples
-    --------
-    Compare two steering definitions::
+    Raises
+    ------
+    TypeError if result types are incompatible.
+
+    Example
+    -------
+    ::
 
         from fawp_index import ODWDetector, compare_fawp
-
-        odw_u  = ODWDetector.from_e9_2_data(steering='u')
-        odw_xi = ODWDetector.from_e9_2_data(steering='xi')
-
-        cmp = compare_fawp(odw_u, odw_xi, label_a="u-steering", label_b="xi-steering")
+        a = ODWDetector.from_e9_2_data(steering="u")
+        b = ODWDetector.from_e9_2_data(steering="xi")
+        cmp = compare_fawp(a, b, label_a="u-steer", label_b="xi-steer")
         print(cmp.summary())
-        cmp.to_html("comparison.html")
-
-    Compare two parameter sets::
-
-        from fawp_index import FAWPAlphaIndexV2
-
-        a1 = FAWPAlphaIndexV2(m=3).compute(tau, pred, steer, fail)
-        a2 = FAWPAlphaIndexV2(m=7).compute(tau, pred, steer, fail)
-        cmp = compare_fawp(a1, a2, label_a="m=3", label_b="m=7")
-
-    Compare benchmark cases::
-
-        from fawp_index.benchmarks import clean_control, delayed_collapse
-        cmp = compare_fawp(clean_control(), delayed_collapse(),
-                           label_a="clean", label_b="delayed")
     """
-    fields_a, type_a = _extract_any(result_a)
-    fields_b, type_b = _extract_any(result_b)
+    cls_a = type(result_a).__name__
+    cls_b = type(result_b).__name__
 
-    if type_a != type_b:
-        raise TypeError(
-            f"Cannot directly compare {type_a} and {type_b} results. "
-            "Both must be the same result type."
-        )
+    # Normalise: unwrap detectors to their result objects
+    def _unwrap(r):
+        # ODWDetector → run if needed
+        if hasattr(r, "result") and r.result is not None:
+            return r.result
+        if hasattr(r, "compute"):
+            return r.compute()
+        # BenchmarkResult → use its odw_result
+        if hasattr(r, "odw_result"):
+            return r.odw_result
+        return r
 
-    rows: List[ComparisonRow] = []
-    score_a = score_b = 0
+    ua = _unwrap(result_a)
+    ub = _unwrap(result_b)
 
-    # Use field order from type A
-    for field_name, val_a in fields_a.items():
-        val_b = fields_b.get(field_name)
+    # Check type compatibility
+    cls_ua = type(ua).__name__
+    cls_ub = type(ub).__name__
+    if cls_ua != cls_ub:
+        # Allow BenchmarkResult → ODWResult normalization
+        if "ODW" not in cls_ua or "ODW" not in cls_ub:
+            raise TypeError(
+                f"Cannot compare {cls_ua} with {cls_ub}. "
+                f"Both results must be the same type."
+            )
 
-        # Delta
-        delta = None
-        if (isinstance(val_a, (int, float)) and val_a is not None and
-                isinstance(val_b, (int, float)) and val_b is not None):
-            try:
-                delta = float(val_b) - float(val_a)
-            except Exception:
-                delta = None
+    # Determine result_type
+    if "AlphaV2" in cls_a or "AlphaV2" in cls_b:
+        result_type = "AlphaV2"
+    else:
+        result_type = "ODW"
 
-        winner, direction = _determine_winner(field_name, val_a, val_b)
-        if winner == "A":
-            score_a += 1
-        elif winner == "B":
-            score_b += 1
-
-        rows.append(ComparisonRow(
-            field=field_name, val_a=val_a, val_b=val_b,
-            delta=delta, winner=winner, direction=direction,
-        ))
+    rows, score_a, score_b = _odw_rows(ua, ub)
 
     if score_a > score_b:
-        overall = "A"
+        winner = "A"
     elif score_b > score_a:
-        overall = "B"
+        winner = "B"
     else:
-        overall = "tie"
-
-    # Unwrap BenchmarkResult → ODWResult for storage
-    ra = result_a.odw_result if hasattr(result_a, "odw_result") else result_a
-    rb = result_b.odw_result if hasattr(result_b, "odw_result") else result_b
+        winner = "tie"
 
     return ComparisonResult(
-        label_a=label_a, label_b=label_b,
-        result_a=ra, result_b=rb,
-        result_type=type_a,
-        rows=rows,
-        winner_overall=overall,
-        score_a=score_a, score_b=score_b,
+        label_a        = label_a,
+        label_b        = label_b,
+        result_type    = result_type,
+        rows           = rows,
+        winner_overall = winner,
+        score_a        = score_a,
+        score_b        = score_b,
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# HTML renderer
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _cmp_html(cmp: ComparisonResult) -> str:
-    w = cmp.winner_overall
-    win_name  = cmp.label_a if w == "A" else cmp.label_b if w == "B" else "Tie"
-    hdr_col   = "#0E2550"
-
-    def _fmt(v):
-        if v is None:
-            return "&mdash;"
-        if isinstance(v, bool):
-            return "YES" if v else "NO"
-        if isinstance(v, float):
-            return f"{v:.4f}"
-        return str(v)
-
-    def _delta_fmt(row):
-        if row.delta is None:
-            return "&mdash;"
-        sign = "+" if row.delta > 0 else ""
-        return f"{sign}{row.delta:.3f}"
-
-    winner_col = {"A": "#1a7a1a", "B": "#aa1111", "tie": "#888", "—": "#888"}
-
-    table_rows = ""
-    for i, row in enumerate(cmp.rows):
-        bg = "#f8f8f8" if i % 2 == 0 else "#fff"
-        wc = winner_col.get(row.winner, "#888")
-        win_label = (
-            f'<span style="color:{wc};font-weight:700">'
-            f'{"← " + cmp.label_a if row.winner == "A" else cmp.label_b + " →" if row.winner == "B" else row.winner}'
-            f"</span>"
-        )
-        # Highlight winning cell
-        style_a = f'style="padding:7px 12px;font-weight:{"700" if row.winner=="A" else "400"};color:{"#0E2550" if row.winner=="A" else "#333"}"'
-        style_b = f'style="padding:7px 12px;font-weight:{"700" if row.winner=="B" else "400"};color:{"#0E2550" if row.winner=="B" else "#333"}"'
-        table_rows += (
-            f'<tr style="background:{bg}">'
-            f'<td style="padding:7px 12px;font-weight:500">{row.field}</td>'
-            f'<td {style_a}>{_fmt(row.val_a)}</td>'
-            f'<td {style_b}>{_fmt(row.val_b)}</td>'
-            f'<td style="padding:7px 12px;color:#666;font-family:monospace">{_delta_fmt(row)}</td>'
-            f'<td style="padding:7px 12px">{win_label}</td>'
-            f'</tr>\n'
-        )
-
-    # Try to embed comparison bar chart
-    chart_html = ""
+def _comparison_html(r: ComparisonResult) -> str:
+    """Generate a self-contained HTML comparison report."""
+    import base64, io
     try:
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
-        import base64
-        import io
-
-        numeric = [
-            r for r in cmp.rows
-            if isinstance(r.val_a, (int, float)) and r.val_a is not None
-            and isinstance(r.val_b, (int, float)) and r.val_b is not None
-        ]
-        if numeric:
-            labels = [r.field for r in numeric]
-            vals_a = [float(r.val_a) for r in numeric]
-            vals_b = [float(r.val_b) for r in numeric]
-            n = len(labels)
-            x = np.arange(n)
-            ww = 0.35
-
-            fig, ax = plt.subplots(figsize=(max(6, n * 1.3), 4))
-            ax.bar(x - ww/2, vals_a, ww, label=cmp.label_a,
-                   color="#0E2550", alpha=0.85)
-            ax.bar(x + ww/2, vals_b, ww, label=cmp.label_b,
-                   color="#C0111A", alpha=0.85)
-            for i, row in enumerate(numeric):
-                if row.winner == "A":
-                    ax.bar(x[i] - ww/2, vals_a[i], ww, color="#D4AF37", alpha=0.35)
-                elif row.winner == "B":
-                    ax.bar(x[i] + ww/2, vals_b[i], ww, color="#D4AF37", alpha=0.35)
-            ax.set_xticks(x)
-            ax.set_xticklabels(labels, rotation=28, ha="right", fontsize=8)
-            ax.legend(fontsize=8)
-            ax.grid(True, alpha=0.2, axis="y")
-            ax.set_title(f"{cmp.label_a} vs {cmp.label_b}", fontsize=9)
-            plt.tight_layout()
-            buf = io.BytesIO()
-            fig.savefig(buf, format="png", dpi=130, bbox_inches="tight")
-            plt.close(fig)
-            b64 = base64.b64encode(buf.getvalue()).decode()
-            chart_html = (
-                '<h2 style="color:#0E2550;margin-top:2em">Chart</h2>'
-                f'<img src="data:image/png;base64,{b64}" '
-                'style="max-width:100%;border:1px solid #ddd;border-radius:4px">'
-                f'<p style="font-size:0.8em;color:#888;text-align:center">'
-                f'Gold highlight = winner per field.</p>'
-            )
+        import numpy as np
+        fig, ax = plt.subplots(figsize=(6, 2.5))
+        fig.patch.set_facecolor("#07101E")
+        ax.set_facecolor("#0D1729")
+        metrics = [row.field for row in r.rows]
+        a_wins  = [1 if row.winner == "A" else 0 for row in r.rows]
+        b_wins  = [1 if row.winner == "B" else 0 for row in r.rows]
+        x = np.arange(len(metrics))
+        ax.bar(x - 0.2, a_wins, 0.4, color="#D4AF37", label=r.label_a)
+        ax.bar(x + 0.2, b_wins, 0.4, color="#4A7FCC", label=r.label_b)
+        ax.set_xticks(x)
+        ax.set_xticklabels(metrics, rotation=20, ha="right", fontsize=7, color="#7A90B8")
+        ax.tick_params(colors="#7A90B8")
+        ax.legend(fontsize=7, facecolor="#0D1729", labelcolor="#EDF0F8")
+        for sp in ax.spines.values(): sp.set_edgecolor("#182540")
+        plt.tight_layout(pad=0.4)
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png", facecolor="#07101E")
+        plt.close(fig)
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        chart_html = f'<img src="data:image/png;base64,{b64}" style="max-width:100%">'
     except Exception:
-        pass
+        chart_html = ""
 
+    rows_html = "".join(
+        f"<tr><td>{row.field}</td><td>{row.value_a}</td>"
+        f"<td>{row.value_b}</td>"
+        f"<td style='color:#D4AF37;font-weight:700'>"
+        f"{'→'+row.winner if row.winner and row.winner != 'tie' else row.winner}</td></tr>"
+        for row in r.rows
+    )
     return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>FAWP Comparison: {cmp.label_a} vs {cmp.label_b}</title>
+<html lang="en"><head><meta charset="UTF-8">
+<title>FAWP Comparison</title>
 <style>
-  body {{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-         max-width:900px;margin:0 auto;padding:2em 1.5em;
-         background:#fafafa;color:#222;line-height:1.6}}
-  header {{background:{hdr_col};color:white;padding:1.8em 2em 1.4em;
-           border-radius:8px;margin-bottom:1.5em}}
-  header h1 {{margin:0 0 0.3em;font-size:1.45em}}
-  header p {{margin:0.2em 0;font-size:0.88em;color:#aac}}
-  .badge {{display:inline-block;padding:0.35em 1.1em;border-radius:16px;
-           font-weight:700;color:#0E2550;background:#D4AF37;margin:0.6em 0}}
-  .score {{display:flex;gap:2em;margin:0.8em 0}}
-  .score-box {{background:#fff;border:2px solid #ddd;border-radius:8px;
-               padding:0.6em 1.2em;text-align:center;min-width:120px}}
-  .score-box.winner {{border-color:#D4AF37}}
-  .score-box h3 {{margin:0;font-size:1em;color:#0E2550}}
-  .score-box span {{font-size:1.8em;font-weight:700;color:#0E2550}}
-  h2 {{color:#0E2550;border-bottom:2px solid #D4AF37;padding-bottom:4px}}
-  table {{width:100%;border-collapse:collapse;margin:1em 0;
-          box-shadow:0 1px 4px rgba(0,0,0,0.07);border-radius:6px;overflow:hidden}}
-  thead th {{background:{hdr_col};color:white;padding:9px 12px;text-align:left}}
-  footer {{margin-top:3em;padding-top:1em;border-top:1px solid #ddd;
-           font-size:0.8em;color:#888}}
-  a {{color:#0E2550}}
-</style>
-</head>
-<body>
-<header>
-  <h1>FAWP Comparison: {cmp.label_a} vs {cmp.label_b}</h1>
-  <p>Generated {date.today().isoformat()} &bull
-  fawp-index v{_VERSION}</p>
-  <p><a href="{_DOI}" style="color:#D4AF37">{_DOI}</a></p>
-</header>
-
-<div class="badge">Overall winner: {win_name}</div>
-
-<div class="score">
-  <div class="score-box {"winner" if w == "A" else ""}">
-    <h3>{cmp.label_a}</h3>
-    <span>{cmp.score_a}</span><br>
-    <small>fields won</small>
-  </div>
-  <div class="score-box {"winner" if w == "B" else ""}">
-    <h3>{cmp.label_b}</h3>
-    <span>{cmp.score_b}</span><br>
-    <small>fields won</small>
-  </div>
-</div>
-
-<h2>Field Comparison ({cmp.result_type})</h2>
-<table>
-  <thead>
-    <tr>
-      <th>Field</th>
-      <th>{cmp.label_a}</th>
-      <th>{cmp.label_b}</th>
-      <th>Delta (B&minus;A)</th>
-      <th>Winner</th>
-    </tr>
-  </thead>
-  <tbody>{table_rows}</tbody>
-</table>
-
+body{{font-family:-apple-system,sans-serif;background:#07101E;color:#EDF0F8;padding:2em}}
+h1{{color:#D4AF37;font-size:1.2em}}
+table{{border-collapse:collapse;width:100%;font-size:.88em;margin-top:1em}}
+th{{color:#7A90B8;text-align:left;padding:.4em .8em;border-bottom:1px solid #182540;font-size:.75em;text-transform:uppercase}}
+td{{padding:.4em .8em;border-bottom:1px solid #111E35}}
+</style></head><body>
+<h1>FAWP Comparison — {r.label_a} vs {r.label_b}</h1>
+<p style="color:#7A90B8;font-size:.85em">Winner: <b style="color:#D4AF37">{r.winner_overall}</b>
+({r.label_a}: {r.score_a} · {r.label_b}: {r.score_b})</p>
 {chart_html}
-
-<footer>
-  <a href="{_GITHUB}">fawp-index</a> &bull;
-  Ralph Clayton (2026) &bull;
-  <a href="{_DOI}">{_DOI}</a>
-</footer>
-</body>
-</html>
-"""
+<table><thead><tr><th>Metric</th><th>{r.label_a}</th><th>{r.label_b}</th><th>Winner</th></tr></thead>
+<tbody>{rows_html}</tbody></table>
+</body></html>"""

@@ -51,27 +51,37 @@ def _supabase_client():
 
 
 def _current_user_id() -> Optional[str]:
-    """Return current Supabase user ID from session_state, or None."""
+    """Return verified Supabase user ID via get_user(), or None."""
     try:
+        client = _supabase_client()
+        if not client:
+            return None
         import streamlit as st
-        session = st.session_state.get("supabase_session")
-        if session:
-            return session.get("user", {}).get("id")
+        sess = st.session_state.get("supabase_session")
+        if sess and sess.get("access_token") and sess.get("refresh_token"):
+            client.auth.set_session(sess["access_token"], sess["refresh_token"])
+        user_resp = client.auth.get_user()
+        user = getattr(user_resp, "user", None) or user_resp
+        return getattr(user, "id", None)
     except Exception:
-        pass
-    return None
+        return None
 
 
 def _current_user_email() -> Optional[str]:
-    """Return current user email or None."""
+    """Return verified Supabase user email via get_user(), or None."""
     try:
+        client = _supabase_client()
+        if not client:
+            return None
         import streamlit as st
-        session = st.session_state.get("supabase_session")
-        if session:
-            return session.get("user", {}).get("email")
+        sess = st.session_state.get("supabase_session")
+        if sess and sess.get("access_token") and sess.get("refresh_token"):
+            client.auth.set_session(sess["access_token"], sess["refresh_token"])
+        user_resp = client.auth.get_user()
+        user = getattr(user_resp, "user", None) or user_resp
+        return getattr(user, "email", None)
     except Exception:
-        pass
-    return None
+        return None
 
 
 # ── LocalFallback ─────────────────────────────────────────────────────────────
