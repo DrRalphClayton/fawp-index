@@ -18,6 +18,8 @@ env/
 
 # Generated output files
 *.png
+# But DO track README screenshots
+!docs/images/*.png
 *.jpg
 E1_*.png
 E2_*.png
