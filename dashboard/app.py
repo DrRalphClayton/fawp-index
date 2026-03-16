@@ -1,5 +1,5 @@
 """
-FAWP Dashboard v1.0.0 — Streamlit app
+FAWP Dashboard v1.1.0 — Streamlit app
 ========================================
 Ralph Clayton (2026) · https://doi.org/10.5281/zenodo.18673949
 """
@@ -43,6 +43,13 @@ st.set_page_config(
 
 if _AUTH_ENABLED:
     require_auth()
+
+try:
+    from share import share_button as _share_button
+    _SHARE_OK = True
+except Exception:
+    _SHARE_OK = False
+    def _share_button(*a, **k): pass
 
 # Demo mode state
 import os as _os_early
@@ -133,7 +140,7 @@ if _APP_MODE is None:
 
     st.markdown("""
 <div style="text-align:center;margin-top:3em;color:#1E2E4A;font-size:.78em">
-  fawp-index v1.0.0 · Ralph Clayton · 2026 ·
+  fawp-index v1.1.0 · Ralph Clayton · 2026 ·
   <a href="https://github.com/DrRalphClayton/fawp-index"
      style="color:#1E2E4A">GitHub</a> ·
   <a href="https://pypi.org/project/fawp-index/"
@@ -160,9 +167,8 @@ with _title_col:
 
 # ── Route to correct app ───────────────────────────────────────────────────────
 if _APP_MODE == "weather":
-    # Weather always uses real ERA5 data — clear demo state
-    st.session_state.pop("_demo_bypass", None)
-    st.session_state.pop("_demo_mode", None)
+    # Weather uses real ERA5 data — but keep demo bypass alive for demo users
+    # (previously this cleared _demo_bypass which kicked demo users to login)
     # ── Inline weather dashboard ───────────────────────────────────────────
     import importlib.util as _ilu, os as _os2
     _wx_path = _os2.path.join(_THIS_DIR, "weather_app.py")
@@ -854,9 +860,12 @@ elif source == "Enter tickers (yfinance)":
                     st.session_state["_fetched_key"] = _fetch_key
                     tickers_loaded = ", ".join(_fetched.keys())
                     n_bars = max(len(v) for v in _fetched.values())
-                    st.success(f"✓ Loaded {tickers_loaded} ({n_bars} bars) — click ▶ Run Scan")
+                    first_date = min(str(v.index[0].date()) for v in _fetched.values())
+                    last_date  = max(str(v.index[-1].date()) for v in _fetched.values())
+                    st.success(f"✓ Loaded: {tickers_loaded} · {n_bars} bars · {first_date} → {last_date}")
+                    st.info("Click ▶ Run Scan in the sidebar to analyse.")
                 else:
-                    st.error("No data returned — check ticker symbols and try again.")
+                    st.error("No data returned — check ticker symbols (e.g. SPY, AAPL, BTC-USD) and try again.")
             except ImportError:
                 st.error("yfinance not installed — `pip install yfinance`")
             except Exception as _fetch_ex:

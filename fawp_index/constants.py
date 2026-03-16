@@ -17,7 +17,7 @@ Ralph Clayton (2026)
 
 # ── Null-correction ────────────────────────────────────────────────────────
 # Conservative null-quantile level (β). Used for both shuffle and shift controls.
-# Source: SECRET Eq. 2–3, E9 standard config, SPHERE E9.4 portability sweep.
+# Source: E9 standard config, E9 standard config, SPHERE E9.4 portability sweep.
 BETA_NULL_QUANTILE: float = 0.99
 
 # Number of null permutations for floor estimation (shuffle + shift each).
@@ -27,7 +27,7 @@ N_NULL_FAST: int = 0        # 0 = skip null correction entirely (raw MI)
 
 # ── Detectability thresholds ───────────────────────────────────────────────
 # Post-null-correction steering near-null criterion.
-# Source: SECRET Eq. 8, calibration note: "ε ~ 10⁻⁴ after floor subtraction"
+# Source: E8 flagship, calibration note: "ε ~ 10⁻⁴ after floor subtraction"
 EPSILON_STEERING_CORRECTED: float = 1e-4
 
 # Raw steering detectability threshold (pre-correction, used by ODWDetector).
@@ -35,12 +35,12 @@ EPSILON_STEERING_CORRECTED: float = 1e-4
 EPSILON_STEERING_RAW: float = 0.01
 
 # Predictive coupling floor (η) — post-null-correction.
-# Source: SECRET calibration note: "η ~ 10⁻⁴ to 10⁻³ bits"
+# Source: E8 calibration note: "η ~ 10⁻⁴ to 10⁻³ bits"
 ETA_PRED_CORRECTED: float = 1e-4
 
 # ── Persistence gating ─────────────────────────────────────────────────────
 # Robust stability window width m for Sm(τ).
-# Source: SECRET Eq. 6, default m=5. Use m=3 for noisier / shorter regimes.
+# Source: E8 paper, default m=5. Use m=3 for noisier / shorter regimes.
 PERSISTENCE_WINDOW_M: int = 5
 PERSISTENCE_WINDOW_M_NOISY: int = 3   # for noisier regimes (from paper note)
 
@@ -51,7 +51,7 @@ PERSISTENCE_RULE_N: int = 4
 
 # ── Alpha Index v2.1 ───────────────────────────────────────────────────────
 # Log-slope regularizer δ (avoids log(0) in Rlog computation).
-# Source: SECRET Eq. 7
+# Source: E8 paper
 DELTA_LOG_SMOOTH: float = 1e-6
 
 # Resonance weight κ.  κ=1.0 is neutral (paper does not specify; 1.0 preserves
@@ -59,11 +59,11 @@ DELTA_LOG_SMOOTH: float = 1e-6
 KAPPA_RESONANCE: float = 1.0
 
 # Minimum tau for causal interpretation — τ=0 excluded as shared-state diagnostic.
-# Source: FORECASTING, E8, SECRET all enforce τ ≥ 1.
+# Source: FORECASTING, E8, E8 all enforce τ ≥ 1.
 TAU_MIN: int = 1
 
 # ── Flagship E8 parameters ─────────────────────────────────────────────────
-# Source: FORECASTING Eq. 15–17, E8 table, SECRET
+# Source: FORECASTING Eq. 15–17, E8 table
 FLAGSHIP_A: float = 1.02          # unstable scalar drift (a > 1 → unstable)
 FLAGSHIP_K: float = 0.8           # controller gain
 FLAGSHIP_DELTA_PRED: int = 20     # forecast horizon Δ

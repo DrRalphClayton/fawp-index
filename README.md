@@ -9,6 +9,16 @@
 
 ---
 
+## Screenshots
+
+### Finance Scanner
+![FAWP Finance Scanner — SPY FAWP detection](docs/images/scanner_result.png)
+
+### Weather Scanner
+![FAWP Weather Scanner — London temperature](docs/images/weather_result.png)
+
+
+
 <div align="center">
 
 ### 🔴 Try it live — no install needed
@@ -18,7 +28,7 @@
 Scan any stock, ETF, or crypto in your browser.
 Enter tickers → Fetch data → See regime detection in real time.
 
-*Powered by fawp-index v1.0.0 · [pip install it](#install) for full local control*
+*Powered by fawp-index v1.1.0 · [pip install it](#install) for full local control*
 
 </div>
 
@@ -342,7 +352,7 @@ fawp-dashboard                     # opens on http://localhost:8501
 cd dashboard && streamlit run app.py
 ```
 
-**Dashboard features (v1.0.0):**
+**Dashboard features (v1.1.0):**
 - Severity pills (FAWP / HIGH / WATCH / CLEAR) with pulsing indicators
 - Sparkline score trend per asset with ▲/▼ arrows
 - ODW proportional bar showing window position in τ range
@@ -421,26 +431,6 @@ from fawp_index.constants import (
 
 ---
 
-## The mathematics
-
-The **FAWP Alpha Index v2.1** (SECRET Eq. 9):
-
-```
-α₂(τ) = 𝟙[τ≥1] · g(τ) · (Sₘ(τ) − Ĩ_steer(τ)) · (1 + κ · R_log(τ))
-```
-
-- `g(τ)` — gate: fires when `Sₘ(τ) > η` AND `Ĩ_steer(τ) ≤ ε`
-- `Sₘ(τ)` — windowed-min corrected predictive MI (multi-step persistence)
-- `Ĩ_steer(τ)` — null-corrected steering MI
-- `R_log(τ)` — log-slope resonance amplifier near the horizon
-- Calibrated: β=0.99, m=5, η=ε=10⁻⁴ bits, δ=10⁻⁶
-
-The **agency horizon τ_h** is where steering MI first falls below ε.
-Near τ_h, predictive MI surges — the empirical signature of the
-Information-Control Exclusion Principle.
-
----
-
 ## Citation
 
 ```bibtex
@@ -448,7 +438,7 @@ Information-Control Exclusion Principle.
   author  = {Ralph Clayton},
   title   = {fawp-index: Information-Control Exclusion Principle detector},
   year    = {2026},
-  version = {1.0.0},
+  version = {1.1.0},
   url     = {https://github.com/DrRalphClayton/fawp-index},
   doi     = {10.5281/zenodo.18673949}
 }
