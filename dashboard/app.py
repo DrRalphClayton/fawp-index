@@ -1,5 +1,5 @@
 """
-FAWP Dashboard v1.1.0 — Streamlit app
+FAWP Dashboard v1.1.4 — Streamlit app
 ========================================
 Ralph Clayton (2026) · https://doi.org/10.5281/zenodo.18673949
 """
@@ -140,7 +140,7 @@ if _APP_MODE is None:
 
     st.markdown("""
 <div style="text-align:center;margin-top:3em;color:#1E2E4A;font-size:.78em">
-  fawp-index v1.1.0 · Ralph Clayton · 2026 ·
+  fawp-index v1.1.4 · Ralph Clayton · 2026 ·
   <a href="https://github.com/DrRalphClayton/fawp-index"
      style="color:#1E2E4A">GitHub</a> ·
   <a href="https://pypi.org/project/fawp-index/"
@@ -824,7 +824,7 @@ elif source == "Upload CSV(s)":
     )
     if uploaded:
         st.session_state["input_dfs"] = _load_uploaded(uploaded)
-    dfs = st.session_state["input_dfs"]
+    dfs = st.session_state.get("input_dfs", {})
 
 elif source == "Enter tickers (yfinance)":
     col1, col2 = st.columns([3, 1])
@@ -870,10 +870,10 @@ elif source == "Enter tickers (yfinance)":
                 st.error("yfinance not installed — `pip install yfinance`")
             except Exception as _fetch_ex:
                 st.error(f"Fetch failed: {_fetch_ex}")
-    dfs = st.session_state["input_dfs"]
+    dfs = st.session_state.get("input_dfs", {})
 
 else:
-    dfs = st.session_state["input_dfs"]
+    dfs = st.session_state.get("input_dfs", {})
 
 if not dfs:
     st.markdown(_empty_state("📡","No data loaded","Choose a source in the sidebar and press <b>▶ Run Scan</b>.","← Select source in sidebar"), unsafe_allow_html=True)
@@ -1783,15 +1783,14 @@ with tab_weather:
             with st.spinner(f"Fetching ERA5 {w_var} @ ({w_lat:.1f}, {w_lon:.1f})…"):
                 try:
                     w_result = fawp_from_open_meteo(
-                        latitude           = w_lat,
-                        longitude          = w_lon,
-                        variable           = w_var,
-                        start_date         = w_start,
-                        end_date           = w_end,
-                        horizon_days       = w_horiz,
-                        tau_max            = w_tau,
-                        n_null             = w_null,
-                        remove_seasonality = w_seas,
+                        latitude     = w_lat,
+                        longitude    = w_lon,
+                        variable     = w_var,
+                        start_date   = w_start,
+                        end_date     = w_end,
+                        horizon_days = w_horiz,
+                        tau_max      = w_tau,
+                        n_null       = w_null,
                     )
                     st.session_state["w_result"] = w_result
                 except Exception as we:

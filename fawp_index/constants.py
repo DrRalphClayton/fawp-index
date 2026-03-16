@@ -7,6 +7,8 @@ All values are derived directly from the published papers:
   E1–E7 — doi:10.5281/zenodo.18663547  (Agency Horizon / FORECASTING)
   E8    — doi:10.5281/zenodo.18673949  (Secret Formula / FAWP confirmation)
   E9    — SPHERE_15 confirmation suite (doi:10.5281/zenodo.18693949 pending)
+  E8v2  — SPHERE_16 recalibration (March 2026) — η=0, peak=2.233669 bits
+  E9.7  — Comparative timing sweep (March 2026) — gap2 best predictor, α lags
 
 Do NOT change these without a corresponding paper update.
 Use them as defaults throughout the package so every module
@@ -35,8 +37,8 @@ EPSILON_STEERING_CORRECTED: float = 1e-4
 EPSILON_STEERING_RAW: float = 0.01
 
 # Predictive coupling floor (η) — post-null-correction.
-# Source: E8 calibration note: "η ~ 10⁻⁴ to 10⁻³ bits"
-ETA_PRED_CORRECTED: float = 1e-4
+# SPHERE_16 Eq. 8: after null-correction, η=0 is already strict.
+ETA_PRED_CORRECTED: float = 0.0
 
 # ── Persistence gating ─────────────────────────────────────────────────────
 # Robust stability window width m for Sm(τ).
@@ -49,7 +51,7 @@ PERSISTENCE_WINDOW_M_NOISY: int = 3   # for noisier regimes (from paper note)
 PERSISTENCE_RULE_M: int = 3
 PERSISTENCE_RULE_N: int = 4
 
-# ── Alpha Index v2.1 ───────────────────────────────────────────────────────
+# ── Alpha Index v2.2 (SPHERE_16 calibrated) ─────────────────────────────────
 # Log-slope regularizer δ (avoids log(0) in Rlog computation).
 # Source: E8 paper
 DELTA_LOG_SMOOTH: float = 1e-6
@@ -72,12 +74,17 @@ FLAGSHIP_X_FAIL: float = 500.0    # failure threshold |x| > x_fail
 FLAGSHIP_SIGMA_PROC: float = 1.0  # process noise std σ_w
 FLAGSHIP_U_MAX: float = 10.0      # action clip bound
 
+# ── Null control bounds (E8, SPHERE_16 Eq. 19) ───────────────────────────
+# Conservative upper bounds on null MI for τ ≥ 1 — justify high-β subtraction.
+NULL_MAX_SHUFFLE_E8: float = 0.00216  # max shuffle null pred MI (τ≥1)
+NULL_MAX_SHIFT_E8:   float = 0.00421  # max shift   null pred MI (τ≥1)
+
 # ── Flagship E8 empirical anchors ─────────────────────────────────────────
 # Source: E8 table in FAWP paper; E9 SPHERE confirmation
 TAU_PLUS_H_FLAGSHIP: int = 4      # post-zero agency horizon τ⁺ₕ (E8)
 TAU_F_FLAGSHIP: int = 35          # functional failure cliff (E8: fail ≥ 0.99)
-PEAK_PRED_BITS: float = 2.1964    # peak corrected stratified prediction (E9.2, τ=9)
-PRED_AT_CLIFF: float = 1.0110     # prediction at cliff (τ=35)  ← NOTE: 1.0110 not 1.1010
+PEAK_PRED_BITS: float = 2.233669  # peak corrected stratified prediction (E8 flagship, τ=9) — SPHERE_16
+PRED_AT_CLIFF: float = 1.01       # prediction MI at cliff τf=35 (SPHERE_16 Eq. 5: ~1.01 bits)
 
 # E9.2 / SPHERE confirmed values (20-seed aggregate, 400 trials/τ)
 TAU_PLUS_H_E9: int = 31           # τ⁺ₕ for both u and ξ steering
@@ -135,6 +142,44 @@ E96_BASIN_MEAN_LEAD_CLIFF_U: float = 2.15    # mean lead to cliff, u-steering
 E96_BASIN_MEAN_LEAD_CLIFF_XI:float = 2.025   # mean lead to cliff, ξ-steering
 E96_BASIN_BEFORE_RISE_RATE:  float = 1.0     # before-or-at-rise rate (both channels)
 E96_BASIN_BEFORE_CLIFF_RATE: float = 1.0     # before-cliff rate      (both channels)
+
+
+# ── E9.7 comparative timing sweep (SPHERE_17 / new) ──────────────────────
+# Source: e9_7_out data — multi-seed sweep comparing alpha, alpha2, gap2 timing
+# 4244 runs total (2122 per channel × 2 channels), seeds 51500–51621+
+E97_N_RUNS: int        = 4244    # total runs across both channels
+E97_N_RUNS_PER_CH: int = 2122    # runs per channel
+E97_MEAN_TAU_F: float  = 52.5608 # mean failure cliff (broader than E9.2 fixed 36)
+E97_MEAN_TAU_RISE: float = 28.297 # mean steepest rise τ
+
+# ODW localisation
+E97_MEAN_ODW_START_U:  float = 31.927  # mean ODW start, u-channel
+E97_MEAN_ODW_START_XI: float = 31.327  # mean ODW start, ξ-channel
+E97_MEAN_ODW_END_U:    float = 34.119  # mean ODW end,   u-channel
+E97_MEAN_ODW_END_XI:   float = 33.315  # mean ODW end,   ξ-channel
+
+# Gap2 peak (raw leverage gap peak) — best ODW localizer
+E97_MEAN_TAU_GAP2_PEAK_U:  float = 37.105  # mean τ of gap2 peak, u
+E97_MEAN_TAU_GAP2_PEAK_XI: float = 37.255  # mean τ of gap2 peak, ξ
+E97_MEAN_LEAD_GAP2_TO_CLIFF_U:  float = 0.7552  # gap2 leads cliff, u
+E97_MEAN_LEAD_GAP2_TO_CLIFF_XI: float = 0.4664  # gap2 leads cliff, ξ
+E97_MEAN_ABS_ERR_GAP2_VS_ODW_START: float = 2.108  # best localizer: ≈2 delay error
+
+# Alpha2 (SPHERE_16 formula) timing
+E97_MEAN_TAU_ALPHA2_NEAREST_U:  float = 38.626  # mean nearest α₂ peak, u
+E97_MEAN_TAU_ALPHA2_NEAREST_XI: float = 38.795  # mean nearest α₂ peak, ξ
+E97_MEAN_LEAD_ALPHA2_TO_CLIFF_U:  float = 0.144  # α₂ barely leads cliff, u
+E97_MEAN_LEAD_ALPHA2_TO_CLIFF_XI: float = 0.368  # α₂ barely leads cliff, ξ
+E97_MEAN_ABS_ERR_ALPHA2_VS_ODW_START: float = 9.139  # α₂ moderate ODW localization
+
+# Alpha (baseline/older) timing — LAGS cliff; inferior to alpha2
+E97_MEAN_LEAD_ALPHA_TO_CLIFF_U:  float = -2.004  # alpha LAGS cliff by ~2 delays, u
+E97_MEAN_LEAD_ALPHA_TO_CLIFF_XI: float = -1.964  # alpha LAGS cliff by ~2 delays, ξ
+E97_MEAN_ABS_ERR_ALPHA_VS_ODW_START: float = 18.161  # alpha: worst ODW localization
+
+# E9.7 verdict: gap2 peak → best cliff predictor (leads by ~0.6 delays, err ~2.1)
+#               alpha2    → adequate early-warning (barely leads, err ~9.1)
+#               alpha     → inferior (lags cliff, err ~18.2) — confirms alpha2 upgrade
 
 # ── Gaussian channel / OATS defaults ──────────────────────────────────────
 # Source: VTM Eq. 13–18, AgencyHorizon canonical example

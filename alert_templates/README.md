@@ -40,4 +40,4 @@ for alert_type, template in TRADING_DESK.items():
 | `{severity}` | HIGH |
 | `{alert_type}` | NEW_FAWP |
 | `{timestamp}` | 2026-03-14 09:31 |
-| `{version}` | 1.1.0 |
+| `{version}` | 1.1.4 |

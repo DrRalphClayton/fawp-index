@@ -1,11 +1,11 @@
 """
-fawp-index v1.1.0
+fawp-index v1.1.4
 FAWP Alpha Index — Information-Control Exclusion Principle detector.
 Includes full E1-E9 experimental suite data.
 Ralph Clayton (2026) · doi:10.5281/zenodo.18673949
 """
 
-__version__ = "1.1.0"
+__version__ = "1.1.4"
 __author__ = "Ralph Clayton"
 __doi__ = "https://doi.org/10.5281/zenodo.18673949"
 __github__ = "https://github.com/DrRalphClayton/fawp-index"
@@ -44,7 +44,19 @@ from .constants import (
     TAU_F_E9,
     ODW_START_E9,
     ODW_END_E9,
-    PEAK_GAP_BITS_E9_U, PEAK_GAP_BITS_E9_XI, PEAK_GAP_TAU_E9,
+    PEAK_GAP_BITS_E9_U, PEAK_GAP_BITS_E9_XI,
+    NULL_MAX_SHUFFLE_E8, NULL_MAX_SHIFT_E8,
+    E97_N_RUNS, E97_N_RUNS_PER_CH, E97_MEAN_TAU_F, E97_MEAN_TAU_RISE,
+    E97_MEAN_ODW_START_U, E97_MEAN_ODW_START_XI,
+    E97_MEAN_ODW_END_U, E97_MEAN_ODW_END_XI,
+    E97_MEAN_TAU_GAP2_PEAK_U, E97_MEAN_TAU_GAP2_PEAK_XI,
+    E97_MEAN_LEAD_GAP2_TO_CLIFF_U, E97_MEAN_LEAD_GAP2_TO_CLIFF_XI,
+    E97_MEAN_ABS_ERR_GAP2_VS_ODW_START,
+    E97_MEAN_TAU_ALPHA2_NEAREST_U, E97_MEAN_TAU_ALPHA2_NEAREST_XI,
+    E97_MEAN_LEAD_ALPHA2_TO_CLIFF_U, E97_MEAN_LEAD_ALPHA2_TO_CLIFF_XI,
+    E97_MEAN_ABS_ERR_ALPHA2_VS_ODW_START,
+    E97_MEAN_LEAD_ALPHA_TO_CLIFF_U, E97_MEAN_LEAD_ALPHA_TO_CLIFF_XI,
+    E97_MEAN_ABS_ERR_ALPHA_VS_ODW_START, PEAK_GAP_TAU_E9,
 )
 from .core.alpha_index import FAWPAlphaIndex, FAWPResult
 from .core.alpha_v2 import FAWPAlphaIndexV2, AlphaV2Result

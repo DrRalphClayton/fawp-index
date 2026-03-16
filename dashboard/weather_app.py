@@ -841,21 +841,27 @@ if "wx_result" in st.session_state:
     bi  = "🔴 FAWP DETECTED" if r.fawp_found else "✅ No FAWP Detected"
     bsub = f"{VARIABLES.get(r.variable, r.variable)} · {r.location} · {r.date_range[0]} → {r.date_range[1]}"
     hpill = ""
-if hazard:
-    hc = HAZARDS.get(hazard, {}).get("color", "var(--gold)")
-    hb = HAZARDS.get(hazard, {}).get("bg", "var(--gold-dim)")
-    hpill = (f'<span style="display:inline-flex;align-items:center;gap:.4em;'
-             f'padding:.3em .9em;border-radius:8px;font-size:.8em;font-weight:700;'
-             f'background:{hb};color:{hc};border:1px solid {hc}33;letter-spacing:.02em">'
-             f'{hazard}</span>')
-    st.markdown(
-        f'<div class="result-banner {bc}">'
-        f'<div>'
-        f'<div class="result-label">{bi}</div>'
-        f'<div class="result-sub">{bsub}</div>'
-        f'</div>'
-        f'<div style="margin-left:auto">{hpill}</div>'
-        f'</div>', unsafe_allow_html=True)
+    if hazard:
+        hc = HAZARDS.get(hazard, {}).get("color", "var(--gold)")
+        hb = HAZARDS.get(hazard, {}).get("bg", "var(--gold-dim)")
+        hpill = (f'<span style="display:inline-flex;align-items:center;gap:.4em;'
+                 f'padding:.3em .9em;border-radius:8px;font-size:.8em;font-weight:700;'
+                 f'background:{hb};color:{hc};border:1px solid {hc}33;letter-spacing:.02em">'
+                 f'{hazard}</span>')
+        st.markdown(
+            f'<div class="result-banner {bc}">'
+            f'<div>'
+            f'<div class="result-label">{bi}</div>'
+            f'<div class="result-sub">{bsub}</div>'
+            f'</div>'
+            f'<div style="margin-left:auto">{hpill}</div>'
+            f'</div>', unsafe_allow_html=True)
+    else:
+        st.markdown(
+            f'<div class="result-banner {bc}">'
+            f'<div class="result-label">{bi}</div>'
+            f'<div class="result-sub">{bsub}</div>'
+            f'</div>', unsafe_allow_html=True)
 
     # KPI row
     c1,c2,c3,c4,c5 = st.columns(5)

@@ -472,7 +472,7 @@ class AlertEngine:
         horizon_warn_tau:        Optional[int] = None,
         state_path:              Optional[Union[str, Path]] = None,
         suppress_errors:         bool = True,
-        # ── New in v1.1.0 ───────────────────────────────────────────────
+        # ── New in v1.1.4 ───────────────────────────────────────────────
         cooldown_hours:          float = 0.0,
         min_consecutive_windows: int   = 1,
         score_change_threshold:  float = 0.0,
@@ -1008,7 +1008,7 @@ def render_weather_alert(
         from fawp_index.weather import fawp_from_open_meteo
         from fawp_index.alerts import render_weather_alert
 
-        r = fawp_from_open_meteo(lat=25.0, lon=-80.0, variable="wind_speed_10m",
+        r = fawp_from_open_meteo(latitude=25.0, longitude=-80.0, variable="wind_speed_10m",
                                   start_date="2024-01-01", end_date="2024-12-31")
         if r.fawp_found:
             msg = render_weather_alert("telegram_fawp_hurricane", r,

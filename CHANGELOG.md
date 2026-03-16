@@ -4,7 +4,7 @@ All notable changes to fawp-index are documented here.
 
 ---
 
-## [1.1.0] — 2026-03-14
+## [1.1.4] — 2026-03-14
 
 ### Highlights
 - Dashboard UX overhaul — severity pills, sparklines, ODW bars, leaderboard, explain cards
@@ -310,7 +310,7 @@ from fawp_index.data import E9_2_AGGREGATE_CURVES, E9_2_SEED_CURVES, E9_2_SUMMAR
 
 ---
 
-## [1.1.0] — 2026-03-11
+## [1.1.4] — 2026-03-11
 
 ### Added
 - `notebooks/fawp_demo.ipynb` — comprehensive Jupyter walkthrough

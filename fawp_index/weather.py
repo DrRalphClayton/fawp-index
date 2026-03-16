@@ -1134,16 +1134,15 @@ def compare_locations(
     """
     def _run(loc):
         return fawp_from_open_meteo(
-            latitude           = loc["lat"],
-            longitude          = loc["lon"],
-            variable           = variable,
-            start_date         = start_date,
-            end_date           = end_date,
-            horizon_days       = horizon_days,
-            tau_max            = tau_max,
-            epsilon            = epsilon,
-            n_null             = n_null,
-            remove_seasonality = remove_seasonality,
+            latitude     = loc["lat"],
+            longitude    = loc["lon"],
+            variable     = variable,
+            start_date   = start_date,
+            end_date     = end_date,
+            horizon_days = horizon_days,
+            tau_max      = tau_max,
+            epsilon      = epsilon,
+            n_null       = n_null,
         )
 
     name_a = location_a.get("name", _fmt_loc(location_a["lat"], location_a["lon"]))
@@ -1238,16 +1237,15 @@ def fawp_rolling_timeline(
         w_end   = (cursor + win).isoformat()
         try:
             r = fawp_from_open_meteo(
-                latitude    = latitude,
-                longitude   = longitude,
-                variable    = variable,
-                start_date  = w_start,
-                end_date    = w_end,
+                latitude     = latitude,
+                longitude    = longitude,
+                variable     = variable,
+                start_date   = w_start,
+                end_date     = w_end,
                 horizon_days = horizon_days,
-                tau_max     = tau_max,
-                epsilon     = epsilon,
-                n_null      = n_null,
-                remove_seasonality = remove_seasonality,
+                tau_max      = tau_max,
+                epsilon      = epsilon,
+                n_null       = n_null,
             )
             rows.append({
                 "window_start":  w_start,
