@@ -63,6 +63,34 @@ def _fmt_loc(lat: float, lon: float) -> str:
     return f"({abs(lat):.2f}{ns}, {abs(lon):.2f}{ew})"
 
 
+def _deseasonalise(series: np.ndarray, period: int = 365) -> np.ndarray:
+    """
+    Remove the annual seasonal cycle using a rolling mean.
+
+    Subtracts the running centred mean over `period` days from the raw
+    series. This removes the dominant annual cycle so the FAWP detector
+    operates on anomalies rather than the raw signal.
+
+    Parameters
+    ----------
+    series : np.ndarray
+    period : int
+        Seasonal period in samples. 365 for daily ERA5 data.
+
+    Returns
+    -------
+    np.ndarray — anomaly series (same length as input)
+    """
+    import pandas as _pd
+    s = _pd.Series(series)
+    # Centred rolling mean with min_periods so edges are handled
+    trend = s.rolling(window=period, center=True, min_periods=period // 2).mean()
+    # Fill any remaining NaNs at edges with the global mean
+    trend = trend.fillna(s.mean())
+    return (s - trend).values
+
+
+
 # ── Internal MI computation (mirrors market.py pattern) ──────────────────────
 
 def _weather_mi(x: np.ndarray, y: np.ndarray, min_n: int = 20) -> float:
@@ -214,6 +242,29 @@ class WeatherFAWPResult:
             ]
         lines.append("=" * 60)
         return "\n".join(lines)
+
+    def explain(self) -> str:
+        """
+        Plain-English explanation of the FAWP result.
+        Suitable for non-technical audiences.
+        """
+        if self.fawp_found:
+            return (
+                f"FAWP detected for {self.variable} at {self.location}.\n"
+                f"The forecast system retains predictive skill "
+                f"(agency horizon τ⁺ₕ = {self.odw_result.tau_h_plus}), "
+                f"but the ability to intervene and change outcomes has already collapsed.\n"
+                f"Peak leverage gap: {self.peak_gap_bits:.4f} bits. "
+                f"Operational Detection Window: τ = {self.odw_start}–{self.odw_end}.\n"
+                f"In plain terms: you can see it coming better than you can still change it."
+            )
+        else:
+            return (
+                f"No FAWP regime detected for {self.variable} at {self.location}.\n"
+                f"Predictive and steering coupling collapse together — "
+                f"no persistent pre-cliff gap was found.\n"
+                f"Peak gap: {self.peak_gap_bits:.4f} bits."
+            )
 
     def to_dict(self) -> dict:
         return {
@@ -486,6 +537,10 @@ def fawp_from_open_meteo(
         Detectability threshold (bits).
     n_null : int
         Null permutations.
+    remove_seasonality : bool
+        If True, subtract the 365-day rolling mean before computing MI.
+        Recommended for temperature to remove the annual cycle and detect
+        FAWP in the anomaly signal rather than the raw signal. Default False.
 
     Returns
     -------
@@ -589,6 +644,10 @@ def fawp_from_open_meteo(
             f"Not enough data after alignment: {n} rows. "
             f"Try a longer date range."
         )
+
+    # Optional: remove annual seasonal cycle
+    if remove_seasonality:
+        values = _deseasonalise(values, period=365)
 
     # Prediction channel: today's value → value in horizon_days
     pred_series   = values[:n]
@@ -719,3 +778,626 @@ def scan_weather_grid(
                 print(f"       ⚠  Failed: {exc}")
 
     return sorted(results, key=lambda r: r.peak_gap_bits, reverse=True)
+
+
+# ── Convenience helpers ────────────────────────────────────────────────────────
+
+def fetch_openmeteo(
+    location: str,
+    days: int = 14,
+    var: str = "temperature_2m",
+    end_date: Optional[str] = None,
+) -> "pd.DataFrame":
+    """
+    Fetch ERA5 reanalysis from Open-Meteo for a named city or lat/lon string.
+
+    Returns a DataFrame with columns: pred, future, action, obs
+    ready to pass directly to FAWPAlphaIndexV2 or fawp_from_forecast().
+
+    Parameters
+    ----------
+    location : str
+        City name (e.g. "London", "Paris", "New York") or "lat,lon" string.
+    days : int
+        Number of days of data to fetch (counting back from end_date).
+    var : str
+        ERA5 variable name. Options: temperature_2m, precipitation_sum,
+        wind_speed_10m, surface_pressure, cloud_cover, shortwave_radiation.
+    end_date : str, optional
+        End date "YYYY-MM-DD". Defaults to yesterday.
+
+    Returns
+    -------
+    pd.DataFrame with columns: pred, future, action, obs, date
+
+    Requires
+    --------
+    pip install "fawp-index[weather]"
+
+    Example
+    -------
+    ::
+
+        from fawp_index.weather import fetch_openmeteo, to_fawp_dataframe
+
+        df = fetch_openmeteo("London", days=365, var="temperature_2m")
+        print(df.head())
+        # pred    future   action    obs         date
+        # 12.3    13.1     0.8       12.3   2024-01-01
+    """
+    import datetime as _dt
+
+    # Resolve location
+    _CITY_COORDS = {
+        "london":    (51.50, -0.10),
+        "paris":     (48.86,  2.35),
+        "new york":  (40.71,-74.01),
+        "newyork":   (40.71,-74.01),
+        "tokyo":     (35.69,139.69),
+        "sydney":   (-33.87,151.21),
+        "dubai":     (25.20, 55.27),
+        "berlin":    (52.52, 13.40),
+        "chicago":   (41.88,-87.63),
+        "mumbai":    (19.08, 72.88),
+        "beijing":   (39.91,116.40),
+        "moscow":    (55.75, 37.62),
+        "toronto":   (43.65,-79.38),
+        "cairo":     (30.04, 31.24),
+        "singapore": ( 1.35,103.82),
+        "amsterdam": (52.37,  4.90),
+        "madrid":    (40.42, -3.70),
+        "rome":      (41.90, 12.50),
+        "bangkok":   (13.75,100.52),
+        "seoul":     (37.57,126.98),
+    }
+
+    loc_key = location.strip().lower()
+    if "," in loc_key:
+        parts = loc_key.split(",")
+        try:
+            lat, lon = float(parts[0].strip()), float(parts[1].strip())
+        except ValueError:
+            raise ValueError(f"Cannot parse lat,lon from: {location!r}")
+    elif loc_key in _CITY_COORDS:
+        lat, lon = _CITY_COORDS[loc_key]
+    else:
+        raise ValueError(
+            f"Unknown city: {location!r}. Use lat,lon string or one of: "
+            + ", ".join(_CITY_COORDS.keys())
+        )
+
+    if end_date is None:
+        end_date = (_dt.date.today() - _dt.timedelta(days=1)).isoformat()
+    start_dt  = _dt.date.fromisoformat(end_date) - _dt.timedelta(days=days)
+    start_date = start_dt.isoformat()
+
+    # Use existing Open-Meteo fetch logic
+    try:
+        import openmeteo_requests
+        import requests_cache
+        from retry_requests import retry
+    except ImportError:
+        raise ImportError(
+            "Install weather dependencies: pip install \'fawp-index[weather]\'"
+        )
+
+    cache   = requests_cache.CachedSession(".fawp_weather_cache", expire_after=3600)
+    session = retry(cache, retries=5, backoff_factor=0.2)
+    om      = openmeteo_requests.Client(session=session)
+
+    _ERA5_MAP = {
+        "temperature_2m": "temperature_2m", "temp": "temperature_2m",
+        "precipitation_sum": "precipitation", "precip": "precipitation",
+        "wind_speed_10m": "wind_speed_10m", "wind": "wind_speed_10m",
+        "surface_pressure": "surface_pressure",
+        "cloud_cover": "cloud_cover",
+        "shortwave_radiation": "shortwave_radiation",
+    }
+    api_var = _ERA5_MAP.get(var, var)
+
+    params = {
+        "latitude": lat, "longitude": lon,
+        "start_date": start_date, "end_date": end_date,
+        "daily": api_var, "timezone": "UTC",
+    }
+    resp   = om.weather_api("https://archive-api.open-meteo.com/v1/archive", params=params)[0]
+    daily  = resp.Daily()
+    values = daily.Variables(0).ValuesAsNumpy().astype(float)
+    times  = pd.date_range(
+        start=pd.to_datetime(daily.Time(), unit="s", utc=True),
+        periods=len(values), freq="D",
+    ).tz_localize(None)
+
+    series = pd.Series(values, index=times).interpolate(limit=3).values
+    n      = len(series) - 1
+    df = pd.DataFrame({
+        "date":   times[:n],
+        "pred":   series[:n],
+        "future": series[1:],
+        "action": np.diff(series),   # day-over-day change = intervention proxy
+        "obs":    series[:n],
+    })
+    df.attrs["variable"] = var
+    df.attrs["location"] = location
+    df.attrs["lat"]      = lat
+    df.attrs["lon"]      = lon
+    return df
+
+
+def to_fawp_dataframe(
+    df: "pd.DataFrame",
+    pred_col: str = "pred",
+    future_col: str = "future",
+    action_col: str = "action",
+    obs_col: str = "obs",
+) -> "pd.DataFrame":
+    """
+    Normalise any DataFrame into the standard FAWP input format.
+
+    Renames columns to pred / future / action / obs and drops NaNs.
+    Use when you have your own forecast/observation data and want
+    to pass it to fawp_from_forecast().
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame with forecast / observation columns.
+    pred_col, future_col, action_col, obs_col : str
+        Column names in df to map to the FAWP input format.
+
+    Returns
+    -------
+    pd.DataFrame with columns: pred, future, action, obs
+
+    Example
+    -------
+    ::
+
+        from fawp_index.weather import fetch_openmeteo, to_fawp_dataframe, fawp_from_forecast
+
+        raw = fetch_openmeteo("Tokyo", days=730, var="temperature_2m")
+        df  = to_fawp_dataframe(raw)
+
+        result = fawp_from_forecast(
+            forecast     = df["pred"].values,
+            observed     = df["future"].values,
+            intervention = df["action"].values,
+            variable     = "temperature_2m",
+            location     = "Tokyo",
+        )
+        result.explain()
+    """
+    rename = {pred_col: "pred", future_col: "future",
+              action_col: "action", obs_col: "obs"}
+    out = df.rename(columns=rename)[["pred", "future", "action", "obs"]].dropna()
+    return out.reset_index(drop=True)
+
+
+
+
+
+
+
+def fawp_from_nwp_csvs(
+    forecast_path:   str,
+    observed_path:   str,
+    forecast_col:    str = "forecast",
+    observed_col:    str = "observed",
+    date_col:        str = "date",
+    intervention_col: Optional[str] = None,
+    variable:        str = "temperature",
+    location:        str = "uploaded",
+    horizon_days:    int = 1,
+    tau_max:         int = 40,
+    epsilon:         float = 0.01,
+    n_null:          int = 100,
+    remove_seasonality: bool = False,
+) -> WeatherFAWPResult:
+    """
+    Run FAWP detection on real NWP forecast vs observation data from CSV files.
+
+    This is the scientific-credibility mode — uses actual forecast verification
+    data rather than the ERA5 proxy. Upload a model forecast CSV and an
+    observation CSV, and FAWP is computed on the real skill gap.
+
+    Parameters
+    ----------
+    forecast_path : str   Path to forecast CSV.
+    observed_path : str   Path to observation CSV.
+    forecast_col : str    Column name for forecast values.
+    observed_col : str    Column name for observed values.
+    date_col : str        Column name for dates (used to align the two files).
+    intervention_col : str, optional
+        Column in forecast CSV to use as intervention proxy (e.g. ensemble spread,
+        model correction). If None, uses day-over-day forecast change.
+    variable : str        Variable label for the result.
+    location : str        Location label for the result.
+    horizon_days : int    Forecast horizon Δ (for labelling).
+    tau_max, epsilon, n_null : detection settings.
+    remove_seasonality : bool
+
+    Returns
+    -------
+    WeatherFAWPResult
+
+    Example
+    -------
+    ::
+
+        from fawp_index.weather import fawp_from_nwp_csvs
+
+        result = fawp_from_nwp_csvs(
+            forecast_path    = "ecmwf_t2m_forecast.csv",
+            observed_path    = "station_t2m_obs.csv",
+            forecast_col     = "t2m_forecast",
+            observed_col     = "t2m_obs",
+            date_col         = "date",
+            intervention_col = "ensemble_spread",   # or None
+            variable         = "temperature_2m",
+            location         = "London Heathrow",
+            horizon_days     = 5,
+        )
+        print(result.summary())
+        print(result.explain())
+    """
+    fc_df  = pd.read_csv(forecast_path, parse_dates=[date_col])
+    obs_df = pd.read_csv(observed_path, parse_dates=[date_col])
+
+    # Align on date
+    merged = pd.merge(fc_df, obs_df, on=date_col, how="inner").sort_values(date_col)
+
+    if forecast_col not in merged.columns:
+        raise ValueError(f"Forecast column '{forecast_col}' not found. "
+                         f"Available: {merged.columns.tolist()}")
+    if observed_col not in merged.columns:
+        raise ValueError(f"Observed column '{observed_col}' not found. "
+                         f"Available: {merged.columns.tolist()}")
+
+    forecast = merged[forecast_col].values.astype(float)
+    observed = merged[observed_col].values.astype(float)
+
+    if intervention_col and intervention_col in merged.columns:
+        intervention = merged[intervention_col].values.astype(float)
+    else:
+        # Day-over-day forecast change as proxy
+        intervention = np.concatenate([[0], np.diff(forecast)])
+
+    if remove_seasonality:
+        forecast     = _deseasonalise(forecast)
+        observed     = _deseasonalise(observed)
+
+    dates = merged[date_col]
+    date_start = str(dates.iloc[0].date())  if hasattr(dates.iloc[0], 'date') else str(dates.iloc[0])[:10]
+    date_end   = str(dates.iloc[-1].date()) if hasattr(dates.iloc[-1], 'date') else str(dates.iloc[-1])[:10]
+
+    return fawp_from_forecast(
+        forecast     = forecast,
+        observed     = observed,
+        intervention = intervention,
+        horizon_days = horizon_days,
+        variable     = variable,
+        location     = location,
+        tau_max      = tau_max,
+        epsilon      = epsilon,
+        n_null       = n_null,
+        skill_metric = "NWP_verification",
+        dates        = pd.DatetimeIndex(dates),
+        metadata     = {
+            "source":        "NWP CSV upload",
+            "forecast_file": str(forecast_path),
+            "observed_file": str(observed_path),
+            "n_rows":        len(merged),
+        },
+    )
+
+
+def compare_locations(
+    location_a:      dict,
+    location_b:      dict,
+    variable:        str = "temperature_2m",
+    start_date:      str = "2010-01-01",
+    end_date:        str = "2024-12-31",
+    horizon_days:    int = 7,
+    tau_max:         int = 30,
+    epsilon:         float = 0.01,
+    n_null:          int = 50,
+    remove_seasonality: bool = False,
+) -> "tuple[WeatherFAWPResult, WeatherFAWPResult]":
+    """
+    Compare FAWP detection between two locations for the same variable.
+
+    Parameters
+    ----------
+    location_a, location_b : dict
+        Each must have "lat", "lon", and optionally "name".
+        Example: {"lat": 51.5, "lon": -0.1, "name": "London"}
+    variable, start_date, end_date, horizon_days, tau_max, epsilon, n_null,
+    remove_seasonality : see fawp_from_open_meteo()
+
+    Returns
+    -------
+    tuple of (WeatherFAWPResult, WeatherFAWPResult)
+
+    Example
+    -------
+    ::
+
+        from fawp_index.weather import compare_locations
+
+        r_lon, r_nyc = compare_locations(
+            {"lat": 51.5, "lon": -0.1,  "name": "London"},
+            {"lat": 40.7, "lon": -74.0, "name": "New York"},
+            variable="temperature_2m",
+        )
+        print(r_lon.summary())
+        print(r_nyc.summary())
+    """
+    def _run(loc):
+        return fawp_from_open_meteo(
+            latitude           = loc["lat"],
+            longitude          = loc["lon"],
+            variable           = variable,
+            start_date         = start_date,
+            end_date           = end_date,
+            horizon_days       = horizon_days,
+            tau_max            = tau_max,
+            epsilon            = epsilon,
+            n_null             = n_null,
+            remove_seasonality = remove_seasonality,
+        )
+
+    name_a = location_a.get("name", _fmt_loc(location_a["lat"], location_a["lon"]))
+    name_b = location_b.get("name", _fmt_loc(location_b["lat"], location_b["lon"]))
+
+    r_a = _run(location_a)
+    r_b = _run(location_b)
+
+    # Override location labels with friendly names
+    r_a = WeatherFAWPResult(
+        variable=r_a.variable, location=name_a, odw_result=r_a.odw_result,
+        tau=r_a.tau, pred_mi=r_a.pred_mi, steer_mi=r_a.steer_mi,
+        skill_metric=r_a.skill_metric, n_obs=r_a.n_obs,
+        horizon_days=r_a.horizon_days, date_range=r_a.date_range,
+        metadata={**r_a.metadata, "name": name_a},
+    )
+    r_b = WeatherFAWPResult(
+        variable=r_b.variable, location=name_b, odw_result=r_b.odw_result,
+        tau=r_b.tau, pred_mi=r_b.pred_mi, steer_mi=r_b.steer_mi,
+        skill_metric=r_b.skill_metric, n_obs=r_b.n_obs,
+        horizon_days=r_b.horizon_days, date_range=r_b.date_range,
+        metadata={**r_b.metadata, "name": name_b},
+    )
+    return r_a, r_b
+
+
+def fawp_rolling_timeline(
+    latitude:        float,
+    longitude:       float,
+    variable:        str = "temperature_2m",
+    start_date:      str = "2000-01-01",
+    end_date:        str = "2024-12-31",
+    window_years:    int = 2,
+    step_months:     int = 6,
+    horizon_days:    int = 7,
+    tau_max:         int = 30,
+    epsilon:         float = 0.01,
+    n_null:          int = 20,
+    remove_seasonality: bool = False,
+) -> "pd.DataFrame":
+    """
+    Compute FAWP metrics across rolling time windows for a single location.
+
+    Slides a window of `window_years` years across the full date range,
+    stepping by `step_months` months, and computes FAWP detection for each
+    window. Returns a DataFrame showing how peak_gap_bits, fawp_found,
+    odw_start, and odw_end evolve over time.
+
+    Answers: "Is FAWP getting worse at this location over time?"
+
+    Parameters
+    ----------
+    latitude, longitude : float
+    variable : str
+    start_date, end_date : str   Full date range to scan.
+    window_years : int           Rolling window size in years. Default 2.
+    step_months : int            Step between windows in months. Default 6.
+    horizon_days : int           Forecast horizon Δ.
+    tau_max, epsilon, n_null : detection settings
+    remove_seasonality : bool
+
+    Returns
+    -------
+    pd.DataFrame with columns:
+        window_start, window_end, fawp_found, peak_gap_bits,
+        odw_start, odw_end, tau_h_plus, tau_f
+
+    Example
+    -------
+    ::
+
+        from fawp_index.weather import fawp_rolling_timeline
+
+        df = fawp_rolling_timeline(
+            51.5, -0.1, variable="temperature_2m",
+            start_date="2000-01-01", end_date="2024-12-31",
+            window_years=2, step_months=6,
+        )
+        print(df[df.fawp_found])
+    """
+    import datetime as _dt
+
+    start = _dt.date.fromisoformat(start_date)
+    end   = _dt.date.fromisoformat(end_date)
+    win   = _dt.timedelta(days=window_years * 365)
+    step  = _dt.timedelta(days=step_months * 30)
+
+    rows = []
+    cursor = start
+    while cursor + win <= end:
+        w_start = cursor.isoformat()
+        w_end   = (cursor + win).isoformat()
+        try:
+            r = fawp_from_open_meteo(
+                latitude    = latitude,
+                longitude   = longitude,
+                variable    = variable,
+                start_date  = w_start,
+                end_date    = w_end,
+                horizon_days = horizon_days,
+                tau_max     = tau_max,
+                epsilon     = epsilon,
+                n_null      = n_null,
+                remove_seasonality = remove_seasonality,
+            )
+            rows.append({
+                "window_start":  w_start,
+                "window_end":    w_end,
+                "fawp_found":    r.fawp_found,
+                "peak_gap_bits": r.peak_gap_bits,
+                "odw_start":     r.odw_start,
+                "odw_end":       r.odw_end,
+                "tau_h_plus":    r.odw_result.tau_h_plus,
+                "tau_f":         r.odw_result.tau_f,
+                "n_obs":         r.n_obs,
+            })
+        except Exception as exc:
+            rows.append({
+                "window_start": w_start, "window_end": w_end,
+                "fawp_found": None, "peak_gap_bits": float("nan"),
+                "odw_start": None, "odw_end": None,
+                "tau_h_plus": None, "tau_f": None, "n_obs": 0,
+                "error": str(exc),
+            })
+        cursor += step
+
+    return pd.DataFrame(rows)
+
+
+def plot_weather_map(
+    results: "List[WeatherFAWPResult]",
+    title:   str = "FAWP Agency Horizon Map",
+    zoom:    int = 2,
+) -> "plotly.graph_objects.Figure":
+    """
+    Interactive map of FAWP scan results — coloured by leverage gap.
+
+    Each location is shown as a circle marker:
+      - 🔴 Red  = FAWP detected (gap above threshold)
+      - 🟢 Green = No FAWP detected
+    Marker size scales with peak_gap_bits.
+    Hover shows: location, variable, gap, ODW, τ⁺ₕ, τf.
+
+    Parameters
+    ----------
+    results : list of WeatherFAWPResult
+        Output from scan_weather_grid() or a list of fawp_from_open_meteo() calls.
+    title : str
+        Map title.
+    zoom : int
+        Initial zoom level (1=world, 4=country, 8=city).
+
+    Returns
+    -------
+    plotly.graph_objects.Figure — use .show() or st.plotly_chart()
+
+    Requires
+    --------
+    pip install "fawp-index[plotly]"
+
+    Example
+    -------
+    ::
+
+        from fawp_index.weather import scan_weather_grid, plot_weather_map
+
+        locs = [
+            {"lat": 51.5,  "lon": -0.1,  "name": "London"},
+            {"lat": 48.9,  "lon":  2.4,  "name": "Paris"},
+            {"lat": 40.7,  "lon": -74.0, "name": "New York"},
+            {"lat": 35.7,  "lon": 139.7, "name": "Tokyo"},
+        ]
+        results = scan_weather_grid(locs, variable="temperature_2m",
+                                    start_date="2015-01-01", end_date="2024-12-31")
+        fig = plot_weather_map(results)
+        fig.show()
+    """
+    try:
+        import plotly.graph_objects as go
+    except ImportError:
+        raise ImportError(
+            "plotly is required for map visualisation.\\n"
+            "Install with: pip install \\'fawp-index[plotly]\\'"
+        )
+
+    lats, lons, names, gaps, colors, sizes, hovers = [], [], [], [], [], [], []
+
+    for r in results:
+        meta = r.metadata or {}
+        lat  = meta.get("latitude",  meta.get("lat", 0.0))
+        lon  = meta.get("longitude", meta.get("lon", 0.0))
+        name = meta.get("name", r.location)
+
+        gap   = r.peak_gap_bits
+        fawp  = r.fawp_found
+        color = "#C0111A" if fawp else "#1DB954"
+        size  = max(8, min(40, 8 + gap * 60))
+
+        odw   = f"τ {r.odw_start}–{r.odw_end}" if fawp else "—"
+        tauh  = str(r.odw_result.tau_h_plus) if r.odw_result.tau_h_plus else "—"
+        tauf  = str(r.odw_result.tau_f)      if r.odw_result.tau_f      else "—"
+        hover = (
+            f"<b>{name}</b><br>"
+            f"FAWP: {'🔴 YES' if fawp else '✅ NO'}<br>"
+            f"Variable: {r.variable}<br>"
+            f"Gap: {gap:.4f} bits<br>"
+            f"ODW: {odw}<br>"
+            f"τ⁺ₕ: {tauh} &nbsp; τf: {tauf}<br>"
+            f"Period: {r.date_range[0]} → {r.date_range[1]}"
+        )
+
+        lats.append(lat); lons.append(lon); names.append(name)
+        gaps.append(gap); colors.append(color)
+        sizes.append(size); hovers.append(hover)
+
+    # Centre map on mean of locations
+    centre_lat = float(np.mean(lats)) if lats else 30.0
+    centre_lon = float(np.mean(lons)) if lons else 0.0
+
+    fig = go.Figure()
+    fig.add_trace(go.Scattergeo(
+        lat          = lats,
+        lon          = lons,
+        text         = hovers,
+        hoverinfo    = "text",
+        mode         = "markers+text",
+        textposition = "top center",
+        textfont     = dict(size=10, color="#EDF0F8"),
+        marker       = dict(
+            size        = sizes,
+            color       = colors,
+            opacity     = 0.85,
+            line        = dict(width=1, color="#07101E"),
+            symbol      = "circle",
+        ),
+        name         = "FAWP scan results",
+    ))
+
+    fig.update_layout(
+        title       = dict(text=title, font=dict(size=15, color="#D4AF37"),
+                           x=0.5, xanchor="center"),
+        paper_bgcolor = "#07101E",
+        plot_bgcolor  = "#07101E",
+        geo = dict(
+            showland      = True, landcolor      = "#0D1729",
+            showocean     = True, oceancolor     = "#070E1A",
+            showcoastlines= True, coastlinecolor = "#182540",
+            showframe     = False,
+            showcountries = True, countrycolor   = "#1E2E4A",
+            projection_type = "natural earth",
+            center      = dict(lat=centre_lat, lon=centre_lon),
+        ),
+        margin = dict(l=0, r=0, t=50, b=0),
+        legend = dict(bgcolor="#0D1729", font=dict(color="#7A90B8")),
+        height = 520,
+    )
+    return fig

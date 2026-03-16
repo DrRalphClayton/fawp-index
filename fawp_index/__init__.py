@@ -1,11 +1,11 @@
 """
-fawp-index v0.27.0
+fawp-index v0.4.0
 FAWP Alpha Index — Information-Control Exclusion Principle detector.
 Includes full E1-E9 experimental suite data.
 Ralph Clayton (2026) · doi:10.5281/zenodo.18673949
 """
 
-__version__ = "0.27.0"
+__version__ = "0.4.0"
 __author__ = "Ralph Clayton"
 __doi__ = "https://doi.org/10.5281/zenodo.18673949"
 __github__ = "https://github.com/DrRalphClayton/fawp-index"
@@ -14,8 +14,11 @@ from .validation import validate_signals, ValidationReport, HorizonStats
 from .weather import (
     fawp_from_forecast, fawp_from_skill_series,
     fawp_from_open_meteo, scan_weather_grid,
-    WeatherFAWPResult,
+    WeatherFAWPResult, fetch_openmeteo, to_fawp_dataframe,
+    plot_weather_map, fawp_rolling_timeline,
+    compare_locations, fawp_from_nwp_csvs,
 )
+from .report_html import generate_html_report
 from .compare import compare_signals, CompareReport, compare_fawp, ComparisonResult
 from .scan_history import ScanHistory
 from .constants import (
@@ -72,6 +75,7 @@ from .watchlist import (
 from .alert_template_presets import TRADING_DESK, RESEARCH, MINIMAL, ALL_PRESETS
 from .alerts import (
     AlertEngine, FAWPAlert, AlertType, AlertSeverity,
+    WEATHER_ALERT_TEMPLATES, render_weather_alert,
 )
 from .leaderboard import Leaderboard, LeaderboardEntry
 from .watchlist_store import WatchlistStore
@@ -86,6 +90,7 @@ from .benchmarks import (
     clean_control, prediction_only, control_only,
     noisy_false_positive, delayed_collapse,
     gradual_fade, multi_regime, spiky_false_positive,
+    hurricane_path, drought_persistence, extreme_precip_spike,
 )
 from .exports import _inject_exports
 _inject_exports()
@@ -102,6 +107,9 @@ __all__ = [
     # Weather / climate
     "fawp_from_forecast", "fawp_from_skill_series",
     "fawp_from_open_meteo", "scan_weather_grid", "WeatherFAWPResult",
+    "fetch_openmeteo", "to_fawp_dataframe", "plot_weather_map",
+    "fawp_rolling_timeline", "compare_locations", "fawp_from_nwp_csvs",
+    "generate_html_report",
     "compare_signals", "CompareReport", "compare_fawp", "ComparisonResult",
     # Scan history
     "ScanHistory",
@@ -142,6 +150,7 @@ __all__ = [
     "WatchlistResult", "AssetResult",
     # Alerts
     "AlertEngine", "FAWPAlert", "AlertType", "AlertSeverity",
+    "WEATHER_ALERT_TEMPLATES", "render_weather_alert",
     "TRADING_DESK", "RESEARCH", "MINIMAL", "ALL_PRESETS",
     "AlertSeverity",  # re-export
     "gradual_fade", "multi_regime", "spiky_false_positive",

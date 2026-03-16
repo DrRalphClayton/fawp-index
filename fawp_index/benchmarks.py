@@ -677,7 +677,171 @@ def _simulate_case(
 # run_all()
 # ─────────────────────────────────────────────────────────────────────────────
 
-def run_all(simulate: bool = False, seed: int = 42) -> BenchmarkSuite:
+
+# ════════════════════════════════════════════════════════════════════════════
+# Climate-specific benchmark cases
+# Run via: fawp-index benchmarks --weather
+# ════════════════════════════════════════════════════════════════════════════
+
+def hurricane_path(simulate: bool = False, seed: int = 42) -> BenchmarkResult:
+    """
+    Hurricane path — FAWP case.
+
+    Physical scenario:
+        Forecast skill for track/intensity remains high (satellite + NWP is good).
+        Steering collapses as the storm approaches landfall — evacuation orders,
+        pre-positioned resources, and grid preparation windows close faster
+        than the forecast improves.
+
+    Expected: FAWP = True (forecast skill persists, intervention window closes)
+    Calibration: E9 flagship basin — clean connected FAWP regime.
+    """
+    rng = np.random.default_rng(seed)
+    tau = np.arange(1, 41, dtype=float)
+
+    # Prediction: NWP track skill remains high throughout the forecast window
+    # High plateau then slow decay — satellite + ensemble keeps skill elevated
+    pred = 0.18 * np.exp(-0.012 * tau) + 0.04 + rng.normal(0, 0.004, len(tau))
+    pred = np.clip(pred, 0, None)
+
+    # Steering: evacuation/response window closes rapidly as storm nears
+    # Steep sigmoid collapse — once within 48h, actions are fixed
+    steer = 0.14 * _sigmoid(-tau, centre=-8, steepness=0.55) + rng.normal(0, 0.003, len(tau))
+    steer = np.clip(steer, 0, None)
+
+    # Failure: storm makes landfall — deterministic cliff around τ=20
+    fail = _sigmoid(tau, centre=20, steepness=0.9)
+
+    odw = _run_detector(tau, pred, steer, fail)
+
+    desc = (
+        "Hurricane path FAWP: NWP track/intensity forecast skill remains elevated "
+        "while the evacuation and pre-positioning window collapses rapidly as the "
+        "storm approaches landfall. Forecast can see it coming; intervention window "
+        "closes faster than the forecast improves."
+    )
+
+    return BenchmarkResult(
+        name           = "hurricane_path",
+        description    = desc,
+        expected_fawp  = True,
+        odw_result     = odw,
+        tau            = tau,
+        pred_mi        = pred,
+        steer_mi       = steer,
+        fail_rate      = fail,
+        domain         = "weather",
+        notes          = "Steering collapses ~τ=8; cliff at τ=20. ODW should span τ=8–18.",
+    )
+
+
+def drought_persistence(simulate: bool = False, seed: int = 42) -> BenchmarkResult:
+    """
+    Drought persistence — slow multi-regime fade.
+
+    Physical scenario:
+        Seasonal forecast skill (SPI, PDSI) remains measurable for months.
+        Agricultural and water-management interventions (irrigation scheduling,
+        reservoir releases, crop switching) lose effectiveness gradually as soil
+        moisture deficit becomes self-reinforcing.
+
+    Expected: FAWP = True (gradual fade pattern)
+    Tests: the gradual_fade case but with realistic slow-regime volatility.
+    Calibration: E9.3 persistence sweep — stable across broad rule neighbourhood.
+    """
+    rng = np.random.default_rng(seed)
+    tau = np.arange(1, 41, dtype=float)
+
+    # Prediction: slow seasonal forecast — peaks early, long plateau
+    pred = 0.12 * np.exp(-0.007 * tau) + 0.03 + rng.normal(0, 0.005, len(tau))
+    pred = np.clip(pred, 0, None)
+
+    # Steering: gradual fade — reservoir releases lose effect over months
+    # Slow sigmoid, wide transition zone (realistic: not a sudden cliff)
+    steer = 0.10 * _sigmoid(-tau, centre=-15, steepness=0.22) + rng.normal(0, 0.005, len(tau))
+    steer = np.clip(steer, 0, None)
+
+    # Failure: crop failure / water shortage — late cliff around τ=35
+    fail = _sigmoid(tau, centre=35, steepness=0.5)
+
+    odw = _run_detector(tau, pred, steer, fail)
+
+    desc = (
+        "Drought persistence FAWP: seasonal forecast skill (e.g. SPI, PDSI) "
+        "remains measurable for months while agricultural/water-management "
+        "interventions lose effectiveness gradually as soil moisture deficit "
+        "becomes self-reinforcing. Wide pre-cliff ODW expected."
+    )
+
+    return BenchmarkResult(
+        name           = "drought_persistence",
+        description    = desc,
+        expected_fawp  = True,
+        odw_result     = odw,
+        tau            = tau,
+        pred_mi        = pred,
+        steer_mi       = steer,
+        fail_rate      = fail,
+        domain         = "weather",
+        notes          = "Gradual fade; wide ODW. Tests E9.3 persistence-rule robustness.",
+    )
+
+
+def extreme_precip_spike(simulate: bool = False, seed: int = 42) -> BenchmarkResult:
+    """
+    Extreme precipitation spike — false-positive trap.
+
+    Physical scenario:
+        High-volatility convective precipitation. Raw MI looks elevated because
+        of serial autocorrelation in the weather signal, but null correction
+        should eliminate the spurious gap. This is the climate analogue of the
+        spiky_false_positive case — tests that the detector does not fire on
+        volatile but genuinely unsteerable systems.
+
+    Expected: FAWP = False (null correction removes the spurious signal)
+    Tests: conservative null floor is essential (E9.1 ablation result).
+    Calibration: E9.1 — without null calibration, detector fails completely.
+    """
+    rng = np.random.default_rng(seed)
+    tau = np.arange(1, 41, dtype=float)
+
+    # Both channels: high volatility, raw MI elevated, but correlated
+    # after null correction both should collapse to near zero
+    base_noise  = rng.normal(0, 0.025, len(tau))
+    pred  = np.abs(0.04 + base_noise * np.exp(-0.08 * tau))
+    steer = np.abs(0.035 + rng.normal(0, 0.022, len(tau)) * np.exp(-0.06 * tau))
+    pred  = np.clip(pred,  0, None)
+    steer = np.clip(steer, 0, None)
+
+    # Failure: high but noisy — convective events are unpredictable
+    fail = 0.5 + 0.35 * np.sin(tau * 0.3) + rng.normal(0, 0.05, len(tau))
+    fail = np.clip(fail, 0, 1)
+
+    odw = _run_detector(tau, pred, steer, fail)
+
+    desc = (
+        "Extreme precipitation spike false-positive trap: high-volatility convective "
+        "precipitation creates elevated raw MI in both channels due to serial "
+        "autocorrelation. Conservative null correction (β=0.99) should eliminate "
+        "the spurious FAWP signal. Tests E9.1 finding: null calibration is essential."
+    )
+
+    return BenchmarkResult(
+        name           = "extreme_precip_spike",
+        description    = desc,
+        expected_fawp  = False,
+        odw_result     = odw,
+        tau            = tau,
+        pred_mi        = pred,
+        steer_mi       = steer,
+        fail_rate      = fail,
+        domain         = "weather",
+        notes          = "FP trap — both channels high but null floor should suppress. FAWP=False expected.",
+    )
+
+
+def run_all(simulate: bool = False, seed: int = 42,
+            include_weather: bool = False) -> BenchmarkSuite:
     """
     Run all eight benchmark cases and return a BenchmarkSuite.
 
@@ -946,7 +1110,7 @@ def _suite_html(suite: BenchmarkSuite) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Additional benchmark cases (v0.27.0)
+# Additional benchmark cases (v0.4.0)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def gradual_fade(simulate: bool = False, seed: int = 42) -> BenchmarkResult:

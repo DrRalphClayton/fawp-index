@@ -287,31 +287,47 @@ def require_auth():
     /* ── Card ── */
     .login-card {
         width: 100%;
-        max-width: 420px;
-        margin: 7vh auto 0;
+        max-width: 380px;
+        margin: 5vh auto 0;
         background: #0D1729;
         border: 1px solid #1E2E4A;
         border-top: 3px solid #D4AF37;
         border-radius: 10px;
-        padding: 2.6em 2.4em 2.2em;
+        padding: 2em 2em 1.8em;
         box-shadow: 0 8px 40px rgba(0,0,0,0.5);
     }
 
     /* ── Logo ── */
     .login-logo {
         font-family: 'Syne', sans-serif;
-        font-size: 1.9em;
+        font-size: 1.6em;
         font-weight: 800;
         color: #D4AF37;
         letter-spacing: -0.01em;
-        margin-bottom: 0.15em;
+        margin-bottom: 0.1em;
     }
     .login-sub {
         font-family: 'DM Sans', sans-serif;
-        font-size: 0.8em;
+        font-size: 0.75em;
         color: #3A4E70;
-        margin-bottom: 2em;
+        margin-bottom: 0;
         letter-spacing: 0.01em;
+    }
+    /* Demo button — gold outline style */
+    [data-testid="stButton"][data-key="demo_bypass_btn"] > button {
+        background: transparent !important;
+        border: 1.5px solid #D4AF37 !important;
+        color: #D4AF37 !important;
+        font-family: 'Syne', sans-serif !important;
+        font-weight: 700 !important;
+        font-size: 0.88em !important;
+        border-radius: 6px !important;
+        padding: 0.55em 0 !important;
+        width: 100% !important;
+        letter-spacing: 0.02em !important;
+    }
+    [data-testid="stButton"][data-key="demo_bypass_btn"] > button:hover {
+        background: rgba(212,175,55,0.08) !important;
     }
     .login-divider {
         border: none;
@@ -396,14 +412,41 @@ def require_auth():
     </style>
     """, unsafe_allow_html=True)
 
-    # Card wrapper
+    # ── Demo button — TOP, most prominent ───────────────────────────────────
     st.markdown('<div class="login-card">', unsafe_allow_html=True)
-    st.markdown('<div class="login-logo">FAWP Scanner</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="login-sub">Information-Control Exclusion Principle</div>',
-        unsafe_allow_html=True,
-    )
 
+    # Logo
+    st.markdown("""
+<div style="text-align:center;margin-bottom:1.2em">
+  <div class="login-logo">🔴 FAWP</div>
+  <div class="login-sub">Information-Control Exclusion Principle</div>
+</div>
+""", unsafe_allow_html=True)
+
+    # Demo CTA — top, full width, gold outline
+    if st.button(
+        "▶  Try demo — no sign-up needed",
+        use_container_width=True,
+        key="demo_bypass_btn",
+    ):
+        st.session_state["_demo_bypass"] = True
+        st.session_state["_demo_mode"]   = True
+        st.rerun()
+    st.markdown(
+        '<div style="text-align:center;color:#3A4E70;font-size:.73em;'
+        'margin:.3em 0 1.2em">Synthetic data · No account needed</div>',
+        unsafe_allow_html=True)
+
+    # Divider with "or sign in"
+    st.markdown("""
+<div style="display:flex;align-items:center;gap:.8em;margin-bottom:1.1em">
+  <div style="flex:1;border-top:1px solid #1E2E4A"></div>
+  <div style="color:#3A4E70;font-size:.75em;white-space:nowrap">or sign in</div>
+  <div style="flex:1;border-top:1px solid #1E2E4A"></div>
+</div>
+""", unsafe_allow_html=True)
+
+    # Sign in / Create account / Reset tabs
     tab_in, tab_up, tab_reset = st.tabs(["Sign in", "Create account", "Reset password"])
 
     # ── Sign in ───────────────────────────────────────────────────────────────
@@ -477,27 +520,8 @@ def require_auth():
                             unsafe_allow_html=True)
 
     st.markdown(
-        '<div class="login-footer">fawp-scanner.info · '
-        'doi:10.5281/zenodo.18673949</div>',
+        '<div class="login-footer">fawp-scanner.info · '        'doi:10.5281/zenodo.18673949</div>',
         unsafe_allow_html=True,
     )
     st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown(
-        '<div style="text-align:center;margin:1.2em 0 .4em">'
-        '<span style="color:#3A4E70;font-size:.8em">or</span></div>',
-        unsafe_allow_html=True)
-    if st.button(
-        '▶  Try demo — no account needed',
-        use_container_width=True,
-        key='demo_bypass_btn',
-    ):
-        st.session_state['_demo_bypass'] = True
-        st.session_state['_demo_mode']   = True
-        st.rerun()
-    st.markdown(
-        '<div style="text-align:center;padding:.5em 0 1em">'
-        '<span style="color:#3A4E70;font-size:.75em">'
-        'Demo uses synthetic data · Sign up for real scans</span></div>',
-        unsafe_allow_html=True)
     st.stop()

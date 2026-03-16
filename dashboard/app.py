@@ -1,5 +1,5 @@
 """
-FAWP Dashboard v0.27.0 — Streamlit app
+FAWP Dashboard v0.4.0 — Streamlit app
 ========================================
 Ralph Clayton (2026) · https://doi.org/10.5281/zenodo.18673949
 """
@@ -35,8 +35,8 @@ except Exception:
     def is_admin(): return False
 
 st.set_page_config(
-    page_title="FAWP Scanner",
-    page_icon="📡",
+    page_title="FAWP — Information-Control Exclusion Principle",
+    page_icon="🔴",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -48,6 +48,134 @@ if _AUTH_ENABLED:
 import os as _os_early
 _FAWP_ENV_DEMO = _os_early.getenv("FAWP_DEMO", "0") in ("1", "true", "yes")
 _IS_DEMO = bool(st.session_state.get("_demo_mode", _FAWP_ENV_DEMO))
+
+# ── App mode routing ───────────────────────────────────────────────────────────
+# "finance" | "weather" | None (landing)
+_APP_MODE = st.session_state.get("_app_mode", None)
+
+if _APP_MODE is None:
+    # ── Landing page ─────────────────────────────────────────────────────────
+    st.markdown("""
+<style>
+.landing-wrap {
+    display:flex; flex-direction:column; align-items:center;
+    justify-content:center; min-height:75vh; padding:2em 1em;
+}
+.landing-title {
+    font-family:'Syne',sans-serif; font-size:3em; font-weight:800;
+    color:#D4AF37; letter-spacing:-.02em; text-align:center;
+    margin-bottom:.2em;
+}
+.landing-sub {
+    color:#3A4E70; font-size:.95em; text-align:center;
+    margin-bottom:3em; font-family:'DM Sans',sans-serif;
+}
+.mode-card {
+    background:#0D1729; border:1px solid #182540;
+    border-radius:14px; padding:2.4em 2.8em;
+    text-align:center; cursor:pointer;
+    transition:border-color .2s, transform .15s;
+    max-width:340px; width:100%;
+}
+.mode-card:hover { border-color:#D4AF37; transform:translateY(-3px); }
+.mode-icon  { font-size:2.8em; margin-bottom:.5em; }
+.mode-name  { font-family:'Syne',sans-serif; font-size:1.4em;
+              font-weight:800; color:#EDF0F8; margin-bottom:.4em; }
+.mode-desc  { color:#7A90B8; font-size:.85em; line-height:1.5; }
+</style>
+<div class="landing-wrap">
+  <div class="landing-title">FAWP</div>
+  <div class="landing-sub">
+    Information-Control Exclusion Principle detector ·
+    <a href="https://doi.org/10.5281/zenodo.18673949"
+       style="color:#4A7FCC">doi:10.5281/zenodo.18673949</a>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+    col_l, col_fin, col_gap, col_wx, col_r = st.columns([1, 3, 0.6, 3, 1])
+
+    with col_fin:
+        st.markdown("""
+<div class="mode-card">
+  <div class="mode-icon">📈</div>
+  <div class="mode-name">FAWP Finance</div>
+  <div class="mode-desc">
+    Scan equities, crypto, ETFs and commodities.<br>
+    Detect when forecast skill persists after market steering has collapsed.
+    Real-time via yfinance or upload your own CSV.
+  </div>
+</div>
+""", unsafe_allow_html=True)
+        if st.button("▶  Open Finance Scanner",
+                     use_container_width=True, type="primary",
+                     key="goto_finance"):
+            st.session_state["_app_mode"] = "finance"
+            st.rerun()
+
+    with col_wx:
+        st.markdown("""
+<div class="mode-card">
+  <div class="mode-icon">🌦</div>
+  <div class="mode-name">FAWP Weather</div>
+  <div class="mode-desc">
+    Scan ERA5 reanalysis for any location on Earth.<br>
+    Detect when weather remains forecastable but intervention
+    windows have already closed. Free · no API key needed.
+  </div>
+</div>
+""", unsafe_allow_html=True)
+        if st.button("▶  Open Weather Scanner",
+                     use_container_width=True, type="primary",
+                     key="goto_weather"):
+            st.session_state["_app_mode"] = "weather"
+            st.rerun()
+
+    st.markdown("""
+<div style="text-align:center;margin-top:3em;color:#1E2E4A;font-size:.78em">
+  fawp-index v0.4.0 · Ralph Clayton · 2026 ·
+  <a href="https://github.com/DrRalphClayton/fawp-index"
+     style="color:#1E2E4A">GitHub</a> ·
+  <a href="https://pypi.org/project/fawp-index/"
+     style="color:#1E2E4A">PyPI</a>
+</div>
+""", unsafe_allow_html=True)
+    st.stop()
+
+# ── Mode header with back button ───────────────────────────────────────────────
+_mode_label = "📈 Finance Scanner" if _APP_MODE == "finance" else "🌦 Weather Scanner"
+_back_col, _title_col = st.columns([1, 9])
+with _back_col:
+    if st.button("← Back", key="back_to_landing"):
+        st.session_state.pop("_app_mode", None)
+        # Clear mode-specific state
+        for _k in ["wl_result","input_dfs","_fetched_key","wx_result","wx_hazard"]:
+            st.session_state.pop(_k, None)
+        st.rerun()
+with _title_col:
+    st.markdown(
+        f'<div style="padding:.4em 0;font-family:Syne,sans-serif;font-size:1.1em;'
+        f'font-weight:700;color:#7A90B8">{_mode_label}</div>',
+        unsafe_allow_html=True)
+
+# ── Route to correct app ───────────────────────────────────────────────────────
+if _APP_MODE == "weather":
+    # Weather always uses real ERA5 data — clear demo state
+    st.session_state.pop("_demo_bypass", None)
+    st.session_state.pop("_demo_mode", None)
+    # ── Inline weather dashboard ───────────────────────────────────────────
+    import importlib.util as _ilu, os as _os2
+    _wx_path = _os2.path.join(_THIS_DIR, "weather_app.py")
+    _spec    = _ilu.spec_from_file_location("weather_app", _wx_path)
+    _wxmod   = _ilu.module_from_spec(_spec)
+    try:
+        _spec.loader.exec_module(_wxmod)
+    except SystemExit:
+        pass
+    st.stop()
+
+# If _APP_MODE == "finance", fall through to the rest of app.py below
+
 
 _CSS = """
 <style>
@@ -246,6 +374,7 @@ try:
     from fawp_index.scan_history import ScanHistory
     from fawp_index.validation import validate_signals
     from fawp_index.compare import compare_signals
+    from fawp_index.report_html import generate_html_report
     from fawp_index.constants import EPSILON_STEERING_RAW as _EPS_STEER
     from fawp_index.weather import fawp_from_open_meteo, scan_weather_grid, WeatherFAWPResult
     HAS_FAWP = True
@@ -615,7 +744,16 @@ def _load_yfinance(tickers_str: str, period: str) -> dict:
         try:
             df = yf.download(ticker, period=period, progress=False, auto_adjust=True)
             if not df.empty:
-                df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
+                # Flatten MultiIndex columns (yfinance 0.2.x returns MultiIndex)
+                if hasattr(df.columns, "levels"):
+                    df.columns = [c[0] if isinstance(c, tuple) else c
+                                  for c in df.columns]
+                else:
+                    df.columns = [c[0] if isinstance(c, tuple) else c
+                                  for c in df.columns]
+                # Ensure Close column exists
+                if "Close" not in df.columns and "close" in [c.lower() for c in df.columns]:
+                    df = df.rename(columns={c: c.title() for c in df.columns})
                 dfs[ticker] = df
             else:
                 errors[ticker] = "empty response"
@@ -711,10 +849,18 @@ elif source == "Enter tickers (yfinance)":
                 _fetched, _fetch_errors = _load_yfinance(",".join(tickers), period)
                 for _t, _e in _fetch_errors.items():
                     st.warning(f"Failed to fetch {_t}: {_e}")
-                st.session_state["input_dfs"]   = _fetched
-                st.session_state["_fetched_key"] = _fetch_key
+                if _fetched:
+                    st.session_state["input_dfs"]   = _fetched
+                    st.session_state["_fetched_key"] = _fetch_key
+                    tickers_loaded = ", ".join(_fetched.keys())
+                    n_bars = max(len(v) for v in _fetched.values())
+                    st.success(f"✓ Loaded {tickers_loaded} ({n_bars} bars) — click ▶ Run Scan")
+                else:
+                    st.error("No data returned — check ticker symbols and try again.")
             except ImportError:
                 st.error("yfinance not installed — `pip install yfinance`")
+            except Exception as _fetch_ex:
+                st.error(f"Fetch failed: {_fetch_ex}")
     dfs = st.session_state["input_dfs"]
 
 else:
@@ -1608,6 +1754,8 @@ with tab_weather:
     with col_w3:
         w_tau   = st.slider("Max tau", 5, 60, 30, step=5)
         w_null  = st.slider("Null permutations", 0, 200, 50, step=10)
+        w_seas  = st.checkbox("Remove seasonality", key="w_seasonal",
+                              help="Subtract 365-day trend. Recommended for temperature.")
         run_weather = st.button("🌦 Run Weather Scan", type="primary",
                                 use_container_width=True, key="run_weather")
 
@@ -1626,14 +1774,15 @@ with tab_weather:
             with st.spinner(f"Fetching ERA5 {w_var} @ ({w_lat:.1f}, {w_lon:.1f})…"):
                 try:
                     w_result = fawp_from_open_meteo(
-                        latitude     = w_lat,
-                        longitude    = w_lon,
-                        variable     = w_var,
-                        start_date   = w_start,
-                        end_date     = w_end,
-                        horizon_days = w_horiz,
-                        tau_max      = w_tau,
-                        n_null       = w_null,
+                        latitude           = w_lat,
+                        longitude          = w_lon,
+                        variable           = w_var,
+                        start_date         = w_start,
+                        end_date           = w_end,
+                        horizon_days       = w_horiz,
+                        tau_max            = w_tau,
+                        n_null             = w_null,
+                        remove_seasonality = w_seas,
                     )
                     st.session_state["w_result"] = w_result
                 except Exception as we:
@@ -1766,6 +1915,22 @@ with tab_admin:
 
 
 with tab_export:
+    # ── HTML report ──────────────────────────────────────────────────────
+    st.markdown(_sec("Download report"), unsafe_allow_html=True)
+    if wl:
+        _scan_ts = st.session_state.get("scan_timestamp", "scan")
+        if st.button("Generate HTML report", key="gen_html_report"):
+            with st.spinner("Building report…"):
+                _html = generate_html_report(
+                    wl, title=f"FAWP Finance Scan — {_scan_ts}")
+            st.download_button(
+                "📄 Download HTML report",
+                data=_html.encode(),
+                file_name=f"fawp_scan_{_scan_ts.replace(' ','_')}.html",
+                mime="text/html",
+                key="dl_html_report",
+            )
+    st.markdown("---")
     st.markdown(_sec("Download results"), unsafe_allow_html=True)
 
     col_e1, col_e2, col_e3 = st.columns(3)

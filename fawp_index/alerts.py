@@ -472,7 +472,7 @@ class AlertEngine:
         horizon_warn_tau:        Optional[int] = None,
         state_path:              Optional[Union[str, Path]] = None,
         suppress_errors:         bool = True,
-        # ── New in v0.27.0 ───────────────────────────────────────────────
+        # ── New in v0.4.0 ───────────────────────────────────────────────
         cooldown_hours:          float = 0.0,
         min_consecutive_windows: int   = 1,
         score_change_threshold:  float = 0.0,
@@ -907,3 +907,135 @@ class AlertEngine:
     def backends(self) -> List[str]:
         """Names of registered backends."""
         return [b.name for b in self._backends]
+
+
+# ── Weather-specific alert templates ─────────────────────────────────────────
+
+WEATHER_ALERT_TEMPLATES = {
+
+    "slack_fawp_weather": (
+        "*🔴 FAWP ALERT — {location}*\n"
+        "> *Variable:* {variable}\n"
+        "> *Forecast skill:* {pred_score:.3f} bits (still present)\n"
+        "> *Steering / intervention:* {steer_score:.3f} bits (collapsed)\n"
+        "> *Leverage gap:* {gap_bits:.4f} bits\n"
+        "> *Agency horizon τ⁺ₕ:* {tau_h} — interventions ineffective beyond this lag\n"
+        "> *Detection window (ODW):* τ = {odw_start}–{odw_end}\n"
+        "> *Action:* Window to act is closing. Pre-position resources now.\n"
+        "> _FAWP detected by fawp-index · doi:10.5281/zenodo.18673949_"
+    ),
+
+    "slack_fawp_hurricane": (
+        "*🌀 HURRICANE FAWP ALERT — {location}*\n"
+        "> Track/intensity forecast skill remains: {pred_score:.3f} bits\n"
+        "> Evacuation/prep window closing: steering = {steer_score:.3f} bits\n"
+        "> *Leverage gap:* {gap_bits:.4f} bits\n"
+        "> *Remaining action window (ODW):* τ = {odw_start}–{odw_end} delay steps\n"
+        "> 🚨 *Suggested action:* Issue evacuation orders. Pre-position emergency resources. Grid prep now.\n"
+        "> _FAWP · fawp-scanner.info_"
+    ),
+
+    "slack_fawp_drought": (
+        "*🌵 DROUGHT FAWP ALERT — {location}*\n"
+        "> Seasonal forecast skill: {pred_score:.3f} bits (SPI/PDSI predictable)\n"
+        "> Agricultural intervention window: {steer_score:.3f} bits (collapsing)\n"
+        "> *Gap:* {gap_bits:.4f} bits · *ODW:* τ = {odw_start}–{odw_end}\n"
+        "> ⚠️ *Suggested action:* Activate water restrictions. Alert farmers now. Reservoir scheduling.\n"
+        "> _fawp-index weather scanner_"
+    ),
+
+    "slack_clear_weather": (
+        "*✅ Weather scan complete — {location}*\n"
+        "> Variable: {variable}\n"
+        "> No FAWP regime detected (gap = {gap_bits:.4f} bits)\n"
+        "> Forecast and intervention channels collapsing together — normal regime.\n"
+        "> _fawp-scanner.info_"
+    ),
+
+    "telegram_fawp_weather": (
+        "🔴 *FAWP ALERT* — {location}\n\n"
+        "📍 Variable: {variable}\n"
+        "📈 Forecast skill: {pred_score:.3f} bits (still present)\n"
+        "📉 Intervention coupling: {steer_score:.3f} bits (collapsed)\n"
+        "⚡ Leverage gap: *{gap_bits:.4f} bits*\n"
+        "🎯 Detection window: τ = {odw_start}–{odw_end}\n\n"
+        "⏱ *Action window is closing. Act now.*\n"
+        "🔗 fawp-scanner.info"
+    ),
+
+    "telegram_fawp_hurricane": (
+        "🌀 *HURRICANE FAWP ALERT* — {location}\n\n"
+        "Forecast skill: {pred_score:.3f} bits ✓\n"
+        "Evacuation window: {steer_score:.3f} bits ⬇\n"
+        "Gap: *{gap_bits:.4f} bits*\n"
+        "Action window: τ = {odw_start}–{odw_end}\n\n"
+        "🚨 Issue evacuation orders now.\n"
+        "Pre-position: sandbags · generators · medical supplies\n"
+        "Grid prep: {odw_end} delay steps remaining\n\n"
+        "fawp-scanner.info · doi:10.5281/zenodo.18673949"
+    ),
+}
+
+
+def render_weather_alert(
+    template_name:  str,
+    result:         "WeatherFAWPResult",
+    location_label: str = "",
+    variable_label: str = "",
+) -> str:
+    """
+    Render a weather alert message from a WeatherFAWPResult.
+
+    Parameters
+    ----------
+    template_name : str
+        Key from WEATHER_ALERT_TEMPLATES.
+    result : WeatherFAWPResult
+        Output from fawp_from_open_meteo() or fawp_from_forecast().
+    location_label : str
+        Override location name (defaults to result.location).
+    variable_label : str
+        Override variable label (defaults to result.variable).
+
+    Returns
+    -------
+    str — formatted alert message ready to send.
+
+    Example
+    -------
+    ::
+
+        from fawp_index.weather import fawp_from_open_meteo
+        from fawp_index.alerts import render_weather_alert
+
+        r = fawp_from_open_meteo(lat=25.0, lon=-80.0, variable="wind_speed_10m",
+                                  start_date="2024-01-01", end_date="2024-12-31")
+        if r.fawp_found:
+            msg = render_weather_alert("telegram_fawp_hurricane", r,
+                                       location_label="Miami, FL")
+            print(msg)
+    """
+    template = WEATHER_ALERT_TEMPLATES.get(template_name)
+    if template is None:
+        available = ", ".join(WEATHER_ALERT_TEMPLATES.keys())
+        raise KeyError(f"Unknown weather template: {template_name!r}. Available: {available}")
+
+    odw = result.odw_result
+    try:
+        # Estimate pred/steer scores from MI arrays
+        pred_score  = float(result.pred_mi.mean())  if len(result.pred_mi)  else 0.0
+        steer_score = float(result.steer_mi.mean()) if len(result.steer_mi) else 0.0
+    except Exception:
+        pred_score, steer_score = 0.0, 0.0
+
+    return template.format(
+        location    = location_label or result.location,
+        variable    = variable_label or result.variable,
+        pred_score  = pred_score,
+        steer_score = steer_score,
+        gap_bits    = result.peak_gap_bits,
+        tau_h       = odw.tau_h_plus if odw.tau_h_plus else "—",
+        odw_start   = result.odw_start if result.odw_start is not None else "—",
+        odw_end     = result.odw_end   if result.odw_end   is not None else "—",
+    )
+

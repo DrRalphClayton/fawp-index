@@ -185,7 +185,9 @@ def main():
 
     # ── scan ──────────────────────────────────────────────────────────────────
     p_scan = sub.add_parser("scan", help="Scan a single location for FAWP")
-    p_scan.add_argument("--city",     default=None, help="City preset (e.g. london, tokyo)")
+    p_scan.add_argument("--city",     default=None, help="City name (e.g. london, tokyo)")
+    p_scan.add_argument("--location", default=None, dest="city",
+                        help="Alias for --city (e.g. \"London\", \"New York\")")
     p_scan.add_argument("--lat",      type=float, default=51.5)
     p_scan.add_argument("--lon",      type=float, default=-0.1)
     p_scan.add_argument("--variable", default="temperature_2m", choices=_VARIABLES)

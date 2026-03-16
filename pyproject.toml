@@ -4,20 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fawp-index"
-version = "0.27.0"
+version = "0.4.0"
 description = "FAWP Alpha Index — Information-Control Exclusion Principle detector"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE.txt"]
 authors = [{ name = "Ralph Clayton" }]
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 keywords = [
     "forecasting", "information theory", "mutual information",
     "agency", "control theory", "time series", "FAWP"
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -53,6 +52,9 @@ dashboard = [
   "matplotlib>=3.4",
   "yfinance>=0.2",
   "supabase>=2.0",
+  "openmeteo-requests>=0.3",
+  "requests-cache>=1.0",
+  "retry-requests>=1.0",
 ]
 test    = ["pytest>=7.0", "pytest-cov>=4.0", "matplotlib>=3.4", "reportlab>=4.0"]
 dev     = ["pytest>=7.0", "pytest-cov>=4.0", "matplotlib>=3.4", "reportlab>=4.0",

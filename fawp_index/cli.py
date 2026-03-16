@@ -230,10 +230,22 @@ def cmd_significance(args):
 
 def cmd_benchmarks(args):
     _header()
-    print("Command : benchmarks\n")
+    include_weather = getattr(args, "weather", False)
+    label = "finance + climate" if include_weather else "finance"
+    print(f"Command : benchmarks ({label})\n")
     from fawp_index import run_benchmarks
-    suite = run_benchmarks()
+    suite = run_benchmarks(include_weather=include_weather)
     print(suite.summary())
+    if include_weather:
+        print("\nClimate benchmarks (E9-calibrated):")
+        for c in suite.cases:
+            if getattr(c, "domain", "finance") == "weather":
+                status = "PASS ✓" if c.passed else "FAIL ✗"
+                fawp   = "FAWP=True " if c.odw_result.fawp_found else "FAWP=False"
+                exp    = "expected" if c.odw_result.fawp_found == c.expected_fawp else "UNEXPECTED"
+                print(f"  {status}  {c.name:<28} {fawp}  ({exp})")
+                print(f"         {c.description[:80]}...")
+                print()
     if args.verify:
         try:
             suite.verify_all()
@@ -347,8 +359,11 @@ def _build_parser():
 
     # benchmarks
     p = sub.add_parser("benchmarks", help="Run built-in benchmark suite")
-    p.add_argument("--verify", action="store_true")
-    p.add_argument("--out")
+    p.add_argument("--verify",  action="store_true",
+                   help="Assert all expected_fawp values match")
+    p.add_argument("--weather", action="store_true",
+                   help="Include climate benchmarks (hurricane, drought, precip)")
+    p.add_argument("--out", help="Save results to .html or .json")
     p.set_defaults(func=cmd_benchmarks)
 
     # version

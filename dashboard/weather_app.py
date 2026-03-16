@@ -17,12 +17,17 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(
-    page_title="FAWP Weather Scanner",
-    page_icon="🌦",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+# set_page_config only when run standalone (not imported by app.py)
+if __name__ == "__main__" or not st.session_state.get("_app_mode"):
+    try:
+        st.set_page_config(
+            page_title="FAWP Weather Scanner",
+            page_icon="🌦",
+            layout="wide",
+            initial_sidebar_state="expanded",
+        )
+    except Exception:
+        pass  # Already set by parent app.py
 
 # ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -197,31 +202,22 @@ def _multi_scan_panel():
                 st.error(f"fawp-index not available: {e}")
                 return
 
-            prog = st.progress(0, text="Scanning…")
-            results = []
-            for i, loc in enumerate(locations):
-                prog.progress((i + 1) / len(locations),
-                              text=f"Scanning {loc['name']}…")
-                try:
-                    from fawp_index.weather import fawp_from_open_meteo
-                    r = fawp_from_open_meteo(
-                        latitude=loc["lat"], longitude=loc["lon"],
-                        variable=ms_var, start_date=ms_start,
-                        end_date=ms_end, horizon_days=7,
-                        tau_max=30, n_null=ms_null,
-                    )
-                    results.append((loc["name"], r))
-                except Exception as e:
-                    st.warning(f"{loc['name']}: {e}")
-            prog.empty()
-
-            if results:
-                results.sort(key=lambda x: x[1].peak_gap_bits, reverse=True)
+            with st.spinner(f"Scanning {len(locations)} location(s)…"):
+                results = scan_weather_grid(
+                    locations    = locations,
+                    variable     = ms_var,
+                    start_date   = ms_start,
+                    end_date     = ms_end,
+                    horizon_days = 7,
+                    tau_max      = 30,
+                    n_null       = ms_null,
+                    verbose      = False,
+                )
                 st.markdown("**Results — ranked by leverage gap:**")
                 rows = []
-                for name, r in results:
+                for r in results:
                     rows.append({
-                        "Location":   name,
+                        "Location":   r.location,
                         "FAWP":       "🔴 YES" if r.fawp_found else "—",
                         "Gap (bits)": f"{r.peak_gap_bits:.4f}",
                         "ODW":        f"τ {r.odw_start}–{r.odw_end}" if r.fawp_found else "—",
@@ -230,10 +226,23 @@ def _multi_scan_panel():
                     })
                 st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
+                # ── Map ──────────────────────────────────────────────────
+                try:
+                    from fawp_index.weather import plot_weather_map
+                    fig_map = plot_weather_map(
+                        results,
+                        title=f"FAWP Scan — {VARIABLES.get(ms_var, ms_var)}",
+                    )
+                    st.plotly_chart(fig_map, use_container_width=True)
+                except ImportError:
+                    st.caption("Install plotly for map: `pip install plotly`")
+                except Exception as _map_err:
+                    st.caption(f"Map unavailable: {_map_err}")
+
                 import json as _j
                 st.download_button(
                     "Download multi-scan JSON",
-                    data=_j.dumps([r.to_dict() for _, r in results], indent=2).encode(),
+                    data=_j.dumps([r.to_dict() for r in results], indent=2).encode(),
                     file_name=f"fawp_weather_multiscan_{ms_var}.json",
                     mime="application/json",
                 )
@@ -249,19 +258,27 @@ with st.sidebar:
 </div>
 """, unsafe_allow_html=True)
 
-    mode = st.radio("Mode", ["Single location", "Multi-location scan"],
+    mode = st.radio("Mode",
+                    ["Single location", "Compare two locations",
+                     "Upload NWP data", "Multi-location scan"],
                     label_visibility="collapsed")
 
     if mode == "Single location":
         st.markdown("**Location**")
         preset = st.selectbox("Quick select", ["Custom"] + list(PRESETS.keys()))
-        if preset != "Custom":
-            _lat, _lon = PRESETS[preset]
-        else:
-            _lat, _lon = st.session_state.get("wx_lat", 51.5), st.session_state.get("wx_lon", -0.1)
 
-        lat = st.number_input("Latitude",  value=_lat, min_value=-90.0,  max_value=90.0,  step=0.1, format="%.2f")
-        lon = st.number_input("Longitude", value=_lon, min_value=-180.0, max_value=180.0, step=0.1, format="%.2f")
+        # Initialise keys before inputs render
+        if "wx_lat" not in st.session_state:
+            st.session_state["wx_lat"] = 51.5
+        if "wx_lon" not in st.session_state:
+            st.session_state["wx_lon"] = -0.1
+
+        # Preset overwrites session state so inputs update on next render
+        if preset != "Custom":
+            st.session_state["wx_lat"], st.session_state["wx_lon"] = PRESETS[preset]
+
+        lat = st.number_input("Latitude",  min_value=-90.0,  max_value=90.0,  step=0.1, format="%.2f", key="wx_lat")
+        lon = st.number_input("Longitude", min_value=-180.0, max_value=180.0, step=0.1, format="%.2f", key="wx_lon")
 
         st.markdown("**Hazard / Variable**")
         scan_mode = st.radio("Input mode", ["Hazard", "Variable"],
@@ -283,14 +300,56 @@ with st.sidebar:
         n_null       = st.slider("Null permutations", 0, 200, 50, step=10)
         epsilon      = st.number_input("Epsilon (bits)", value=0.01,
                                        min_value=0.001, max_value=0.1, step=0.001, format="%.3f")
+        remove_seas  = st.checkbox("Remove seasonality",
+                                   help="Subtract 365-day rolling mean. "
+                                        "Recommended for temperature to detect "
+                                        "anomaly-level FAWP, not the annual cycle.")
         run_btn = st.button("▶ Run Scan", type="primary", use_container_width=True)
 
         st.markdown("---")
-        st.caption(
-            "ERA5 · Open-Meteo · free · no API key\n\n"
-            "⚠ **Beta** — proxy-based detection. "
-            "Day-over-day change used as intervention proxy."
-        )
+        st.caption("ERA5 reanalysis · Open-Meteo · free · no API key")
+
+    elif mode == "Compare two locations":
+        st.markdown("**Location A**")
+        if "cmp_lat_a" not in st.session_state: st.session_state["cmp_lat_a"] = 51.5
+        if "cmp_lon_a" not in st.session_state: st.session_state["cmp_lon_a"] = -0.1
+        if "cmp_lat_b" not in st.session_state: st.session_state["cmp_lat_b"] = 48.9
+        if "cmp_lon_b" not in st.session_state: st.session_state["cmp_lon_b"] = 2.4
+        cmp_name_a = st.text_input("Name A", "London",  key="cmp_name_a")
+        cmp_lat_a  = st.number_input("Lat A", min_value=-90.0, max_value=90.0,  step=0.1, format="%.2f", key="cmp_lat_a")
+        cmp_lon_a  = st.number_input("Lon A", min_value=-180.0, max_value=180.0, step=0.1, format="%.2f", key="cmp_lon_a")
+        st.markdown("**Location B**")
+        cmp_name_b = st.text_input("Name B", "Paris",  key="cmp_name_b")
+        cmp_lat_b  = st.number_input("Lat B", min_value=-90.0, max_value=90.0,  step=0.1, format="%.2f", key="cmp_lat_b")
+        cmp_lon_b  = st.number_input("Lon B", min_value=-180.0, max_value=180.0, step=0.1, format="%.2f", key="cmp_lon_b")
+        st.markdown("**Settings**")
+        cmp_var    = st.selectbox("Variable", list(VARIABLES.keys()),
+                                  format_func=lambda k: VARIABLES[k], key="cmp_var")
+        cmp_start  = st.text_input("Start", "2010-01-01", key="cmp_start")
+        cmp_end    = st.text_input("End",   "2024-12-31", key="cmp_end")
+        cmp_horiz  = st.slider("Horizon (days)", 1, 30, 7, key="cmp_horiz")
+        cmp_null   = st.slider("Null perms", 0, 100, 30, key="cmp_null")
+        cmp_seas   = st.checkbox("Remove seasonality", key="cmp_seas")
+        run_cmp    = st.button("▶ Compare", type="primary",
+                               use_container_width=True, key="run_cmp")
+
+    elif mode == "Upload NWP data":
+        st.markdown("**Forecast CSV**")
+        nwp_fc_file  = st.file_uploader("Forecast file (.csv)", type=["csv"], key="nwp_fc")
+        nwp_fc_col   = st.text_input("Forecast column", "forecast", key="nwp_fc_col")
+        st.markdown("**Observation CSV**")
+        nwp_obs_file = st.file_uploader("Observation file (.csv)", type=["csv"], key="nwp_obs")
+        nwp_obs_col  = st.text_input("Observed column", "observed", key="nwp_obs_col")
+        nwp_date_col = st.text_input("Date column",     "date",     key="nwp_date_col")
+        nwp_intv_col = st.text_input("Intervention col (optional, e.g. spread)", "",
+                                     key="nwp_intv_col")
+        nwp_var      = st.text_input("Variable label", "temperature_2m", key="nwp_var")
+        nwp_loc      = st.text_input("Location label", "uploaded",       key="nwp_loc")
+        nwp_null     = st.slider("Null perms", 0, 200, 50, key="nwp_null")
+        nwp_seas     = st.checkbox("Remove seasonality", key="nwp_seas")
+        run_nwp      = st.button("▶ Run FAWP on uploaded data", type="primary",
+                                 use_container_width=True, key="run_nwp")
+
 
 # ── Main header ───────────────────────────────────────────────────────────────
 st.markdown("""
@@ -299,10 +358,159 @@ st.markdown("""
     FAWP Weather Scanner
   </span>
   <span style='color:#3A4E70;font-size:.82em;margin-left:1em'>
-    ERA5 reanalysis · <a href='https://fawp-scanner.info' style='color:#4A7FCC'>fawp-scanner.info</a>
+    Real ERA5 reanalysis · <a href='https://open-meteo.com' style='color:#4A7FCC'>Open-Meteo</a> · <a href='https://fawp-scanner.info' style='color:#7A90B8'>fawp-scanner.info</a>
   </span>
 </div>
 """, unsafe_allow_html=True)
+
+# ── Compare two locations mode ────────────────────────────────────────────────
+if mode == "Compare two locations":
+    st.markdown('<div style="font-family:Syne,sans-serif;font-size:1.1em;font-weight:700;color:#D4AF37;margin-bottom:.8em">Compare two locations</div>', unsafe_allow_html=True)
+    if run_cmp:
+        try:
+            from fawp_index.weather import compare_locations
+        except ImportError as e:
+            st.error(f"fawp-index not available: {e}")
+        else:
+            with st.spinner(f"Scanning {cmp_name_a} and {cmp_name_b}…"):
+                try:
+                    r_a, r_b = compare_locations(
+                        {"lat": cmp_lat_a, "lon": cmp_lon_a, "name": cmp_name_a},
+                        {"lat": cmp_lat_b, "lon": cmp_lon_b, "name": cmp_name_b},
+                        variable=cmp_var, start_date=cmp_start, end_date=cmp_end,
+                        horizon_days=cmp_horiz, n_null=cmp_null,
+                        remove_seasonality=cmp_seas,
+                    )
+                    st.session_state["cmp_r_a"] = r_a
+                    st.session_state["cmp_r_b"] = r_b
+                except Exception as e:
+                    st.error(f"Compare failed: {e}")
+    if "cmp_r_a" in st.session_state and "cmp_r_b" in st.session_state:
+        r_a = st.session_state["cmp_r_a"]
+        r_b = st.session_state["cmp_r_b"]
+        col_a, col_b = st.columns(2)
+        for col, r in [(col_a, r_a), (col_b, r_b)]:
+            with col:
+                badge = "🔴 FAWP" if r.fawp_found else "✅ Clear"
+                st.markdown(f"#### {r.location}  {badge}")
+                _kpi_cols = st.columns(3)
+                _kpi(_kpi_cols[0], f"{r.peak_gap_bits:.4f}", "Gap (bits)")
+                _kpi(_kpi_cols[1], str(r.odw_result.tau_h_plus) if r.odw_result.tau_h_plus else "—", "τ⁺ₕ")
+                _kpi(_kpi_cols[2], f"τ {r.odw_start}–{r.odw_end}" if r.fawp_found else "—", "ODW")
+                try:
+                    import matplotlib
+                    matplotlib.use("Agg")
+                    import matplotlib.pyplot as plt
+                    fig, ax = plt.subplots(figsize=(5, 2.5))
+                    fig.patch.set_facecolor("#07101E")
+                    ax.set_facecolor("#0D1729")
+                    ax.plot(r.tau, r.pred_mi,  color="#D4AF37", lw=1.8, label="Pred MI")
+                    ax.plot(r.tau, r.steer_mi, color="#4A7FCC", lw=1.4, ls="--", label="Steer MI")
+                    if r.fawp_found and r.odw_start:
+                        ax.axvspan(r.odw_start, r.odw_end, alpha=0.2, color="#C0111A")
+                    ax.tick_params(colors="#7A90B8", labelsize=7)
+                    ax.set_xlabel("τ", fontsize=7, color="#7A90B8")
+                    for sp in ax.spines.values(): sp.set_edgecolor("#182540")
+                    ax.legend(fontsize=6, facecolor="#0D1729", labelcolor="#EDF0F8",
+                              edgecolor="#182540")
+                    plt.tight_layout(pad=0.3)
+                    st.pyplot(fig, use_container_width=True)
+                    plt.close(fig)
+                except Exception:
+                    pass
+                st.caption(r.explain() if hasattr(r, "explain") else "")
+    elif not run_cmp:
+        st.info("Fill in both locations in the sidebar and click ▶ Compare.")
+    st.stop()
+
+# ── NWP upload mode ───────────────────────────────────────────────────────────
+if mode == "Upload NWP data":
+    st.markdown('<div style="font-family:Syne,sans-serif;font-size:1.1em;font-weight:700;color:#D4AF37;margin-bottom:.8em">NWP Forecast vs Observation</div>', unsafe_allow_html=True)
+    st.caption("Upload your own forecast and observation CSVs. FAWP is computed on real model skill — no ERA5 proxy.")
+    if run_nwp:
+        if not nwp_fc_file or not nwp_obs_file:
+            st.error("Upload both forecast and observation CSV files.")
+        else:
+            import tempfile, os
+            with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f_fc:
+                f_fc.write(nwp_fc_file.read()); fc_tmp = f_fc.name
+            with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f_obs:
+                f_obs.write(nwp_obs_file.read()); obs_tmp = f_obs.name
+            try:
+                from fawp_index.weather import fawp_from_nwp_csvs
+                with st.spinner("Running FAWP on uploaded NWP data…"):
+                    nwp_result = fawp_from_nwp_csvs(
+                        forecast_path     = fc_tmp,
+                        observed_path     = obs_tmp,
+                        forecast_col      = nwp_fc_col,
+                        observed_col      = nwp_obs_col,
+                        date_col          = nwp_date_col,
+                        intervention_col  = nwp_intv_col if nwp_intv_col.strip() else None,
+                        variable          = nwp_var,
+                        location          = nwp_loc,
+                        n_null            = nwp_null,
+                        remove_seasonality= nwp_seas,
+                    )
+                st.session_state["nwp_result"] = nwp_result
+            except Exception as e:
+                st.error(f"Failed: {e}")
+            finally:
+                os.unlink(fc_tmp); os.unlink(obs_tmp)
+    if "nwp_result" in st.session_state:
+        nr = st.session_state["nwp_result"]
+        badge = "🔴 FAWP DETECTED" if nr.fawp_found else "✅ No FAWP"
+        st.markdown(f"### {badge}")
+        kc = st.columns(4)
+        _kpi(kc[0], f"{nr.peak_gap_bits:.4f}", "Peak gap (bits)")
+        _kpi(kc[1], str(nr.odw_result.tau_h_plus) if nr.odw_result.tau_h_plus else "—", "τ⁺ₕ")
+        _kpi(kc[2], f"τ {nr.odw_start}–{nr.odw_end}" if nr.fawp_found else "—", "ODW")
+        _kpi(kc[3], f"{nr.n_obs:,}", "Observations")
+        if nr.fawp_found:
+            st.success(nr.explain())
+        else:
+            st.info(nr.explain())
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots(figsize=(10, 3))
+            fig.patch.set_facecolor("#07101E")
+            ax.set_facecolor("#0D1729")
+            ax.plot(nr.tau, nr.pred_mi,  color="#D4AF37", lw=2, label="Prediction MI (forecast skill)")
+            ax.plot(nr.tau, nr.steer_mi, color="#4A7FCC", lw=1.5, ls="--", label="Steering MI (intervention)")
+            if nr.fawp_found and nr.odw_start:
+                ax.axvspan(nr.odw_start, nr.odw_end, alpha=0.18, color="#C0111A", label="ODW")
+            ax.set_xlabel("τ (delay)", fontsize=8, color="#7A90B8")
+            ax.set_ylabel("MI (bits)", fontsize=8, color="#7A90B8")
+            ax.tick_params(colors="#7A90B8", labelsize=7)
+            ax.legend(fontsize=7, facecolor="#0D1729", labelcolor="#EDF0F8", edgecolor="#182540")
+            for sp in ax.spines.values(): sp.set_edgecolor("#182540")
+            plt.tight_layout(pad=0.4)
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)
+        except Exception:
+            pass
+        import json as _j
+        st.download_button("Download result JSON",
+            data=_j.dumps(nr.to_dict(), indent=2).encode(),
+            file_name=f"fawp_nwp_{nr.variable}.json", mime="application/json")
+    elif not run_nwp:
+        st.info("Upload a forecast CSV and observation CSV in the sidebar, then click ▶ Run.")
+        with st.expander("📋 Expected CSV format"):
+            st.markdown("""**Forecast CSV** — one row per date:
+```
+date,forecast,ensemble_spread
+2020-01-01,12.3,0.8
+2020-01-02,13.1,0.9
+```
+**Observation CSV** — same dates:
+```
+date,observed
+2020-01-01,12.8
+2020-01-02,13.5
+```
+Both files must share the same date column name.""")
+    st.stop()
 
 # ── Multi-location mode ───────────────────────────────────────────────────────
 if mode == "Multi-location scan":
@@ -330,10 +538,12 @@ if run_btn:
                 start_date=start_date, end_date=end_date,
                 horizon_days=horizon_days, tau_max=tau_max,
                 epsilon=epsilon, n_null=n_null,
+                remove_seasonality=remove_seas,
             )
-            st.session_state["wx_result"]  = result
-            st.session_state["wx_hazard"]  = hazard
-            st.session_state["wx_epsilon"] = epsilon
+            st.session_state["wx_result"]   = result
+            st.session_state["wx_hazard"]   = hazard
+            st.session_state["wx_epsilon"]  = epsilon
+            st.session_state["wx_seasonal"] = remove_seas
         except Exception as e:
             st.error(f"Scan failed: {e}")
             st.stop()
@@ -409,24 +619,139 @@ if "wx_result" in st.session_state:
     # ── Explanation panel ─────────────────────────────────────────────────
     _explanation_panel(r, hazard)
 
+
+    # ── Rolling window timeline ───────────────────────────────────────────────
+    with st.expander("📈 FAWP timeline — how has this changed over time?", expanded=False):
+        st.caption(
+            "Slides a rolling window across the full date range and computes FAWP "
+            "for each window. Shows whether the leverage gap is growing, shrinking, "
+            "or stable at this location."
+        )
+        tl_col1, tl_col2, tl_col3 = st.columns(3)
+        with tl_col1:
+            tl_window = st.slider("Window size (years)", 1, 5, 2, key="tl_window")
+        with tl_col2:
+            tl_step = st.slider("Step (months)", 3, 12, 6, key="tl_step")
+        with tl_col3:
+            tl_null = st.slider("Null perms (timeline)", 0, 50, 10, key="tl_null")
+            run_timeline = st.button("▶ Run Timeline", key="run_timeline",
+                                     use_container_width=True)
+
+        if run_timeline:
+            try:
+                from fawp_index.weather import fawp_rolling_timeline
+            except ImportError as e:
+                st.error(f"fawp-index not available: {e}")
+            else:
+                with st.spinner(f"Computing timeline ({tl_window}yr windows, {tl_step}mo steps)…"):
+                    try:
+                        tl_df = fawp_rolling_timeline(
+                            latitude    = lat,
+                            longitude   = lon,
+                            variable    = variable,
+                            start_date  = start_date,
+                            end_date    = end_date,
+                            window_years  = tl_window,
+                            step_months   = tl_step,
+                            horizon_days  = horizon_days,
+                            tau_max       = tau_max,
+                            epsilon       = epsilon,
+                            n_null        = tl_null,
+                            remove_seasonality = remove_seas,
+                        )
+                        st.session_state["wx_timeline"] = tl_df
+                    except Exception as e:
+                        st.error(f"Timeline failed: {e}")
+
+        if "wx_timeline" in st.session_state:
+            tl = st.session_state["wx_timeline"]
+            tl_valid = tl.dropna(subset=["peak_gap_bits"])
+            if len(tl_valid) > 0:
+                try:
+                    import matplotlib
+                    matplotlib.use("Agg")
+                    import matplotlib.pyplot as plt
+                    import matplotlib.patches as mpatches
+                    import numpy as np
+
+                    fig, ax = plt.subplots(figsize=(11, 3.2))
+                    fig.patch.set_facecolor("#07101E")
+                    ax.set_facecolor("#0D1729")
+
+                    # Plot gap line
+                    xs = range(len(tl_valid))
+                    gaps = tl_valid["peak_gap_bits"].values
+                    ax.plot(list(xs), gaps, color="#D4AF37", lw=2, label="Peak gap (bits)")
+
+                    # Shade FAWP windows red
+                    for i, row in enumerate(tl_valid.itertuples()):
+                        if row.fawp_found:
+                            ax.axvspan(i - 0.4, i + 0.4, alpha=0.25,
+                                       color="#C0111A", zorder=0)
+
+                    ax.axhline(epsilon, color="#3A4E70", ls=":", lw=1,
+                               label=f"ε = {epsilon}")
+
+                    # X labels: window start dates (every other)
+                    labels = [str(r.window_start)[:7] for r in tl_valid.itertuples()]
+                    step_label = max(1, len(labels) // 8)
+                    ax.set_xticks(list(xs)[::step_label])
+                    ax.set_xticklabels(labels[::step_label], rotation=30,
+                                       ha="right", fontsize=7, color="#7A90B8")
+                    ax.set_ylabel("Peak gap (bits)", fontsize=8, color="#7A90B8")
+                    ax.tick_params(colors="#7A90B8", labelsize=7)
+                    for sp in ax.spines.values(): sp.set_edgecolor("#182540")
+                    ax.grid(axis="y", color="#182540", alpha=0.4, lw=0.5)
+
+                    fawp_patch = mpatches.Patch(color="#C0111A", alpha=0.4,
+                                                label="FAWP detected")
+                    ax.legend(handles=[ax.lines[0], ax.lines[1], fawp_patch],
+                              fontsize=7, facecolor="#0D1729",
+                              labelcolor="#EDF0F8", edgecolor="#182540")
+                    plt.tight_layout(pad=0.4)
+                    st.pyplot(fig, use_container_width=True)
+                    plt.close(fig)
+
+                    # Summary table
+                    n_fawp = int(tl_valid["fawp_found"].sum())
+                    pct    = n_fawp / len(tl_valid) * 100
+                    max_gap = float(tl_valid["peak_gap_bits"].max())
+                    max_win = tl_valid.loc[tl_valid["peak_gap_bits"].idxmax(), "window_start"]
+                    st.markdown(
+                        f"**{n_fawp}/{len(tl_valid)} windows** show FAWP ({pct:.0f}%) · "
+                        f"Peak gap **{max_gap:.4f} bits** at {str(max_win)[:7]}"
+                    )
+                    st.download_button(
+                        "Download timeline CSV",
+                        data=tl_valid.to_csv(index=False).encode(),
+                        file_name=f"fawp_timeline_{variable}_{lat}_{lon}.csv",
+                        mime="text/csv",
+                    )
+                except Exception as e:
+                    st.error(f"Chart failed: {e}")
+                    st.dataframe(tl_valid, use_container_width=True, hide_index=True)
+
     # ── Confidence / data quality ─────────────────────────────────────────
     with st.expander("📊 Data quality & confidence"):
         q1, q2, q3, q4 = st.columns(4)
+        seasonal_lbl = "Yes" if st.session_state.get("wx_seasonal") else "No"
         q1.metric("Sample size", f"{r.n_obs:,}")
         q2.metric("Tau grid", f"{len(r.tau)} points")
         q3.metric("Max pred MI", f"{r.pred_mi.max():.4f} b" if len(r.pred_mi) else "—")
         q4.metric("Null floor β", "0.99")
+        q5, q6 = st.columns(2)
+        q5.metric("Seasonality removed", seasonal_lbl)
         st.caption(
-            "⚠ **Experimental / beta.** ERA5 reanalysis is used as a proxy. "
-            "Day-over-day change is used as the intervention proxy — not a direct "
-            "measure of real-world steering. Results should be interpreted as "
-            "structural signals, not operational forecasts. "
-            "Null correction (β=0.99) is conservative by design."
+            "ERA5 reanalysis from Open-Meteo (free, CC BY 4.0). "
+            "Prediction channel: I(value_t ; value_{t+Δ}). "
+            "Steering channel: day-over-day change as intervention proxy. "
+            "Null correction β=0.99 (conservative). "
+            "Results reflect structural MI patterns in the ERA5 signal."
         )
 
     # ── Download ──────────────────────────────────────────────────────────
     import json as _j
-    c_d1, c_d2 = st.columns(2)
+    c_d1, c_d2, c_d3 = st.columns(3)
     with c_d1:
         st.download_button("Download JSON", data=_j.dumps(r.to_dict(), indent=2).encode(),
                            file_name=f"fawp_weather_{r.variable}.json", mime="application/json")
@@ -434,6 +759,14 @@ if "wx_result" in st.session_state:
         df_dl = pd.DataFrame({"tau": r.tau, "pred_mi": r.pred_mi, "steer_mi": r.steer_mi})
         st.download_button("Download MI CSV", data=df_dl.to_csv(index=False).encode(),
                            file_name=f"fawp_weather_{r.variable}_mi.csv", mime="text/csv")
+    with c_d3:
+        try:
+            from fawp_index.report_html import generate_html_report
+            _wrpt = generate_html_report(r, title=f"FAWP Weather — {r.variable} {r.location}")
+            st.download_button("📄 HTML Report", data=_wrpt.encode(),
+                               file_name=f"fawp_weather_{r.variable}.html", mime="text/html")
+        except Exception:
+            pass
 
 else:
     st.markdown("""
@@ -447,7 +780,7 @@ else:
     then click <b>▶ Run Scan</b>.<br><br>
     ERA5 reanalysis · 1940–present · any location on Earth<br>
     Free · no API key needed<br><br>
-    <span style="color:#3A4E70;font-size:.85em">⚠ Beta — proxy-based detection</span>
+    <span style="color:#3A4E70;font-size:.85em">ERA5 reanalysis · any location · 1940–present</span>
   </div>
 </div>
 """, unsafe_allow_html=True)

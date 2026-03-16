@@ -4,7 +4,7 @@ All notable changes to fawp-index are documented here.
 
 ---
 
-## [0.27.0] — 2026-03-14
+## [0.4.0] — 2026-03-14
 
 ### Highlights
 - Dashboard UX overhaul — severity pills, sparklines, ODW bars, leaderboard, explain cards
@@ -317,16 +317,6 @@ from fawp_index.data import E9_2_AGGREGATE_CURVES, E9_2_SEED_CURVES, E9_2_SUMMAR
 - `MultivariateFAWP`, `MultivariateFAWPResult`
 - `FAWPSimulator` with full simulation engine
 - README overhaul with quick-start, API reference, citation block
-
----
-
-## [0.3.0] — 2026-03-11
-
-### Added
-- Quant finance suite (`fawp_index.finance`)
-- Data science APIs: `fawp_from_dataframe`, `fawp_rolling`
-- `FAWPTransformer` (scikit-learn compatible)
-- `FAWPFeatureImportance`
 
 ---
 
