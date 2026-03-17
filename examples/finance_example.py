@@ -15,7 +15,7 @@ described in Clayton (2026) Forecasting Without Power.
 import numpy as np
 import pandas as pd
 
-from fawp_index import FAWPAlphaIndex, FAWPStreamDetector
+from fawp_index import FAWPAlphaIndex
 from fawp_index.io.csv_loader import load_csv
 
 
@@ -160,21 +160,34 @@ def trading_alert(r):
               f"alpha={r.peak_alpha:.4f} tau={r.peak_tau} "
               f"→ Execution leverage below detectability")
 
-stream = FAWPStreamDetector(
-    window=600,
-    delta_pred=20,
-    tau_grid=list(range(1, 12)),
-    min_samples=200,
-    n_null=50,
-    on_fawp=trading_alert,
-)
+# Rolling-window FAWP scan (replaces removed FAWPStreamDetector)
+# FAWPAlphaIndex.compute() takes: pred, future, action, obs, tau_grid, delta_pred
+trial_df = df[df["trial"] == 0].reset_index(drop=True)
+window    = 600
+step      = 100
+delta     = 20          # forecast horizon — must match data generation
+tau_grid  = list(range(1, 16))
+n_steps   = len(trial_df)
+roll_results = []
 
-# Feed single-trial price stream
-trial_df = df[df["trial"] == 0]
-stream.update_batch(
-    trial_df["log_return"].values,
-    trial_df["trade_signal"].values
-)
+print("\nRolling-window FAWP scan:")
+for start in range(0, n_steps - window, step):
+    chunk = trial_df.iloc[start : start + window].reset_index(drop=True)
+    n     = len(chunk) - delta   # usable rows after aligning future
 
-print(f"\nFeed complete: {stream.step} ticks, {len(alerts)} FAWP alerts fired")
+    idx = FAWPAlphaIndex(n_null=20)
+    res = idx.compute(
+        pred_series   = chunk["log_return"].values[:n],
+        future_series = chunk["future_return"].values[:n],
+        action_series = chunk["trade_signal"].values[:n],
+        obs_series    = chunk["obs_return"].values[:n],
+        tau_grid      = tau_grid,
+        delta_pred    = delta,
+    )
+    if res.fawp_found:
+        trading_alert(res)
+    roll_results.append(res.fawp_found)
+
+n_fawp = sum(roll_results)
+print(f"\nRolling scan complete: {len(roll_results)} windows, {n_fawp} FAWP windows, {len(alerts)} alerts fired")
 print("✅ Finance example complete\n")

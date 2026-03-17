@@ -120,7 +120,7 @@ lb.to_html("leaderboard.html")
 
 ```python
 from fawp_index import ODWDetector, fawp_significance
-from fawp_index.constants import TAU_PLUS_H_E9, TAU_F_E9, PEAK_GAP_BITS_E9
+from fawp_index.constants import TAU_PLUS_H_E9, TAU_F_E9, PEAK_GAP_BITS_E9_U
 
 odw = ODWDetector.from_e9_2_data(steering="u")
 print(odw.summary())

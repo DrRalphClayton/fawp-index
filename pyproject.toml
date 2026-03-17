@@ -123,6 +123,8 @@ exclude = [
 select = ["E", "F", "W", "I", "UP"]
 ignore = [
     "E501",   # line too long — handled by formatter
+    "E302",   # expected 2 blank lines — pre-existing throughout scientific codebase
+    "E303",   # too many blank lines — pre-existing throughout scientific codebase
     "E741",   # ambiguous variable name — too noisy in scientific code
     "F401",   # unused import — many re-exports in __init__.py
     "UP006",  # use built-in list/dict/tuple — py3.9 compat but pervasive in codebase

@@ -475,7 +475,8 @@ from fawp_index.constants import (
     FLAGSHIP_K,                # 0.8
     TAU_PLUS_H_E9,             # 31 — E9.2 agency horizon
     TAU_F_E9,                  # 36 — E9.2 functional cliff
-    PEAK_GAP_BITS_E9,          # 1.55 bits — E9.2 peak leverage gap
+    PEAK_GAP_BITS_E9_U,        # 1.5489 bits — E9.2 peak leverage gap (u-channel)
+    PEAK_GAP_BITS_E9_XI,       # 1.5524 bits — E9.2 peak leverage gap (ξ-channel)
 )
 ```
 

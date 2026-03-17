@@ -1903,7 +1903,7 @@ with tab_weather:
             fig, ax = _dark_fig(10, 3.2)
             ax.plot(wr.tau, wr.pred_mi,  color="#D4AF37", lw=1.8, label="Pred MI (forecast skill)")
             ax.plot(wr.tau, wr.steer_mi, color="#4A7FCC", lw=1.5, ls="--", label="Steer MI (intervention)")
-            ax.axhline(_EPS_STEER, color="#3A4E70", ls=":", lw=1, label=f"ε = {EPSILON_STEERING_RAW}")
+            ax.axhline(_EPS_STEER, color="#3A4E70", ls=":", lw=1, label=f"ε = {_EPS_STEER}")
             if wr.fawp_found and wr.odw_start:
                 ax.axvspan(wr.odw_start, wr.odw_end, alpha=0.15, color="#C0111A", label="ODW")
             ax.set_xlabel("τ (delay)", fontsize=8, color="#7A90B8")
