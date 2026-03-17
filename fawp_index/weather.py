@@ -500,16 +500,94 @@ def fawp_from_skill_series(
     )
 
 
+
+# ── ERA5 variable mapping + shared hourly→daily fetch helper ──────────────
+# All ERA5 variables must be fetched as HOURLY and resampled to daily.
+# Sending them as `daily=` causes "invalid String value" errors from the API.
+
+_HOURLY_ERA5_MAP = {
+    "temperature_2m":             "temperature_2m",
+    "precipitation_sum":          "precipitation",
+    "wind_speed_10m":             "wind_speed_10m",
+    "surface_pressure":           "surface_pressure",
+    "cloud_cover":                "cloud_cover",
+    "et0_fao_evapotranspiration": "et0_fao_evapotranspiration",
+    "shortwave_radiation":        "shortwave_radiation",
+    # aliases
+    "temp":   "temperature_2m",
+    "precip": "precipitation",
+    "wind":   "wind_speed_10m",
+}
+
+# Variables that should be summed (not averaged) when resampling hourly → daily
+_SUM_VARS = {"precipitation_sum", "et0_fao_evapotranspiration", "precipitation"}
+
+
+def _fetch_openmeteo_daily_series(om, latitude, longitude, start_date, end_date, variable):
+    """
+    Fetch a single ERA5 variable as HOURLY data and resample to daily.
+
+    All UI-exposed variables (temperature_2m, precipitation_sum, etc.) must go
+    through the hourly endpoint — the ERA5 archive does not support them as
+    `daily=` parameters, which causes ``invalid String value`` errors.
+
+    Parameters
+    ----------
+    om : openmeteo_requests.Client
+    latitude, longitude : float
+    start_date, end_date : str  YYYY-MM-DD
+    variable : str  UI variable name (e.g. "temperature_2m", "precipitation_sum")
+
+    Returns
+    -------
+    times : pd.DatetimeIndex  (tz-naive, daily)
+    values : np.ndarray       (daily values, NaN-filled gaps interpolated)
+    """
+    api_var = _HOURLY_ERA5_MAP.get(variable, variable)
+
+    resp = om.weather_api(
+        "https://archive-api.open-meteo.com/v1/archive",
+        params={
+            "latitude":   latitude,
+            "longitude":  longitude,
+            "start_date": start_date,
+            "end_date":   end_date,
+            "hourly":     api_var,
+            "timezone":   "UTC",
+        },
+    )[0]
+
+    hourly = resp.Hourly()
+    raw    = hourly.Variables(0).ValuesAsNumpy().astype(float)
+    times_hr = pd.date_range(
+        start=pd.to_datetime(hourly.Time(),    unit="s", utc=True),
+        end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
+        freq=pd.Timedelta(seconds=hourly.Interval()),
+        inclusive="left",
+    )
+
+    s = pd.Series(np.where(np.isfinite(raw), raw, np.nan), index=times_hr)
+
+    # Sum for accumulation variables, mean for everything else
+    if variable in _SUM_VARS:
+        daily = s.resample("D").sum(min_count=1)
+    else:
+        daily = s.resample("D").mean()
+
+    daily = daily.interpolate(method="linear", limit=3)
+    return daily.index.tz_localize(None), daily.values
+
 def fawp_from_open_meteo(
-    latitude:        float,
-    longitude:       float,
-    variable:        str = "temperature_2m",
-    start_date:      str = "2020-01-01",
-    end_date:        str = "2024-12-31",
-    horizon_days:    int = 5,
-    tau_max:         int = 30,
-    epsilon:         float = EPSILON_STEERING_RAW,
-    n_null:          int = 100,
+    latitude:          float,
+    longitude:         float,
+    variable:          str = "temperature_2m",
+    start_date:        str = "2020-01-01",
+    end_date:          str = "2024-12-31",
+    horizon_days:      int = 5,
+    tau_max:           int = 30,
+    epsilon:           float = EPSILON_STEERING_RAW,
+    n_null:            int = 100,
+    remove_seasonality: bool = False,
 ) -> WeatherFAWPResult:
     """
     Fetch ERA5 reanalysis data from Open-Meteo (free, no API key) and
@@ -589,46 +667,15 @@ def fawp_from_open_meteo(
     session = retry(cache, retries=5, backoff_factor=0.2)
     om = openmeteo_requests.Client(session=session)
 
-    # Map variable names to Open-Meteo ERA5 hourly names
-    _ERA5_MAP = {
-        "temperature_2m":                "temperature_2m",
-        "precipitation_sum":             "precipitation",
-        "wind_speed_10m":                "wind_speed_10m",
-        "surface_pressure":              "surface_pressure",
-        "cloud_cover":                   "cloud_cover",
-        "et0_fao_evapotranspiration":    "et0_fao_evapotranspiration",
-        "shortwave_radiation":           "shortwave_radiation",
-    }
-    api_var = _ERA5_MAP.get(variable, variable)
-
-    print(f"Fetching ERA5: {variable} @ ({latitude:.2f}, {longitude:.2f}) "
-          f"{start_date} → {end_date}")
-
-    url    = "https://archive-api.open-meteo.com/v1/archive"
-    params = {
-        "latitude":        latitude,
-        "longitude":       longitude,
-        "start_date":      start_date,
-        "end_date":        end_date,
-        "daily":           api_var,
-        "timezone":        "UTC",
-    }
-
-    # Try daily first; fall back to hourly resampled
+    # Fetch ERA5 via shared hourly→daily helper
+    # (All variables must use hourly endpoint; daily= causes API errors)
     try:
-        responses = om.weather_api(url, params=params)
-        resp = responses[0]
-        daily = resp.Daily()
-        values = daily.Variables(0).ValuesAsNumpy().astype(float)
-        times  = pd.date_range(
-            start=pd.to_datetime(daily.Time(), unit="s", utc=True),
-            end=pd.to_datetime(daily.TimeEnd(), unit="s", utc=True),
-            freq=pd.Timedelta(seconds=daily.Interval()),
-            inclusive="left",
-        ).tz_localize(None)
+        times, values = _fetch_openmeteo_daily_series(
+            om, latitude, longitude, start_date, end_date, variable
+        )
     except Exception as exc:
         raise RuntimeError(
-            f"Open-Meteo fetch failed: {exc}\n"
+            f"Open-Meteo fetch failed for {variable!r}: {exc}\n"
             "Check your internet connection and variable name."
         ) from exc
 
@@ -885,30 +932,9 @@ def fetch_openmeteo(
     session = retry(cache, retries=5, backoff_factor=0.2)
     om      = openmeteo_requests.Client(session=session)
 
-    _ERA5_MAP = {
-        "temperature_2m": "temperature_2m", "temp": "temperature_2m",
-        "precipitation_sum": "precipitation", "precip": "precipitation",
-        "wind_speed_10m": "wind_speed_10m", "wind": "wind_speed_10m",
-        "surface_pressure": "surface_pressure",
-        "cloud_cover": "cloud_cover",
-        "shortwave_radiation": "shortwave_radiation",
-    }
-    api_var = _ERA5_MAP.get(var, var)
-
-    params = {
-        "latitude": lat, "longitude": lon,
-        "start_date": start_date, "end_date": end_date,
-        "daily": api_var, "timezone": "UTC",
-    }
-    resp   = om.weather_api("https://archive-api.open-meteo.com/v1/archive", params=params)[0]
-    daily  = resp.Daily()
-    values = daily.Variables(0).ValuesAsNumpy().astype(float)
-    times  = pd.date_range(
-        start=pd.to_datetime(daily.Time(), unit="s", utc=True),
-        periods=len(values), freq="D",
-    ).tz_localize(None)
-
-    series = pd.Series(values, index=times).interpolate(limit=3).values
+    # Fetch via shared hourly→daily helper (daily= endpoint causes API errors)
+    times, values = _fetch_openmeteo_daily_series(om, lat, lon, start_date, end_date, var)
+    series = values
     n      = len(series) - 1
     df = pd.DataFrame({
         "date":   times[:n],

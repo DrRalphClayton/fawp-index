@@ -50,7 +50,7 @@ for i,(lbl,val,col) in enumerate(kpis):
     ax2.text(x+.14,y+.20,val,ha="center",va="center",color=col,fontsize=13,fontweight="bold",fontfamily="monospace")
     ax2.text(x+.14,y+.07,lbl,ha="center",va="center",color=MUTED,fontsize=7,fontweight="bold")
 
-fig.text(.5,.01,"fawp-index v1.1.6 · doi:10.5281/zenodo.18673949",ha="center",color=MUTED,fontsize=7)
+fig.text(.5,.01,"fawp-index v1.1.8 · doi:10.5281/zenodo.18673949",ha="center",color=MUTED,fontsize=7)
 plt.tight_layout(pad=1.2)
 plt.savefig("docs/images/scanner_result.png",dpi=150,facecolor=BG,bbox_inches="tight"); plt.close()
 print("✓ docs/images/scanner_result.png")
@@ -72,7 +72,7 @@ ax3.set_ylabel("Mutual Information (bits)",color=MUTED,fontsize=9)
 ax3.set_title("FAWP Weather Scanner — London · Temperature 2m · 2010–2024",
               color="#E8EDF8",fontsize=10,fontweight="bold",pad=10)
 ax3.legend(fontsize=8,facecolor=CARD,labelcolor="#E8EDF8",edgecolor=BORDER,framealpha=.95)
-fig2.text(.5,.01,"ERA5 via Open-Meteo · fawp-index v1.1.6 · fawp-scanner.info",ha="center",color=MUTED,fontsize=7)
+fig2.text(.5,.01,"ERA5 via Open-Meteo · fawp-index v1.1.8 · fawp-scanner.info",ha="center",color=MUTED,fontsize=7)
 plt.tight_layout(pad=1.2)
 plt.savefig("docs/images/weather_result.png",dpi=150,facecolor=BG,bbox_inches="tight"); plt.close()
 print("✓ docs/images/weather_result.png")

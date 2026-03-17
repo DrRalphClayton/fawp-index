@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fawp-index"
-version = "1.1.6"
+version = "1.1.8"
 description = "FAWP Alpha Index — Information-Control Exclusion Principle detector"
 readme = "README.md"
 license = "MIT"
@@ -125,7 +125,9 @@ ignore = [
     "E501",   # line too long — handled by formatter
     "E741",   # ambiguous variable name — too noisy in scientific code
     "F401",   # unused import — many re-exports in __init__.py
+    "UP006",  # use built-in list/dict/tuple — py3.9 compat but pervasive in codebase
     "UP007",  # use X|Y for union types — py3.9 compat
+    "UP035",  # deprecated typing imports — keeping for py3.9 compat
 ]
 [tool.ruff.lint.per-file-ignores]
 "fawp_index/__init__.py" = ["F401"]

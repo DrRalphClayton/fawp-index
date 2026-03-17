@@ -48,7 +48,7 @@ class TestODWExports:
         data = json.loads(p.read_text())
         assert data["result_type"] == "ODWResult"
         assert data["results"]["fawp_found"] is True
-        assert data["meta"]["fawp_index_version"] == "1.1.6"
+        assert data["meta"]["fawp_index_version"] == "1.1.8"
 
     def test_to_json_valid_json(self, odw, tmp_path):
         p = tmp_path / "odw_valid.json"

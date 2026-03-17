@@ -1,5 +1,5 @@
 """
-FAWP Dashboard v1.1.6 — Streamlit app
+FAWP Dashboard v1.1.8 — Streamlit app
 ========================================
 Ralph Clayton (2026) · https://doi.org/10.5281/zenodo.18673949
 """
@@ -57,7 +57,7 @@ _FAWP_ENV_DEMO = _os_early.getenv("FAWP_DEMO", "0") in ("1", "true", "yes")
 _IS_DEMO = bool(st.session_state.get("_demo_mode", _FAWP_ENV_DEMO))
 
 # ── App mode routing ───────────────────────────────────────────────────────────
-# "finance" | "weather" | None (landing)
+# "finance" | "weather" | "seismic" | None (landing)
 _APP_MODE = st.session_state.get("_app_mode", None)
 
 if _APP_MODE is None:
@@ -100,7 +100,7 @@ if _APP_MODE is None:
 </div>
 """, unsafe_allow_html=True)
 
-    col_l, col_fin, col_gap, col_wx, col_r = st.columns([1, 3, 0.6, 3, 1])
+    col_l, col_fin, col_gap, col_wx, col_gap2, col_seis, col_r = st.columns([0.5, 3, 0.4, 3, 0.4, 3, 0.5])
 
     with col_fin:
         st.markdown("""
@@ -138,9 +138,27 @@ if _APP_MODE is None:
             st.session_state["_app_mode"] = "weather"
             st.rerun()
 
+    with col_seis:
+        st.markdown("""
+<div class="mode-card">
+  <div class="mode-icon">🌍</div>
+  <div class="mode-name">FAWP Seismic</div>
+  <div class="mode-desc">
+    Scan USGS earthquake catalogs for any region.<br>
+    Detect when seismic activity is forecastable but the
+    intervention window has collapsed. Free · no API key needed.
+  </div>
+</div>
+""", unsafe_allow_html=True)
+        if st.button("▶  Open Seismic Scanner",
+                     use_container_width=True, type="primary",
+                     key="goto_seismic"):
+            st.session_state["_app_mode"] = "seismic"
+            st.rerun()
+
     st.markdown("""
 <div style="text-align:center;margin-top:3em;color:#1E2E4A;font-size:.78em">
-  fawp-index v1.1.6 · Ralph Clayton · 2026 ·
+  fawp-index v1.1.8 · Ralph Clayton · 2026 ·
   <a href="https://github.com/DrRalphClayton/fawp-index"
      style="color:#1E2E4A">GitHub</a> ·
   <a href="https://pypi.org/project/fawp-index/"
@@ -150,13 +168,15 @@ if _APP_MODE is None:
     st.stop()
 
 # ── Mode header with back button ───────────────────────────────────────────────
-_mode_label = "📈 Finance Scanner" if _APP_MODE == "finance" else "🌦 Weather Scanner"
+_mode_label = ("📈 Finance Scanner" if _APP_MODE == "finance"
+               else "🌍 Seismic Scanner" if _APP_MODE == "seismic"
+               else "🌦 Weather Scanner")
 _back_col, _title_col = st.columns([1, 9])
 with _back_col:
     if st.button("← Back", key="back_to_landing"):
         st.session_state.pop("_app_mode", None)
         # Clear mode-specific state
-        for _k in ["wl_result","input_dfs","_fetched_key","wx_result","wx_hazard"]:
+        for _k in ["wl_result","input_dfs","_fetched_key","wx_result","wx_hazard","seis_result","seis_raw","seis_daily"]:
             st.session_state.pop(_k, None)
         st.rerun()
 with _title_col:
@@ -176,6 +196,17 @@ if _APP_MODE == "weather":
     _wxmod   = _ilu.module_from_spec(_spec)
     try:
         _spec.loader.exec_module(_wxmod)
+    except SystemExit:
+        pass
+    st.stop()
+
+if _APP_MODE == "seismic":
+    import importlib.util as _ilu2, os as _os3
+    _seis_path = _os3.path.join(_THIS_DIR, "seismic_app.py")
+    _spec2     = _ilu2.spec_from_file_location("seismic_app", _seis_path)
+    _seismod   = _ilu2.module_from_spec(_spec2)
+    try:
+        _spec2.loader.exec_module(_seismod)
     except SystemExit:
         pass
     st.stop()

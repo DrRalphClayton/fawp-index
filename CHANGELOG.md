@@ -4,7 +4,7 @@ All notable changes to fawp-index are documented here.
 
 ---
 
-## [1.1.6] — 2026-03-16
+## [1.1.8] — 2026-03-16
 
 ### Added
 - **PyPI metadata glow-up**: full classifiers, expanded keywords, `Demo`, `Documentation`, `Zenodo Software`, `Repository` URLs in `pyproject.toml`
@@ -26,7 +26,7 @@ All notable changes to fawp-index are documented here.
 | Breaking API change | Major (X.0.0) | Rename `fawp_from_series()` |
 | New feature, backward compatible | Minor (1.X.0) | New weather variable |
 | Bug fix, calibration patch | Patch (1.1.X) | Fix `remove_seasonality` kwarg |
-## [1.1.6] — 2026-03-14
+## [1.1.8] — 2026-03-14
 
 ### Highlights
 - Dashboard UX overhaul — severity pills, sparklines, ODW bars, leaderboard, explain cards
@@ -332,7 +332,7 @@ from fawp_index.data import E9_2_AGGREGATE_CURVES, E9_2_SEED_CURVES, E9_2_SUMMAR
 
 ---
 
-## [1.1.6] — 2026-03-11
+## [1.1.8] — 2026-03-11
 
 ### Added
 - `notebooks/fawp_demo.ipynb` — comprehensive Jupyter walkthrough

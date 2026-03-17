@@ -181,7 +181,7 @@ class MultivariateFAWP:
                 _action = action[:n - self.delta]
                 _obs = obs[:n - self.delta]
                 n = len(pred)
-            
+
             if future_series is not None:
                 _action = action
                 _obs = obs

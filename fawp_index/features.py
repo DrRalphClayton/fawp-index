@@ -177,7 +177,7 @@ class FAWPFeatureImportance:
                 fut = pred[self.delta:]
                 pred = pred[:n - self.delta]
                 _action = action[:n - self.delta]
-            
+
             if target is not None:
                 _action = action
 
