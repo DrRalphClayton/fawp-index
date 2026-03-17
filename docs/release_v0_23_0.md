@@ -1,4 +1,4 @@
-# fawp-index v1.1.8
+# fawp-index v1.1.9
 
 **Information-Control Exclusion Principle detector for finance, climate, and ML systems.**
 
@@ -8,7 +8,7 @@
 
 ---
 
-## What's new in v1.1.8
+## What's new in v1.1.9
 
 ### 🔔 In-app notification bell
 Every scan now fires an in-app alert:
@@ -44,10 +44,10 @@ New `fawp_index.compare.compare_signals()` function:
 ## Install
 
 ```bash
-pip install "fawp-index==1.1.8"              # core
-pip install "fawp-index[dashboard]==1.1.8"   # + Streamlit dashboard
-pip install "fawp-index[fast]==1.1.8"        # + Numba JIT (5-15x faster scans)
-pip install "fawp-index[all]==1.1.8"         # everything
+pip install "fawp-index==1.1.9"              # core
+pip install "fawp-index[dashboard]==1.1.9"   # + Streamlit dashboard
+pip install "fawp-index[fast]==1.1.9"        # + Numba JIT (5-15x faster scans)
+pip install "fawp-index[all]==1.1.9"         # everything
 ```
 
 ## Quick start

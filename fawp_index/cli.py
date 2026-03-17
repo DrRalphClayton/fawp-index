@@ -284,6 +284,7 @@ def _build_parser():
             "  fawp-index significance data.csv --state price --action trade\n"
             "  fawp-index benchmarks --verify\n"
             "  fawp-index version\n"
+            "  fawp-index cite\n"
         ),
     )
     parser.add_argument("--version", action="version", version=f"fawp-index {_VERSION}")
@@ -370,7 +371,64 @@ def _build_parser():
     p = sub.add_parser("version", help="Print version and exit")
     p.set_defaults(func=cmd_version)
 
+    # cite
+    p = sub.add_parser("cite", help="Print BibTeX citations for fawp-index and papers")
+    p.set_defaults(func=cmd_cite)
+
     return parser
+
+
+
+def cmd_cite(args):
+    """Print BibTeX citations for fawp-index and its papers."""
+    import fawp_index as _fi
+    ver = _fi.__version__
+
+    bib = f"""
+% ─────────────────────────────────────────────────────────────
+%  fawp-index — citation guide
+%  Run:  fawp-index cite
+% ─────────────────────────────────────────────────────────────
+
+% 1. Software (PyPI package + this repo)
+@software{{fawp_index_software,
+  author    = {{Clayton, Ralph}},
+  title     = {{fawp-index: FAWP Alpha Index — Information-Control Exclusion Principle detector}},
+  year      = {{2026}},
+  version   = {{{ver}}},
+  doi       = {{10.5281/zenodo.18673949}},
+  url       = {{https://github.com/DrRalphClayton/fawp-index}},
+  license   = {{MIT}}
+}}
+
+% 2. E9 Suite (comparative timing, gap2, robustness)
+@article{{fawp_e9_suite,
+  author    = {{Clayton, Ralph}},
+  title     = {{FAWP Alpha Index — E9 Suite: Comparative timing, gap2 detector, robustness}},
+  year      = {{2026}},
+  doi       = {{10.5281/zenodo.19065421}},
+  url       = {{https://doi.org/10.5281/zenodo.19065421}}
+}}
+
+% 3. E8 / SPHERE-16 flagship calibration
+@article{{fawp_sphere16,
+  author    = {{Clayton, Ralph}},
+  title     = {{FAWP Alpha Index — SPHERE-16: E8 Flagship Calibration}},
+  year      = {{2026}},
+  doi       = {{10.5281/zenodo.18673949}},
+  url       = {{https://doi.org/10.5281/zenodo.18673949}}
+}}
+
+% 4. E1–E7 foundational theory (Volumetric Time Model)
+@article{{fawp_e1_e7,
+  author    = {{Clayton, Ralph}},
+  title     = {{FAWP Alpha Index — E1–E7: Volumetric Time Model}},
+  year      = {{2026}},
+  doi       = {{10.5281/zenodo.18663547}},
+  url       = {{https://doi.org/10.5281/zenodo.18663547}}
+}}
+"""
+    print(bib.strip())
 
 
 def main():

@@ -4,7 +4,28 @@ All notable changes to fawp-index are documented here.
 
 ---
 
-## [1.1.8] — 2026-03-16
+## [1.1.9] — 2026-03-17
+
+### Added
+- **FAWP Seismic Scanner** (`dashboard/seismic_app.py`) — third app on fawp-scanner.info
+  - Fetches from **USGS FDSN API** (free, no API key required)
+  - 10 region presets: California, Japan, Turkey, Chile, New Zealand, Indonesia, Alaska, Greece, Italy, Mexico + custom bounding box
+  - 5 seismic variables: daily event count, max/mean magnitude, seismic energy (Gutenberg–Richter), mean focal depth
+  - Full FAWP detection pipeline — same MI curves, ODW, agency horizon as weather app
+  - Results: MI chart, time-series + scatter, event map, JSON export
+- Landing page now shows 3 equal mode cards: 📈 Finance · 🌦 Weather · 🌍 Seismic
+
+### Fixed
+- ERA5 weather fetch completely rewritten — all variables now fetched as **hourly** and resampled to daily (`daily=` endpoint caused `invalid String value temperature_2m` errors)
+- `remove_seasonality` added to `fawp_from_open_meteo()` signature (was in function body but missing from signature — would NameError once fetch started working)
+- `dashboard/requirements.txt` pinned to `fawp-index==1.1.9` so Render pulls the correct patched version
+
+### Changed
+- ruff: `UP006`, `UP035` added to ignore list (typing module compat, pervasive in codebase)
+- `License ::` classifier removed from `pyproject.toml` (PEP 639 conflict with `license = "MIT"` field on Python 3.14+)
+
+---
+## [1.1.9] — 2026-03-16
 
 ### Added
 - **PyPI metadata glow-up**: full classifiers, expanded keywords, `Demo`, `Documentation`, `Zenodo Software`, `Repository` URLs in `pyproject.toml`
@@ -26,7 +47,7 @@ All notable changes to fawp-index are documented here.
 | Breaking API change | Major (X.0.0) | Rename `fawp_from_series()` |
 | New feature, backward compatible | Minor (1.X.0) | New weather variable |
 | Bug fix, calibration patch | Patch (1.1.X) | Fix `remove_seasonality` kwarg |
-## [1.1.8] — 2026-03-14
+## [1.1.9] — 2026-03-14
 
 ### Highlights
 - Dashboard UX overhaul — severity pills, sparklines, ODW bars, leaderboard, explain cards
@@ -332,7 +353,7 @@ from fawp_index.data import E9_2_AGGREGATE_CURVES, E9_2_SEED_CURVES, E9_2_SUMMAR
 
 ---
 
-## [1.1.8] — 2026-03-11
+## [1.1.9] — 2026-03-11
 
 ### Added
 - `notebooks/fawp_demo.ipynb` — comprehensive Jupyter walkthrough

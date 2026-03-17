@@ -1110,7 +1110,7 @@ def _suite_html(suite: BenchmarkSuite) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Additional benchmark cases (v1.1.8)
+# Additional benchmark cases (v1.1.9)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def gradual_fade(simulate: bool = False, seed: int = 42) -> BenchmarkResult:

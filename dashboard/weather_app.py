@@ -570,6 +570,24 @@ def _multi_scan_panel():
             file_name=f"fawp_multiscan_{ms_var}.json", mime="application/json")
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
+# ── Nav bar ─────────────────────────────────────────────────────────────────
+def _wx_nav_switch(mode):
+    for k in ["wl_result","input_dfs","wx_result","wx_hazard","seis_result","seis_raw","seis_daily"]:
+        st.session_state.pop(k, None)
+    if mode is None: st.session_state.pop("_app_mode", None)
+    else: st.session_state["_app_mode"] = mode
+    st.rerun()
+_wx_n1, _wx_n2, _wx_n3, _wx_n4 = st.columns([2, 2, 2, 2])
+with _wx_n1:
+    if st.button("⚡ FAWP", key="wx_nh", use_container_width=True): _wx_nav_switch(None)
+with _wx_n2:
+    if st.button("📈 Finance", key="wx_nf", use_container_width=True): _wx_nav_switch("finance")
+with _wx_n3:
+    st.button("🌦 Weather", key="wx_nw", use_container_width=True, disabled=True, type="primary")
+with _wx_n4:
+    if st.button("🌍 Seismic", key="wx_ns", use_container_width=True): _wx_nav_switch("seismic")
+st.markdown("<hr style='border-color:#182540;margin:.2em 0 .8em'>", unsafe_allow_html=True)
+
 with st.sidebar:
     st.markdown("""
 <div class="wx-logo">
@@ -979,7 +997,7 @@ if "wx_result" in st.session_state:
     with sc2:
         if _WL_OK and st.button("📍 Save to My Locations", key="save_wx_loc"):
             try:
-                from dashboard.supabase_store import _current_user_id
+                from supabase_store import _current_user_id
                 uid = _current_user_id()
             except Exception:
                 uid = None

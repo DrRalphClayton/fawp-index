@@ -298,6 +298,27 @@ def _kpi(col, val, label, color=None):
 # ── Main render ────────────────────────────────────────────────────────────────
 st.markdown(_CSS, unsafe_allow_html=True)
 
+# ── Nav bar ──────────────────────────────────────────────────────────────────
+def _seis_nav_switch(mode):
+    for k in ["wl_result","input_dfs","wx_result","wx_hazard","seis_result","seis_raw","seis_daily"]:
+        st.session_state.pop(k, None)
+    if mode is None:
+        st.session_state.pop("_app_mode", None)
+    else:
+        st.session_state["_app_mode"] = mode
+    st.rerun()
+
+_sn1, _sn2, _sn3, _sn4 = st.columns([2, 2, 2, 2])
+with _sn1:
+    if st.button("⚡ FAWP", key="sn_h", use_container_width=True): _seis_nav_switch(None)
+with _sn2:
+    if st.button("📈 Finance", key="sn_f", use_container_width=True): _seis_nav_switch("finance")
+with _sn3:
+    if st.button("🌦 Weather", key="sn_w", use_container_width=True): _seis_nav_switch("weather")
+with _sn4:
+    st.button("🌍 Seismic", key="sn_s", use_container_width=True, disabled=True, type="primary")
+st.markdown("<hr style='border-color:#182540;margin:.2em 0 .8em'>", unsafe_allow_html=True)
+
 st.markdown(
     '<div class="seis-header">🌍 FAWP Seismic Scanner</div>'
     '<div class="seis-sub">USGS Earthquake Catalog · Free · No API key needed · '

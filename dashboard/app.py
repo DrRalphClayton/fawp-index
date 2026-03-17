@@ -1,5 +1,5 @@
 """
-FAWP Dashboard v1.1.8 — Streamlit app
+FAWP Dashboard v1.1.9 — Streamlit app
 ========================================
 Ralph Clayton (2026) · https://doi.org/10.5281/zenodo.18673949
 """
@@ -158,7 +158,7 @@ if _APP_MODE is None:
 
     st.markdown("""
 <div style="text-align:center;margin-top:3em;color:#1E2E4A;font-size:.78em">
-  fawp-index v1.1.8 · Ralph Clayton · 2026 ·
+  fawp-index v1.1.9 · Ralph Clayton · 2026 ·
   <a href="https://github.com/DrRalphClayton/fawp-index"
      style="color:#1E2E4A">GitHub</a> ·
   <a href="https://pypi.org/project/fawp-index/"
@@ -167,23 +167,71 @@ if _APP_MODE is None:
 """, unsafe_allow_html=True)
     st.stop()
 
-# ── Mode header with back button ───────────────────────────────────────────────
-_mode_label = ("📈 Finance Scanner" if _APP_MODE == "finance"
-               else "🌍 Seismic Scanner" if _APP_MODE == "seismic"
-               else "🌦 Weather Scanner")
-_back_col, _title_col = st.columns([1, 9])
-with _back_col:
-    if st.button("← Back", key="back_to_landing"):
+# ── Top nav bar — Home + direct app switcher ───────────────────────────────────
+_NAV_CSS = """
+<style>
+.fawp-nav {
+    display:flex; align-items:center; gap:.6em;
+    padding:.5em 0 .8em; border-bottom:1px solid #182540;
+    margin-bottom:1em;
+}
+.nav-home {
+    font-family:'Syne',sans-serif; font-weight:800; font-size:1.05em;
+    color:#D4AF37; text-decoration:none; margin-right:.4em;
+    letter-spacing:-.01em;
+}
+.nav-sep { color:#182540; font-size:1.1em; }
+.nav-btn {
+    background:none; border:1px solid #182540; border-radius:7px;
+    padding:.28em .85em; font-size:.8em; font-weight:600;
+    cursor:pointer; transition:border-color .15s, color .15s;
+    font-family:'DM Sans',sans-serif; letter-spacing:.01em;
+}
+.nav-btn:hover { border-color:#D4AF37; }
+.nav-btn-active {
+    border-color:#D4AF37 !important; color:#D4AF37 !important;
+    background:#0D1729 !important;
+}
+</style>
+"""
+st.markdown(_NAV_CSS, unsafe_allow_html=True)
+
+def _switch_mode(new_mode):
+    """Clear current mode state and switch to new_mode."""
+    for _k in ["wl_result","input_dfs","_fetched_key","wx_result","wx_hazard",
+               "seis_result","seis_raw","seis_daily"]:
+        st.session_state.pop(_k, None)
+    if new_mode is None:
         st.session_state.pop("_app_mode", None)
-        # Clear mode-specific state
-        for _k in ["wl_result","input_dfs","_fetched_key","wx_result","wx_hazard","seis_result","seis_raw","seis_daily"]:
-            st.session_state.pop(_k, None)
-        st.rerun()
-with _title_col:
-    st.markdown(
-        f'<div style="padding:.4em 0;font-family:Syne,sans-serif;font-size:1.1em;'
-        f'font-weight:700;color:#7A90B8">{_mode_label}</div>',
-        unsafe_allow_html=True)
+    else:
+        st.session_state["_app_mode"] = new_mode
+    st.rerun()
+
+# Render nav row: FAWP home | 📈 Finance | 🌦 Weather | 🌍 Seismic
+_nav_home, _nav_fin, _nav_wx, _nav_seis = st.columns([2, 2, 2, 2])
+with _nav_home:
+    if st.button("⚡ FAWP", key="nav_home",
+                 help="Back to launcher",
+                 use_container_width=True):
+        _switch_mode(None)
+with _nav_fin:
+    _fin_type = "primary" if _APP_MODE == "finance" else "secondary"
+    if st.button("📈 Finance", key="nav_finance",
+                 type=_fin_type, use_container_width=True,
+                 disabled=(_APP_MODE == "finance")):
+        _switch_mode("finance")
+with _nav_wx:
+    _wx_type = "primary" if _APP_MODE == "weather" else "secondary"
+    if st.button("🌦 Weather", key="nav_weather",
+                 type=_wx_type, use_container_width=True,
+                 disabled=(_APP_MODE == "weather")):
+        _switch_mode("weather")
+with _nav_seis:
+    _seis_type = "primary" if _APP_MODE == "seismic" else "secondary"
+    if st.button("🌍 Seismic", key="nav_seismic",
+                 type=_seis_type, use_container_width=True,
+                 disabled=(_APP_MODE == "seismic")):
+        _switch_mode("seismic")
 
 # ── Route to correct app ───────────────────────────────────────────────────────
 if _APP_MODE == "weather":
@@ -1820,8 +1868,9 @@ with tab_weather:
                         start_date   = w_start,
                         end_date     = w_end,
                         horizon_days = w_horiz,
-                        tau_max      = w_tau,
-                        n_null       = w_null,
+                        tau_max            = w_tau,
+                        n_null             = w_null,
+                        remove_seasonality = w_seas,
                     )
                     st.session_state["w_result"] = w_result
                 except Exception as we:
