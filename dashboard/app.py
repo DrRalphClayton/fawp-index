@@ -1,5 +1,5 @@
 """
-FAWP Dashboard v1.1.4 — Streamlit app
+FAWP Dashboard v1.1.6 — Streamlit app
 ========================================
 Ralph Clayton (2026) · https://doi.org/10.5281/zenodo.18673949
 """
@@ -140,7 +140,7 @@ if _APP_MODE is None:
 
     st.markdown("""
 <div style="text-align:center;margin-top:3em;color:#1E2E4A;font-size:.78em">
-  fawp-index v1.1.4 · Ralph Clayton · 2026 ·
+  fawp-index v1.1.6 · Ralph Clayton · 2026 ·
   <a href="https://github.com/DrRalphClayton/fawp-index"
      style="color:#1E2E4A">GitHub</a> ·
   <a href="https://pypi.org/project/fawp-index/"

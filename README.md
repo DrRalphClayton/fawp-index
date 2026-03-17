@@ -1,11 +1,12 @@
 # fawp-index
 
-[![PyPI version](https://badge.fury.io/py/fawp-index.svg)](https://badge.fury.io/py/fawp-index)
+[![PyPI version](https://img.shields.io/pypi/v/fawp-index.svg)](https://pypi.org/project/fawp-index/)
 [![PyPI downloads](https://img.shields.io/pypi/dm/fawp-index.svg)](https://pypi.org/project/fawp-index/)
-[![Python 3.9–3.12](https://img.shields.io/badge/python-3.9–3.12-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/pypi/pyversions/fawp-index)](https://pypi.org/project/fawp-index/)
 [![CI](https://github.com/DrRalphClayton/fawp-index/actions/workflows/ci.yml/badge.svg)](https://github.com/DrRalphClayton/fawp-index/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18673949.svg)](https://doi.org/10.5281/zenodo.18673949)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.txt)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.18673949-blue)](https://doi.org/10.5281/zenodo.18673949)
+[![Demo](https://img.shields.io/badge/🔴%20Live%20Demo-fawp--scanner.info-gold)](https://fawp-scanner.info)
 
 ---
 
@@ -28,7 +29,7 @@
 Scan any stock, ETF, or crypto in your browser.
 Enter tickers → Fetch data → See regime detection in real time.
 
-*Powered by fawp-index v1.1.5 · [pip install it](#install) for full local control*
+*Powered by fawp-index v1.1.6 · [pip install it](#install) for full local control*
 
 </div>
 
@@ -87,6 +88,51 @@ Hit rate · mean return · MAE · MFE · p5/p95 · FAWP vs baseline comparison.
 No install required. Scan equities, crypto, and sectors in your browser.
 
 ---
+
+## The Science Behind FAWP
+
+<details>
+<summary><b>📐 Click to expand — theory, calibration constants & papers</b></summary>
+
+### Information-Control Exclusion Principle (ICEP)
+
+FAWP detects the moment a system crosses into a regime where **predictive information persists but operational control collapses** — the *Information-Control Exclusion Principle* (ICEP), formalised in the Volumetric Time Model.
+
+The detection pipeline:
+
+```
+Prediction MI  I(X_t; X_{t+τ})  →  peaks inside the Optimal Decision Window (ODW)
+Steering MI    I(X_t; ΔX_{t+τ}) →  collapses toward ε (the "cliff")
+Gap            α(τ) = I_pred − I_steer  →  sustained positive gap = FAWP detected
+```
+
+### Calibration constants (SPHERE-16, E9.7 sweep)
+
+| Constant | Value | Source |
+|---|---|---|
+| `PEAK_PRED_BITS` | 2.233669 bits | SPHERE-16 Eq. 4 |
+| `ETA_PRED_CORRECTED` | 0.0 (strict post-null floor) | SPHERE-16 Eq. 8 |
+| `PRED_AT_CLIFF` | 1.01 bits | SPHERE-16 Eq. 5 |
+| `NULL_MAX_SHUFFLE` | 0.00216 bits | SPHERE-16 Eq. 19 |
+| `NULL_MAX_SHIFT` | 0.00421 bits | SPHERE-16 Eq. 19 |
+| `E97_MEAN_LEAD_GAP2` | +0.61 delays avg | E9.7 4244-run sweep |
+
+### Papers (SPHERE series)
+
+| Paper | DOI | What it establishes |
+|---|---|---|
+| E1–E7 (Volumetric Time Model) | [10.5281/zenodo.18663547](https://doi.org/10.5281/zenodo.18663547) | ICEP theory, ODW, agency horizon |
+| E8 / SPHERE-16 (flagship) | [10.5281/zenodo.18673949](https://doi.org/10.5281/zenodo.18673949) | Peak pred = 2.233669 bits, null controls |
+
+Access calibration constants directly:
+```python
+import fawp_index as fi
+print(fi.PEAK_PRED_BITS)                    # 2.233669
+print(fi.E97_MEAN_LEAD_GAP2_TO_CLIFF_U)    # 0.7552
+print(fi.TAU_H_PLUS_E8)                     # 4
+```
+
+</details>
 
 ## Install
 
@@ -352,7 +398,7 @@ fawp-dashboard                     # opens on http://localhost:8501
 cd dashboard && streamlit run app.py
 ```
 
-**Dashboard features (v1.1.5):**
+**Dashboard features (v1.1.6):**
 - Severity pills (FAWP / HIGH / WATCH / CLEAR) with pulsing indicators
 - Sparkline score trend per asset with ▲/▼ arrows
 - ODW proportional bar showing window position in τ range
@@ -438,7 +484,7 @@ from fawp_index.constants import (
   author  = {Ralph Clayton},
   title   = {fawp-index: Information-Control Exclusion Principle detector},
   year    = {2026},
-  version = {1.1.5},
+  version = {1.1.6},
   url     = {https://github.com/DrRalphClayton/fawp-index},
   doi     = {10.5281/zenodo.18673949}
 }

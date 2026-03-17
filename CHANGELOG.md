@@ -4,7 +4,29 @@ All notable changes to fawp-index are documented here.
 
 ---
 
-## [1.1.4] — 2026-03-14
+## [1.1.6] — 2026-03-16
+
+### Added
+- **PyPI metadata glow-up**: full classifiers, expanded keywords, `Demo`, `Documentation`, `Zenodo Software`, `Repository` URLs in `pyproject.toml`
+- **README hero upgrade**: new badge row (`img.shields.io` live version badges), collapsible "The Science Behind FAWP" section with ICEP pipeline, calibration table, and paper links
+- **`CITATION.cff`**: GitHub auto-detects and shows "Cite this repository" button; includes software + paper references (E1–E7 and E8/SPHERE-16)
+- **GitHub Actions CI** (`.github/workflows/ci.yml`): pytest matrix (Python 3.9–3.12), ruff lint, automatic PyPI publish on version tags
+- **`CONTRIBUTING.md`**: setup instructions, test commands, contribution conventions
+
+### Changed
+- Badge URLs switched from `badge.fury.io` to `img.shields.io/pypi/v` (live version, not cached)
+- Live demo badge added to README header
+
+---
+
+## Semantic versioning from v1.0.0 onwards
+
+| Change type | Version bump | Example |
+|---|---|---|
+| Breaking API change | Major (X.0.0) | Rename `fawp_from_series()` |
+| New feature, backward compatible | Minor (1.X.0) | New weather variable |
+| Bug fix, calibration patch | Patch (1.1.X) | Fix `remove_seasonality` kwarg |
+## [1.1.6] — 2026-03-14
 
 ### Highlights
 - Dashboard UX overhaul — severity pills, sparklines, ODW bars, leaderboard, explain cards
@@ -310,7 +332,7 @@ from fawp_index.data import E9_2_AGGREGATE_CURVES, E9_2_SEED_CURVES, E9_2_SUMMAR
 
 ---
 
-## [1.1.4] — 2026-03-11
+## [1.1.6] — 2026-03-11
 
 ### Added
 - `notebooks/fawp_demo.ipynb` — comprehensive Jupyter walkthrough

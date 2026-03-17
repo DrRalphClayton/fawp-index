@@ -1,0 +1,43 @@
+cff-version: 1.2.0
+message: "If you use fawp-index in your research, please cite the software and the paper below."
+type: software
+title: "fawp-index: FAWP Alpha Index — Information-Control Exclusion Principle detector"
+abstract: >
+  fawp-index detects the Information-Control Exclusion Principle (ICEP) regime in time-series data —
+  the point where predictive information persists but operational control has collapsed.
+  Implements the FAWP Alpha Index (α_A), Optimal Decision Window (ODW), Agency Horizon, and
+  steering MI gap detection, calibrated from the SPHERE empirical series (E1–E9).
+authors:
+  - family-names: Clayton
+    given-names: Ralph
+    alias: DrRalphClayton
+version: "1.1.6"
+date-released: "2026-03-16"
+doi: 10.5281/zenodo.18673949
+repository-code: "https://github.com/DrRalphClayton/fawp-index"
+url: "https://fawp-scanner.info"
+license: MIT
+keywords:
+  - fawp
+  - information-control-exclusion-principle
+  - volumetric-time-model
+  - agency-horizon
+  - mutual-information
+  - regime-detection
+  - forecasting
+  - time-series
+references:
+  - type: article
+    title: "FAWP Alpha Index — SPHERE Empirical Series E1–E7: Volumetric Time Model"
+    authors:
+      - family-names: Clayton
+        given-names: Ralph
+    doi: 10.5281/zenodo.18663547
+    year: 2026
+  - type: article
+    title: "FAWP Alpha Index — SPHERE-16: E8 Flagship Calibration"
+    authors:
+      - family-names: Clayton
+        given-names: Ralph
+    doi: 10.5281/zenodo.18673949
+    year: 2026

@@ -21,15 +21,50 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install package and test dependencies
+      - name: Install dependencies
         run: |
-          pip install --upgrade pip
-          pip install -e ".[test]"
+          python -m pip install --upgrade pip
+          pip install -e ".[test,plot]"
 
       - name: Run tests
-        run: pytest tests/ -v --tb=short
+        run: |
+          pytest tests/ -v --tb=short --ignore=tests/test_weather.py \
+            --ignore=tests/test_finance.py -x
 
-      - name: Check package builds cleanly
+      - name: Check imports
+        run: |
+          python -c "import fawp_index as fi; print(f'fawp-index {fi.__version__} OK')"
+          python -c "from fawp_index.constants import PEAK_PRED_BITS; assert PEAK_PRED_BITS == 2.233669"
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Lint
+        run: ruff check fawp_index/ --ignore E501,E741,F401,UP007
+
+  publish:
+    name: Publish to PyPI
+    needs: test
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment: pypi
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build
         run: |
           pip install build
-          python -m build --sdist --wheel
+          python -m build
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

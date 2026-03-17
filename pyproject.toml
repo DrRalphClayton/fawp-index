@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fawp-index"
-version = "1.1.4"
+version = "1.1.6"
 description = "FAWP Alpha Index — Information-Control Exclusion Principle detector"
 readme = "README.md"
 license = "MIT"
@@ -12,20 +12,29 @@ license-files = ["LICENSE.txt"]
 authors = [{ name = "Ralph Clayton" }]
 requires-python = ">=3.9"
 keywords = [
-    "forecasting", "information theory", "mutual information",
-    "agency", "control theory", "time series", "FAWP"
+    "fawp", "fawp-index", "agency-horizon", "volumetric-time-model",
+    "information-control-exclusion", "operational-accessibility",
+    "mutual-information", "forecasting", "information-theory",
+    "control-theory", "time-series", "finance", "weather", "climate",
+    "regime-detection", "early-warning", "sphere"
 ]
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Office/Business :: Financial",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Topic :: Scientific/Engineering",
-    "Topic :: Scientific/Engineering :: Information Analysis",
-    "Topic :: Office/Business :: Financial",
-    "Intended Audience :: Science/Research",
-    "Intended Audience :: Financial and Insurance Industry",
+    "Operating System :: OS Independent",
+    "Natural Language :: English",
 ]
 dependencies = [
     "numpy>=1.21",
@@ -72,13 +81,17 @@ fawp-demo      = "fawp_index.demo_launcher:launch_demo"
 fawp-weather   = "fawp_index.weather_cli:main"
 
 [project.urls]
-Homepage   = "https://github.com/DrRalphClayton/fawp-index"
-PyPI       = "https://pypi.org/project/fawp-index/"
-Issues     = "https://github.com/DrRalphClayton/fawp-index/issues"
-Changelog  = "https://github.com/DrRalphClayton/fawp-index/releases"
-"Paper (E1-E7)" = "https://doi.org/10.5281/zenodo.18663547"
-"Paper (E8)"    = "https://doi.org/10.5281/zenodo.18673949"
-Book       = "https://www.amazon.com/dp/B0GS1ZVNM7/"
+"Homepage"        = "https://github.com/DrRalphClayton/fawp-index"
+"Repository"      = "https://github.com/DrRalphClayton/fawp-index"
+"Documentation"   = "https://github.com/DrRalphClayton/fawp-index/tree/main/docs"
+"Demo"            = "https://fawp-scanner.info"
+"PyPI"            = "https://pypi.org/project/fawp-index/"
+"Issues"          = "https://github.com/DrRalphClayton/fawp-index/issues"
+"Changelog"       = "https://github.com/DrRalphClayton/fawp-index/blob/main/CHANGELOG.md"
+"Paper (E1-E7)"   = "https://doi.org/10.5281/zenodo.18663547"
+"Paper (E8)"      = "https://doi.org/10.5281/zenodo.18673949"
+"Zenodo Software" = "https://doi.org/10.5281/zenodo.18673949"
+"Book"            = "https://www.amazon.com/dp/B0GS1ZVNM7/"
 
 [tool.setuptools.packages.find]
 where = ["."]
