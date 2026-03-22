@@ -27,6 +27,16 @@ from fawp_index.weather import (
     WeatherFAWPResult,
 )
 
+try:
+    from share import share_button as _seis_share_button
+except Exception:
+    def _seis_share_button(*a, **k): pass
+
+try:
+    from seismic_watchlist import render_seismic_watchlist as _render_seis_wl
+except Exception:
+    def _render_seis_wl(): pass
+
 # ── Styling helpers (match app.py palette) ─────────────────────────────────────
 _CSS = """
 <style>
@@ -167,7 +177,7 @@ def _build_daily_series(raw_df, variable):
     return series
 
 
-def _run_seismic_fawp(daily_series, horizon_days, tau_max, n_null, epsilon):
+def _run_seismic_fawp(daily_series, horizon_days, tau_max, n_null, epsilon, estimator="pearson"):
     """Run FAWP detection on a daily seismic time series."""
     values = daily_series.values.astype(float)
     n = len(values) - horizon_days
@@ -187,6 +197,7 @@ def _run_seismic_fawp(daily_series, horizon_days, tau_max, n_null, epsilon):
         tau_max       = tau_max,
         epsilon       = epsilon,
         n_null        = n_null,
+        estimator     = estimator,
     )
 
     result = WeatherFAWPResult(
@@ -264,8 +275,46 @@ def _event_chart(raw_df, daily_series, variable_label):
     return fig
 
 
-def _map_chart(raw_df):
-    """Simple scatter map of events."""
+def _map_chart_folium(raw_df):
+    """Interactive Folium map of earthquake events."""
+    try:
+        import folium
+        from folium.plugins import HeatMap
+        import streamlit.components.v1 as components
+
+        center_lat = float(raw_df["lat"].mean())
+        center_lon = float(raw_df["lon"].mean())
+        m = folium.Map(
+            location=[center_lat, center_lon],
+            zoom_start=5,
+            tiles="CartoDB dark_matter",
+        )
+
+        # Heatmap layer
+        heat_data = raw_df[["lat", "lon", "magnitude"]].values.tolist()
+        HeatMap(heat_data, radius=8, blur=10, max_zoom=8,
+                gradient={"0.3": "#D4AF37", "0.6": "#C0111A", "1.0": "#FFFFFF"}).add_to(m)
+
+        # Circle markers for M≥4
+        big = raw_df[raw_df["magnitude"] >= 4.0]
+        for _, row in big.iterrows():
+            folium.CircleMarker(
+                location=[row["lat"], row["lon"]],
+                radius=max(3, (row["magnitude"] - 2) * 3),
+                color="#C0111A", fill=True, fill_color="#C0111A",
+                fill_opacity=0.7, weight=1,
+                tooltip=f"M{row['magnitude']:.1f} · {row['time'].strftime('%Y-%m-%d')}",
+            ).add_to(m)
+
+        html_str = m._repr_html_()
+        components.html(html_str, height=450)
+        return None  # rendered directly
+    except ImportError:
+        return _map_chart_matplotlib(raw_df)
+
+
+def _map_chart_matplotlib(raw_df):
+    """Fallback static scatter map (used if folium not installed)."""
     fig, ax = plt.subplots(figsize=(9, 4), facecolor=_CARD_BG)
     ax.set_facecolor(_DARK_BG)
     sc = ax.scatter(
@@ -362,10 +411,14 @@ with st.sidebar:
     horizon_days = st.slider("Forecast horizon (days)", 1, 30, 7)
     tau_max      = st.slider("Max tau", 10, 60, 30)
     n_null       = st.slider("Null permutations", 0, 100, 30)
+    estimator    = st.selectbox("MI estimator", ["pearson", "knn"],
+                     key="seis_estimator",
+                     help="pearson: fast (default). knn: better for non-Gaussian seismic data.")
     epsilon      = st.number_input("Epsilon (bits)", value=0.01, min_value=0.001,
                                    max_value=0.5, format="%.3f")
 
     run_btn = st.button("🌍 Run Seismic Scan", type="primary", use_container_width=True)
+    _render_seis_wl()
 
 # ── Run scan ───────────────────────────────────────────────────────────────────
 if run_btn:
@@ -397,7 +450,7 @@ if run_btn:
         try:
             raw_df = st.session_state["seis_raw"]
             daily  = _build_daily_series(raw_df, variable)
-            result = _run_seismic_fawp(daily, horizon_days, tau_max, n_null, epsilon)
+            result = _run_seismic_fawp(daily, horizon_days, tau_max, n_null, epsilon, estimator)
             st.session_state["seis_result"]  = result
             st.session_state["seis_daily"]   = daily
             st.session_state["seis_epsilon"] = epsilon
@@ -437,9 +490,32 @@ if "seis_result" in st.session_state:
     _kpi(k5, f"{len(raw_df):,}", "Total events")
     _kpi(k6, f"{r.n_obs:,}", "Days analysed")
 
+    # E9.7 timing badge
+    import fawp_index as _fi
+    _lead = _fi.E97_MEAN_LEAD_GAP2_TO_CLIFF_U
+    _err  = _fi.E97_MEAN_ABS_ERR_GAP2_VS_ODW_START
+    st.markdown(
+        f'<div style="font-size:.72em;color:#3A4E70;margin:.3em 0 .8em;padding:.3em .6em;'
+        f'background:#0D1729;border-radius:6px;border:1px solid #182540;display:inline-block">'
+        f'📐 gap2 peak leads cliff by <b style="color:#D4AF37">+{_lead:.3f} delays</b> · '
+        f'ODW localisation error <b style="color:#D4AF37">~{_err:.1f} delays</b> · '
+        f'<a href="https://doi.org/10.5281/zenodo.19065421" style="color:#4A7FCC">E9.7</a>'
+        f'</div>',
+        unsafe_allow_html=True
+    )
+
     # MI chart
     st.markdown('<div class="seis-sec">Prediction vs Steering MI</div>', unsafe_allow_html=True)
-    st.pyplot(_mi_chart(r, epsilon), use_container_width=True)
+    _mi_fig = _mi_chart(r, epsilon)
+    st.pyplot(_mi_fig, use_container_width=True)
+    import io as _seis_io
+    _seis_buf = _seis_io.BytesIO()
+    _mi_fig.savefig(_seis_buf, format="png", dpi=150, bbox_inches="tight")
+    plt.close(_mi_fig)
+    _seis_buf.seek(0)
+    st.download_button("⬇ Download MI chart PNG", data=_seis_buf,
+                       file_name=f"fawp_seismic_{region_lbl.replace(' ','_')}_mi.png",
+                       mime="image/png", key="seis_mi_png")
 
     # Interpretation
     st.markdown('<div class="seis-sec">Interpretation</div>', unsafe_allow_html=True)
@@ -462,22 +538,47 @@ if "seis_result" in st.session_state:
             f"Peak gap is {r.peak_gap_bits:.4f} bits."
         )
 
-    # Event charts
+    # Post-scan magnitude filter (re-slices without re-fetching)
     st.markdown('<div class="seis-sec">Seismic data overview</div>', unsafe_allow_html=True)
+    _filt_col1, _filt_col2, _filt_col3 = st.columns([2, 2, 3])
+    with _filt_col1:
+        _mag_filter = st.slider("Filter: min magnitude", 0.0, 7.0,
+                                float(st.session_state.get("seis_mag_filter", 0.0)),
+                                0.5, key="seis_mag_filter",
+                                help="Re-slice event map and stats without re-fetching USGS data")
+    with _filt_col2:
+        _depth_max = st.slider("Max depth (km)", 10, 700,
+                               int(st.session_state.get("seis_depth_max", 700)),
+                               10, key="seis_depth_max",
+                               help="Filter events by focal depth")
+    with _filt_col3:
+        st.caption(f"Showing events M≥{_mag_filter:.1f} · depth ≤{_depth_max}km")
+
+    # Apply filter to a view (does not re-run FAWP)
+    _raw_view = raw_df.copy()
+    if _mag_filter > 0:
+        _raw_view = _raw_view[_raw_view["magnitude"] >= _mag_filter]
+    if _depth_max < 700:
+        _raw_view = _raw_view[_raw_view["depth"].fillna(0) <= _depth_max]
+    _daily_view = _build_daily_series(_raw_view, st.session_state["seis_var"]) if len(_raw_view) else daily
+    st.caption(f"{len(_raw_view):,} events shown (of {len(raw_df):,} total)")
+
     tab_events, tab_map = st.tabs(["📈 Time series", "🗺️ Event map"])
     with tab_events:
-        st.pyplot(_event_chart(raw_df, daily, var_lbl), use_container_width=True)
+        st.pyplot(_event_chart(_raw_view, _daily_view, var_lbl), use_container_width=True)
     with tab_map:
-        st.pyplot(_map_chart(raw_df), use_container_width=True)
+        result = _map_chart_folium(_raw_view)
+        if result is not None:
+            st.pyplot(result, use_container_width=True)
 
     # Stats
     st.markdown('<div class="seis-sec">Statistics</div>', unsafe_allow_html=True)
     sc1, sc2, sc3, sc4 = st.columns(4)
-    _kpi(sc1, f"{raw_df['magnitude'].max():.1f}", "Max magnitude")
-    _kpi(sc2, f"{raw_df['magnitude'].mean():.2f}", "Mean magnitude")
-    _kpi(sc3, f"{raw_df['depth'].mean():.1f} km", "Mean depth")
-    _kpi(sc4, f"{len(raw_df) / max(1,(pd.Timestamp(end_date)-pd.Timestamp(start_date)).days):.1f}/day",
-         "Avg events/day")
+    _kpi(sc1, f"{_raw_view['magnitude'].max():.1f}" if len(_raw_view) else "—", "Max magnitude (filtered)")
+    _kpi(sc2, f"{_raw_view['magnitude'].mean():.2f}" if len(_raw_view) else "—", "Mean magnitude (filtered)")
+    _kpi(sc3, f"{_raw_view['depth'].mean():.1f} km" if len(_raw_view) else "—", "Mean depth (filtered)")
+    _kpi(sc4, f"{len(_raw_view) / max(1,(pd.Timestamp(end_date)-pd.Timestamp(start_date)).days):.1f}/day",
+         "Avg events/day (filtered)")
 
     # Download
     st.markdown('<div class="seis-sec">Export</div>', unsafe_allow_html=True)
@@ -495,9 +596,13 @@ if "seis_result" in st.session_state:
         "n_events": len(raw_df),
         "n_obs": r.n_obs,
     }
-    st.download_button(
-        "⬇ Download result JSON",
-        data=_json.dumps(export, indent=2).encode(),
-        file_name=f"fawp_seismic_{region_lbl.replace(' ','_').replace('(','').replace(')','')}.json",
-        mime="application/json",
-    )
+    col_dl, col_sh = st.columns([2, 1])
+    with col_dl:
+        st.download_button(
+            "⬇ Download result JSON",
+            data=_json.dumps(export, indent=2).encode(),
+            file_name=f"fawp_seismic_{region_lbl.replace(' ','_').replace('(','').replace(')','')}.json",
+            mime="application/json",
+        )
+    with col_sh:
+        _seis_share_button("seismic", f"FAWP Seismic — {var_lbl} {region_lbl}", export)

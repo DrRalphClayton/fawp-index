@@ -1,0 +1,12 @@
+include README.md
+include LICENSE.txt
+include CHANGELOG.md
+include CITATION.cff
+recursive-include fawp_index *.py *.csv *.json
+recursive-include docs *.md *.css
+recursive-include notebooks *.ipynb
+recursive-exclude build *
+recursive-exclude dist *
+recursive-exclude *.egg-info *
+prune build
+prune dist

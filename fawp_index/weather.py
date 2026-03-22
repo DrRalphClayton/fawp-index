@@ -93,8 +93,32 @@ def _deseasonalise(series: np.ndarray, period: int = 365) -> np.ndarray:
 
 # ── Internal MI computation (mirrors market.py pattern) ──────────────────────
 
-def _weather_mi(x: np.ndarray, y: np.ndarray, min_n: int = 20) -> float:
-    """Pearson-based MI estimate."""
+def _weather_mi(
+    x: np.ndarray,
+    y: np.ndarray,
+    min_n: int = 20,
+    estimator: str = "pearson",
+) -> float:
+    """
+    MI estimate for weather/seismic data.
+
+    Parameters
+    ----------
+    estimator : str
+        "pearson" (default, fast, Gaussian assumption) or
+        "knn"     (non-parametric, slower, better for non-Gaussian data
+                  such as seismic energy or precipitation — see E9 methods).
+    """
+    if len(x) < min_n or len(y) < min_n:
+        return 0.0
+    if estimator == "knn":
+        try:
+            from sklearn.feature_selection import mutual_info_regression
+            return float(mutual_info_regression(
+                x.reshape(-1, 1), y, n_neighbors=3, random_state=42
+            )[0])
+        except ImportError:
+            pass  # fall back to pearson if sklearn not installed
     from fawp_index.core.estimators import mi_from_arrays
     return mi_from_arrays(x, y, min_n=min_n)
 
@@ -115,10 +139,17 @@ def _compute_weather_mi_curves(
     beta:           float = 0.99,
     n_null:         int = 100,
     min_n:          int = 20,
+    estimator:      str = "pearson",
 ) -> tuple:
     """
     Compute null-corrected pred/steer MI curves and run ODW detector.
     Returns (odw_result, tau, pred_mi, steer_mi).
+
+    Parameters
+    ----------
+    estimator : str
+        "pearson" (default) or "knn" (non-Gaussian, requires sklearn).
+        Use "knn" for seismic energy, precipitation, or other heavy-tailed data.
     """
     from fawp_index.detection.odw import ODWDetector
 
@@ -136,7 +167,7 @@ def _compute_weather_mi_curves(
         xp = pred_series[:n_usable]
         yp = future_series[delta:delta + n_usable]
         mn = min(len(xp), len(yp))
-        raw_p  = _weather_mi(xp[:mn], yp[:mn], min_n)
+        raw_p  = _weather_mi(xp[:mn], yp[:mn], min_n, estimator)
         floor_p = _weather_null_floor(xp[:mn], yp[:mn], n_null, beta, min_n) if n_null > 0 else 0.0
         pred_mi[i] = max(0.0, raw_p - floor_p)
 
@@ -144,7 +175,7 @@ def _compute_weather_mi_curves(
         xs = steer_series[:n_usable]
         ys = future_series[int(tau) + 1:int(tau) + 1 + n_usable]
         mn2 = min(len(xs), len(ys))
-        raw_s   = _weather_mi(xs[:mn2], ys[:mn2], min_n)
+        raw_s   = _weather_mi(xs[:mn2], ys[:mn2], min_n, estimator)
         floor_s = _weather_null_floor(xs[:mn2], ys[:mn2], n_null, beta, min_n) if n_null > 0 else 0.0
         steer_mi[i] = max(0.0, raw_s - floor_s)
 
@@ -588,6 +619,7 @@ def fawp_from_open_meteo(
     epsilon:           float = EPSILON_STEERING_RAW,
     n_null:            int = 100,
     remove_seasonality: bool = False,
+    estimator:          str  = "pearson",
 ) -> WeatherFAWPResult:
     """
     Fetch ERA5 reanalysis data from Open-Meteo (free, no API key) and
@@ -1018,6 +1050,7 @@ def fawp_from_nwp_csvs(
     epsilon:         float = 0.01,
     n_null:          int = 100,
     remove_seasonality: bool = False,
+    estimator:          str  = "pearson",
 ) -> WeatherFAWPResult:
     """
     Run FAWP detection on real NWP forecast vs observation data from CSV files.

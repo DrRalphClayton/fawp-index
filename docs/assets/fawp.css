@@ -1,0 +1,7 @@
+:root {
+  --md-primary-fg-color: #D4AF37;
+  --md-accent-fg-color:  #D4AF37;
+}
+.md-header { background: #07101E; }
+.md-nav__title { color: #D4AF37; }
+code { background: #0D1729; }

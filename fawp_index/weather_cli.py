@@ -77,15 +77,17 @@ def cmd_scan(args):
     print()
 
     result = fawp_from_open_meteo(
-        latitude     = lat,
-        longitude    = lon,
-        variable     = args.variable,
-        start_date   = args.start,
-        end_date     = args.end,
-        horizon_days = args.horizon,
-        tau_max      = args.tau_max,
-        epsilon      = args.epsilon,
-        n_null       = args.n_null,
+        latitude           = lat,
+        longitude          = lon,
+        variable           = args.variable,
+        start_date         = args.start,
+        end_date           = args.end,
+        horizon_days       = args.horizon,
+        tau_max            = args.tau_max,
+        epsilon            = args.epsilon,
+        n_null             = args.n_null,
+        remove_seasonality = args.remove_seasonality,
+        estimator          = args.estimator,
     )
 
     print(result.summary())
@@ -198,6 +200,10 @@ def main():
     p_scan.add_argument("--epsilon",  type=float, default=0.01)
     p_scan.add_argument("--n-null",   type=int,   default=50, dest="n_null")
     p_scan.add_argument("--out",      default=None, help="Save result to .json or .csv")
+    p_scan.add_argument("--estimator", default="pearson", choices=["pearson", "knn"],
+                        help="MI estimator: pearson (fast, default) or knn (non-Gaussian, requires sklearn)")
+    p_scan.add_argument("--remove-seasonality", dest="remove_seasonality", action="store_true",
+                        help="Remove annual seasonal cycle before detection")
 
     # ── grid ──────────────────────────────────────────────────────────────────
     p_grid = sub.add_parser("grid", help="Scan multiple cities")

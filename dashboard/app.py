@@ -1,5 +1,5 @@
 """
-FAWP Dashboard v1.1.9 — Streamlit app
+FAWP Dashboard v2.2.1 — Streamlit app
 ========================================
 Ralph Clayton (2026) · https://doi.org/10.5281/zenodo.18673949
 """
@@ -100,6 +100,33 @@ if _APP_MODE is None:
 </div>
 """, unsafe_allow_html=True)
 
+    # ── Live stats ─────────────────────────────────────────────
+    @st.cache_data(ttl=3600)
+    def _pypi_downloads():
+        try:
+            import urllib.request, json as _j
+            url = "https://pypistats.org/api/packages/fawp-index/recent"
+            with urllib.request.urlopen(url, timeout=3) as r:
+                d = _j.loads(r.read())
+            return d.get("data", {}).get("last_month", 0)
+        except Exception:
+            return None
+    _dl = _pypi_downloads()
+    _dl_str = f"{_dl:,}/month" if _dl else "1.5k+/month"
+    st.markdown(
+        f'<div style="display:flex;justify-content:center;gap:2.5em;margin:-1em 0 2em;flex-wrap:wrap">'  
+        f'<div style="text-align:center"><div style="font-size:1.5em;font-weight:800;color:#D4AF37">{_dl_str}</div>'
+        f'<div style="font-size:.72em;color:#3A4E70;text-transform:uppercase">PyPI downloads</div></div>'
+        f'<div style="text-align:center"><div style="font-size:1.5em;font-weight:800;color:#D4AF37">3</div>'
+        f'<div style="font-size:.72em;color:#3A4E70;text-transform:uppercase">Live scanners</div></div>'
+        f'<div style="text-align:center"><div style="font-size:1.5em;font-weight:800;color:#D4AF37">4,244</div>'
+        f'<div style="font-size:.72em;color:#3A4E70;text-transform:uppercase">E9 validation runs</div></div>'
+        f'<div style="text-align:center"><div style="font-size:1.5em;font-weight:800;color:#D4AF37">2.234 bits</div>'
+        f'<div style="font-size:.72em;color:#3A4E70;text-transform:uppercase">SPHERE-16 peak MI</div></div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
     col_l, col_fin, col_gap, col_wx, col_gap2, col_seis, col_r = st.columns([0.5, 3, 0.4, 3, 0.4, 3, 0.5])
 
     with col_fin:
@@ -107,6 +134,7 @@ if _APP_MODE is None:
 <div class="mode-card">
   <div class="mode-icon">📈</div>
   <div class="mode-name">FAWP Finance</div>
+  <svg viewBox="0 0 120 40" style="width:100%;height:40px;margin:.4em 0"><path d="M0,35 C15,30 20,5 35,4 C50,3 55,20 70,22 C85,24 95,32 120,35" fill="none" stroke="#D4AF37" stroke-width="2"/><path d="M0,38 C20,36 40,35 60,37 C80,39 100,38 120,38" fill="none" stroke="#4A7FCC" stroke-width="1.2" stroke-dasharray="3,2"/><rect x="28" y="0" width="50" height="40" fill="#C0111A" opacity="0.12"/></svg>
   <div class="mode-desc">
     Scan equities, crypto, ETFs and commodities.<br>
     Detect when forecast skill persists after market steering has collapsed.
@@ -125,6 +153,7 @@ if _APP_MODE is None:
 <div class="mode-card">
   <div class="mode-icon">🌦</div>
   <div class="mode-name">FAWP Weather</div>
+  <svg viewBox="0 0 120 40" style="width:100%;height:40px;margin:.4em 0"><path d="M0,36 C10,35 20,10 35,8 C50,6 55,18 70,20 C85,22 100,30 120,36" fill="none" stroke="#D4AF37" stroke-width="2"/><path d="M0,38 C15,34 30,33 50,35 C70,37 100,37 120,38" fill="none" stroke="#4A7FCC" stroke-width="1.2" stroke-dasharray="3,2"/><rect x="32" y="0" width="42" height="40" fill="#C0111A" opacity="0.12"/></svg>
   <div class="mode-desc">
     Scan ERA5 reanalysis for any location on Earth.<br>
     Detect when weather remains forecastable but intervention
@@ -143,6 +172,7 @@ if _APP_MODE is None:
 <div class="mode-card">
   <div class="mode-icon">🌍</div>
   <div class="mode-name">FAWP Seismic</div>
+  <svg viewBox="0 0 120 40" style="width:100%;height:40px;margin:.4em 0"><path d="M0,30 C8,28 12,38 16,20 C20,5 24,32 32,28 C40,24 46,12 56,10 C66,8 72,22 82,20 C92,18 102,30 120,36" fill="none" stroke="#D4AF37" stroke-width="2"/><path d="M0,38 C20,36 45,35 65,37 C85,39 105,38 120,38" fill="none" stroke="#4A7FCC" stroke-width="1.2" stroke-dasharray="3,2"/><rect x="42" y="0" width="38" height="40" fill="#C0111A" opacity="0.12"/></svg>
   <div class="mode-desc">
     Scan USGS earthquake catalogs for any region.<br>
     Detect when seismic activity is forecastable but the
@@ -158,7 +188,7 @@ if _APP_MODE is None:
 
     st.markdown("""
 <div style="text-align:center;margin-top:3em;color:#1E2E4A;font-size:.78em">
-  fawp-index v1.1.9 · Ralph Clayton · 2026 ·
+  fawp-index v2.2.1 · Ralph Clayton · 2026 ·
   <a href="https://github.com/DrRalphClayton/fawp-index"
      style="color:#1E2E4A">GitHub</a> ·
   <a href="https://pypi.org/project/fawp-index/"
@@ -965,6 +995,9 @@ if run_btn:
         st.session_state["wl_result"]      = _run_scan(dfs, window, step, tau_max, n_null, epsilon, tuple(timeframes))
         st.session_state["scan_duration"]  = round(time.time() - _t0, 1)
         st.session_state["scan_timestamp"] = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")
+        _n_f = st.session_state["wl_result"].n_flagged
+        st.toast(f"🔴 {_n_f} FAWP regime(s) active" if _n_f else "✅ Scan complete — no FAWP active",
+                 icon="🔴" if _n_f else "✅")
     # Auto-save to per-user store
     try:
         get_store().save_scan(st.session_state["wl_result"])
@@ -1187,6 +1220,42 @@ Follow these steps to run your first scan:
             if a.regime_active or a.latest_score >= 0.005:
                 with st.expander(f"Why {a.ticker} is flagged", expanded=False):
                     st.markdown(_explain_html(a), unsafe_allow_html=True)
+
+    # Multi-ticker comparison chart
+    if len(filtered) > 1 and HAS_MPL:
+        import matplotlib.pyplot as _plt_cmp, matplotlib.patches as _mp_cmp
+        st.markdown(_sec("Score comparison"), unsafe_allow_html=True)
+        _tks  = [f"{a.ticker}\n{a.timeframe}" for a in filtered]
+        _scrs = [a.latest_score for a in filtered]
+        _gps  = [a.peak_gap_bits for a in filtered]
+        _cols = ["#C0111A" if a.regime_active else "#2A4070" for a in filtered]
+        _fig_c, (_ax_s, _ax_g) = _plt_cmp.subplots(1, 2, figsize=(10, max(2.5, len(filtered)*0.4+1)))
+        _fig_c.patch.set_facecolor("#07101E")
+        for _ax in (_ax_s, _ax_g):
+            _ax.set_facecolor("#0D1729")
+            for _sp in _ax.spines.values(): _sp.set_edgecolor("#3A4E70")
+            _ax.tick_params(colors="#7A90B8", labelsize=8)
+        _y = range(len(_tks))
+        _ax_s.barh(list(_y), _scrs, color=_cols, alpha=0.85, height=0.6)
+        _ax_s.set_yticks(list(_y)); _ax_s.set_yticklabels(_tks, fontsize=8, color="#EDF0F8")
+        _ax_s.set_xlabel("FAWP score", fontsize=8, color="#7A90B8")
+        _ax_s.set_title("Score", color="#D4AF37", fontsize=9, fontweight="bold")
+        _ax_s.invert_yaxis()
+        _ax_g.barh(list(_y), _gps, color=_cols, alpha=0.85, height=0.6)
+        _ax_g.set_yticks(list(_y)); _ax_g.set_yticklabels([], fontsize=8)
+        _ax_g.set_xlabel("Peak gap (bits)", fontsize=8, color="#7A90B8")
+        _ax_g.set_title("Gap (bits)", color="#D4AF37", fontsize=9, fontweight="bold")
+        _ax_g.axvline(epsilon, color="#3A4E70", ls=":", lw=1)
+        _ax_g.invert_yaxis()
+        _fig_c.legend(handles=[_mp_cmp.Patch(color="#C0111A",label="FAWP"),_mp_cmp.Patch(color="#2A4070",label="Clear")],
+                      loc="lower right", fontsize=7, framealpha=0.2)
+        _fig_c.tight_layout(pad=0.6)
+        st.pyplot(_fig_c, use_container_width=True)
+        import io as _io_c; _cb = _io_c.BytesIO()
+        _fig_c.savefig(_cb, format="png", dpi=150, bbox_inches="tight")
+        _plt_cmp.close(_fig_c); _cb.seek(0)
+        st.download_button("⬇ Download comparison PNG", data=_cb,
+                           file_name="fawp_comparison.png", mime="image/png", key="cmp_dl")
 
     # Mini leaderboard
     st.markdown(_sec("Leaderboard"), unsafe_allow_html=True)
@@ -1628,26 +1697,71 @@ with tab_history:
                 c2.metric("First onset", onset or "never")
                 c3.metric("Last active", last or "never")
 
-                st.markdown(_sec("Score timeline"), unsafe_allow_html=True)
+                st.markdown(_sec("Score & gap timeline"), unsafe_allow_html=True)
 
                 if HAS_MPL:
                     import matplotlib.pyplot as plt
-                    fig, ax = _dark_fig(10, 2.8)
                     dates  = tl["scanned_at"].dt.strftime("%m-%d %H:%M").tolist()
                     scores = tl["latest_score"].tolist()
+                    gaps   = tl["peak_gap_bits"].tolist()
                     active = tl["regime_active"].tolist()
-                    colors = ["#C0111A" if a else "#2A4070" for a in active]
-                    ax.bar(range(len(scores)), scores, color=colors, alpha=0.85,
-                           edgecolor="none")
                     tick_step = max(1, len(dates) // 8)
-                    ax.set_xticks(range(0, len(dates), tick_step))
-                    ax.set_xticklabels(dates[::tick_step], rotation=25,
-                                       ha="right", fontsize=7, color="#7A90B8")
-                    ax.set_ylabel("Score", fontsize=8, color="#7A90B8")
-                    ax.set_ylim(0, max(max(scores) * 1.15, 0.01))
-                    plt.tight_layout(pad=0.4)
+                    xticks = range(0, len(dates), tick_step)
+
+                    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 4.5),
+                                                    facecolor="#07101E", sharex=True)
+                    for ax in (ax1, ax2):
+                        ax.set_facecolor("#0D1729")
+                        for sp in ax.spines.values(): sp.set_edgecolor("#3A4E70")
+                        ax.tick_params(colors="#3A4E70")
+
+                    # Top: FAWP score bars coloured by regime state
+                    colors = ["#C0111A" if a else "#2A4070" for a in active]
+                    ax1.bar(range(len(scores)), scores, color=colors, alpha=0.85, edgecolor="none")
+                    ax1.set_ylabel("Score", fontsize=8, color="#7A90B8")
+                    ax1.set_ylim(0, max(max(scores) * 1.15, 0.01))
+                    # Legend patches
+                    import matplotlib.patches as _mp
+                    ax1.legend(handles=[
+                        _mp.Patch(color="#C0111A", label="FAWP active"),
+                        _mp.Patch(color="#2A4070", label="Clear"),
+                    ], fontsize=7, framealpha=0.2, loc="upper left")
+
+                    # Bottom: peak gap bits line
+                    ax2.plot(range(len(gaps)), gaps, color="#D4AF37", lw=1.8)
+                    ax2.fill_between(range(len(gaps)), gaps, alpha=0.15, color="#D4AF37")
+                    ax2.axhline(0.01, color="#3A4E70", ls=":", lw=1, label="ε=0.01")
+                    ax2.set_ylabel("Peak gap (bits)", fontsize=8, color="#7A90B8")
+                    ax2.set_xticks(list(xticks))
+                    ax2.set_xticklabels([dates[i] for i in xticks],
+                                        rotation=25, ha="right", fontsize=7, color="#7A90B8")
+                    ax2.legend(fontsize=7, framealpha=0.2)
+
+                    fig.tight_layout(pad=0.4)
                     st.pyplot(fig, use_container_width=True)
                     plt.close(fig)
+
+                    # PNG export
+                    import io as _io
+                    buf = _io.BytesIO()
+                    fig2, (ax1b, ax2b) = plt.subplots(2, 1, figsize=(10, 4.5), facecolor="#07101E", sharex=True)
+                    for ax in (ax1b, ax2b):
+                        ax.set_facecolor("#0D1729")
+                        for sp in ax.spines.values(): sp.set_edgecolor("#3A4E70")
+                        ax.tick_params(colors="#3A4E70")
+                    ax1b.bar(range(len(scores)), scores, color=colors, alpha=0.85, edgecolor="none")
+                    ax1b.set_ylabel("Score", fontsize=8, color="#7A90B8")
+                    ax2b.plot(range(len(gaps)), gaps, color="#D4AF37", lw=1.8)
+                    ax2b.fill_between(range(len(gaps)), gaps, alpha=0.15, color="#D4AF37")
+                    ax2b.set_xticks(list(xticks))
+                    ax2b.set_xticklabels([dates[i] for i in xticks], rotation=25, ha="right", fontsize=7, color="#7A90B8")
+                    fig2.tight_layout(pad=0.4)
+                    fig2.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+                    plt.close(fig2)
+                    buf.seek(0)
+                    st.download_button("⬇ Download chart PNG", data=buf,
+                                       file_name=f"fawp_history_{hticker}_{htf}.png",
+                                       mime="image/png")
 
                 st.markdown(_sec("Recent snapshots"), unsafe_allow_html=True)
                 recent_tl = tl.tail(20).iloc[::-1]

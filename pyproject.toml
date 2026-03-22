@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fawp-index"
-version = "1.1.9"
+version = "2.2.1"
 description = "FAWP Alpha Index — Information-Control Exclusion Principle detector"
 readme = "README.md"
 license = "MIT"
@@ -66,7 +66,8 @@ dashboard = [
 ]
 test    = ["pytest>=7.0", "pytest-cov>=4.0", "matplotlib>=3.4", "reportlab>=4.0"]
 dev     = ["pytest>=7.0", "pytest-cov>=4.0", "matplotlib>=3.4", "reportlab>=4.0",
-           "scikit-learn>=1.0", "twine>=4.0", "build>=0.10", "ruff>=0.1"]
+           "scikit-learn>=1.0", "twine>=4.0", "build>=0.10", "ruff>=0.1",
+           "mkdocs>=1.5", "mkdocs-material>=9.0"]
 all     = ["matplotlib>=3.4", "reportlab>=4.0", "yfinance>=0.2",
            "requests>=2.28", "scikit-learn>=1.0", "plotly>=5.0",
            "numba>=0.57"]
@@ -90,11 +91,13 @@ fawp-weather   = "fawp_index.weather_cli:main"
 "Paper (E1-E7)"   = "https://doi.org/10.5281/zenodo.18663547"
 "Paper (E8)"      = "https://doi.org/10.5281/zenodo.18673949"
 "Zenodo Software" = "https://doi.org/10.5281/zenodo.18673949"
+"Figshare"        = "https://doi.org/10.6084/m9.figshare.31799104"
+"OSF Project"     = "https://osf.io/hzwgp/"
 "Book"            = "https://www.amazon.com/dp/B0GS1ZVNM7/"
 
 [tool.setuptools.packages.find]
 where = ["."]
-exclude = ["tests*", "examples*", "fawp_forge*"]
+exclude = ["tests*", "examples*", "fawp_forge*", "build*", "dist*", "*.egg-info*"]
 
 [tool.setuptools.data-files]
 "share/fawp-index/examples" = [

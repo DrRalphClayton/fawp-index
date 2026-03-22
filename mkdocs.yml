@@ -1,0 +1,65 @@
+site_name: fawp-index
+site_description: FAWP Alpha Index — Information-Control Exclusion Principle detector
+site_url: https://drralphclayton.github.io/fawp-index/
+repo_url: https://github.com/DrRalphClayton/fawp-index
+repo_name: DrRalphClayton/fawp-index
+copyright: Ralph Clayton (2026) · doi:10.5281/zenodo.18673949
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: amber
+      accent: amber
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - search.highlight
+    - content.code.copy
+  font:
+    text: DM Sans
+    code: JetBrains Mono
+  icon:
+    repo: fontawesome/brands/github
+
+nav:
+  - Home: README.md
+  - Getting started: docs/quickstart.md
+  - Scanners:
+    - Finance: docs/market.md
+    - Weather: docs/weather.md
+    - Alerts: docs/alerts.md
+  - API reference:
+    - Examples: docs/examples.md
+    - Dashboard: docs/dashboard.md
+    - Watchlist: docs/watchlist.md
+    - Significance: docs/significance.md
+    - Benchmarks: docs/benchmarks.md
+  - Changelog: CHANGELOG.md
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/DrRalphClayton/fawp-index
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/fawp-index/
+  analytics:
+    provider: google
+
+extra_css:
+  - docs/assets/fawp.css

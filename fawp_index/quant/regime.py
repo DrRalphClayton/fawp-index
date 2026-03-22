@@ -45,9 +45,46 @@ class RegimeResult:
         ]
         return "\n".join(lines)
 
-    def plot(self, **kwargs):
-        from fawp_index.quant._regime_plot import plot_regime
-        return plot_regime(self, **kwargs)
+    def plot(self, show: bool = True, save_path=None, **kwargs):
+        """
+        Plot the regime detection result: score timeline with FAWP windows shaded.
+        Requires matplotlib.
+        """
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+        except ImportError:
+            raise ImportError("matplotlib required for plot(): pip install matplotlib")
+
+        fig, ax = plt.subplots(figsize=(11, 3))
+        fig.patch.set_facecolor("#07101E")
+        ax.set_facecolor("#0D1729")
+        for sp in ax.spines.values():
+            sp.set_edgecolor("#3A4E70")
+        ax.tick_params(colors="#7A90B8")
+
+        xs = range(len(self.in_fawp))
+        ax.fill_between(list(xs), self.scores, alpha=0.3, color="#D4AF37")
+        ax.plot(list(xs), self.scores, color="#D4AF37", lw=1.5, label="FAWP score")
+
+        # Shade FAWP windows
+        for i, f in enumerate(self.in_fawp):
+            if f:
+                ax.axvspan(i - 0.5, i + 0.5, color="#C0111A", alpha=0.2)
+
+        ax.set_ylabel("FAWP score", fontsize=8, color="#7A90B8")
+        ax.set_title(f"FAWP Regime — {self.n_fawp_windows}/{len(self.in_fawp)} windows active",
+                     color="#D4AF37", fontsize=9, fontweight="bold")
+        ax.legend(fontsize=8, framealpha=0.2)
+        fig.tight_layout()
+
+        if save_path:
+            fig.savefig(save_path, dpi=150, bbox_inches="tight")
+        if show:
+            plt.show()
+        plt.close(fig)
+        return fig
 
 
 class FAWPRegimeDetector:
@@ -178,7 +215,7 @@ class FAWPRegimeDetector:
         rng = np.random.default_rng(self.seed)
 
         # Rolling windows
-        window_starts = list(range(0, min_len - self.window, self.step))
+        window_starts = list(range(0, min_len - self.window + 1, self.step))
         if not window_starts:
             raise ValueError(
                 f"Series length {min_len} too short for window={self.window}. "

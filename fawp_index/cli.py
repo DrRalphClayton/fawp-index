@@ -285,6 +285,10 @@ def _build_parser():
             "  fawp-index benchmarks --verify\n"
             "  fawp-index version\n"
             "  fawp-index cite\n"
+            "  fawp-index forecast --forecast fc.csv --obs obs.csv\n"
+            "  fawp-index timing\n"
+            "  fawp-index verify\n"
+            "  fawp-index grid\n"
         ),
     )
     parser.add_argument("--version", action="version", version=f"fawp-index {_VERSION}")
@@ -375,6 +379,42 @@ def _build_parser():
     p = sub.add_parser("cite", help="Print BibTeX citations for fawp-index and papers")
     p.set_defaults(func=cmd_cite)
 
+    # timing
+    p = sub.add_parser("timing", help="Print E9.7 detector timing results from the paper")
+    p.set_defaults(func=cmd_timing)
+
+    # verify
+    p = sub.add_parser("verify", help="Run calibration self-checks against SPHERE/E9 constants")
+    p.set_defaults(func=cmd_verify)
+
+    # grid
+    # forecast
+    p = sub.add_parser("forecast", help="Run FAWP detection on NWP forecast vs observation CSVs")
+    p.add_argument("--forecast",     required=True, help="Path to forecast CSV")
+    p.add_argument("--obs",          required=True, help="Path to observed CSV")
+    p.add_argument("--variable",     default="temperature", help="Variable name (for labelling)")
+    p.add_argument("--location",     default="uploaded",    help="Location label")
+    p.add_argument("--forecast-col", default="forecast",    dest="forecast_col")
+    p.add_argument("--obs-col",      default="observed",    dest="obs_col")
+    p.add_argument("--date-col",     default="date",        dest="date_col")
+    p.add_argument("--horizon",      type=int,   default=1)
+    p.add_argument("--tau-max",      type=int,   default=40,  dest="tau_max")
+    p.add_argument("--epsilon",      type=float, default=0.01)
+    p.add_argument("--n-null",       type=int,   default=100, dest="n_null")
+    p.add_argument("--out",          default=None, help="Save to .json or .csv")
+    p.set_defaults(func=cmd_forecast)
+
+    p = sub.add_parser("grid", help="Generate FAWP detection basin heatmap over (a, K) space")
+    p.add_argument("--a-min",  type=float, default=1.00)
+    p.add_argument("--a-max",  type=float, default=1.10)
+    p.add_argument("--k-min",  type=float, default=0.60)
+    p.add_argument("--k-max",  type=float, default=0.95)
+    p.add_argument("--n",      type=int,   default=10, help="Grid points per axis")
+    p.add_argument("--seeds",  type=int,   default=3,  help="Seeds per cell")
+    p.add_argument("--out",    default="fawp_basin.csv")
+    p.add_argument("--plot",   action="store_true", help="Save heatmap PNG alongside CSV")
+    p.set_defaults(func=cmd_grid)
+
     return parser
 
 
@@ -427,9 +467,239 @@ def cmd_cite(args):
   doi       = {{10.5281/zenodo.18663547}},
   url       = {{https://doi.org/10.5281/zenodo.18663547}}
 }}
+
+% 5. Research data (Figshare)
+@misc{{fawp_figshare,
+  author    = {{Clayton, Ralph}},
+  title     = {{fawp-index: research data and supplementary materials}},
+  year      = {{2026}},
+  doi       = {{10.6084/m9.figshare.31799104}},
+  url       = {{https://doi.org/10.6084/m9.figshare.31799104}}
+}}
+
+% 6. OSF project
+@misc{{fawp_osf,
+  author    = {{Clayton, Ralph}},
+  title     = {{FAWP Alpha Index — OSF Project}},
+  year      = {{2026}},
+  url       = {{https://osf.io/hzwgp/}}
+}}
 """
     print(bib.strip())
 
+
+
+def cmd_timing(_args):
+    """Print E9.7 detector timing results."""
+    import fawp_index as fi
+    print()
+    print("E9.7 Detector Timing — 4,244-run sweep (a=1.02, K=0.8)")
+    print("=" * 58)
+    print(f"  {'Detector':<28} {'Leads cliff (u)':<16} {'Leads cliff (ξ)':<16} {'Err vs ODW'}")
+    print(f"  {'-'*28} {'-'*16} {'-'*16} {'-'*12}")
+    print(f"  {'gap2 peak (raw lever. gap)':<28} "
+          f"{'+{:.4f}'.format(fi.E97_MEAN_LEAD_GAP2_TO_CLIFF_U):<16} "
+          f"{'+{:.4f}'.format(fi.E97_MEAN_LEAD_GAP2_TO_CLIFF_XI):<16} "
+          f"~{fi.E97_MEAN_ABS_ERR_GAP2_VS_ODW_START:.1f} delays  ✅ BEST")
+    print(f"  {'α₂  (SPHERE-16)':<28} "
+          f"{'+{:.4f}'.format(fi.E97_MEAN_LEAD_ALPHA2_TO_CLIFF_U):<16} "
+          f"{'+{:.4f}'.format(fi.E97_MEAN_LEAD_ALPHA2_TO_CLIFF_XI):<16} "
+          f"~{fi.E97_MEAN_ABS_ERR_ALPHA2_VS_ODW_START:.1f} delays  ✅ Good")
+    print(f"  {'α   (baseline, old)':<28} "
+          f"{'{:.4f}'.format(fi.E97_MEAN_LEAD_ALPHA_TO_CLIFF_U):<16} "
+          f"{'{:.4f}'.format(fi.E97_MEAN_LEAD_ALPHA_TO_CLIFF_XI):<16} "
+          f"~{fi.E97_MEAN_ABS_ERR_ALPHA_VS_ODW_START:.1f} delays  ❌ Lags")
+    print()
+    print(f"  Total runs : {fi.E97_N_RUNS}")
+    print(f"  Mean τf    : {fi.E97_MEAN_TAU_F}")
+    print(f"  Source     : doi:10.5281/zenodo.19065421")
+    print()
+
+
+def cmd_verify(_args):
+    """Run calibration self-checks against published SPHERE/E9 constants."""
+    import fawp_index as fi
+    from fawp_index.data import E9_2_SUMMARY_JSON
+    import json
+
+    checks = []
+    def chk(name, got, expected, tol=0.01):
+        ok = abs(float(got) - float(expected)) <= tol
+        checks.append((name, got, expected, ok))
+
+    # SPHERE-16 calibration (E8 flagship)
+    chk("PEAK_PRED_BITS",      fi.PEAK_PRED_BITS,      2.233669,  1e-4)
+    chk("ETA_PRED_CORRECTED",  fi.ETA_PRED_CORRECTED,  0.0,       1e-6)
+    chk("PRED_AT_CLIFF",       fi.PRED_AT_CLIFF,       1.01,      0.01)
+    chk("NULL_MAX_SHUFFLE_E8", fi.NULL_MAX_SHUFFLE_E8, 0.00216,   1e-4)
+    chk("NULL_MAX_SHIFT_E8",   fi.NULL_MAX_SHIFT_E8,   0.00421,   1e-4)
+
+    # E9 / flagship ODW constants (correct exported names)
+    chk("TAU_PLUS_H_FLAGSHIP", fi.TAU_PLUS_H_FLAGSHIP, 4,   0)
+    chk("TAU_F_FLAGSHIP",      fi.TAU_F_FLAGSHIP,      35,  0)
+    chk("TAU_PLUS_H_E9",       fi.TAU_PLUS_H_E9,       31,  0)
+    chk("TAU_F_E9",            fi.TAU_F_E9,            36,  0)
+    chk("ODW_START_E9",        fi.ODW_START_E9,        31,  0)
+    chk("ODW_END_E9",          fi.ODW_END_E9,          33,  0)
+
+    # E9.7 timing
+    chk("E97_MEAN_LEAD_GAP2_TO_CLIFF_U",  fi.E97_MEAN_LEAD_GAP2_TO_CLIFF_U,  0.7552, 1e-3)
+    chk("E97_MEAN_LEAD_ALPHA_TO_CLIFF_U", fi.E97_MEAN_LEAD_ALPHA_TO_CLIFF_U, -2.004, 1e-3)
+    chk("E97_MEAN_ABS_ERR_GAP2_VS_ODW_START", fi.E97_MEAN_ABS_ERR_GAP2_VS_ODW_START, 2.108, 0.01)
+
+    # Verify bundled E9.2 data is loadable
+    try:
+        with open(E9_2_SUMMARY_JSON) as f:
+            s = json.load(f)
+        assert s["aggregate_summary"]["fawp_found_u"] is True
+        checks.append(("E9.2 data loadable + FAWP found", True, True, True))
+    except Exception as e:
+        checks.append((f"E9.2 data error: {e}", None, None, False))
+
+    passed = sum(1 for *_, ok in checks if ok)
+    print()
+    print(f"fawp-index calibration verification — {len(checks)} checks")
+    print("=" * 55)
+    for name, got, exp, ok in checks:
+        icon = "✅" if ok else "❌"
+        val = f"{got}" if got is True or got is None else f"{got}"
+        print(f"  {icon}  {name:<42} {val}")
+    print()
+    print(f"  {passed}/{len(checks)} checks passed")
+    if passed < len(checks):
+        print("  ⚠️  Some checks failed — reinstall fawp-index or check your version")
+    else:
+        print("  ✅ All calibration checks pass")
+    print()
+
+
+def cmd_grid(args):
+    """Generate a FAWP detection basin heatmap over (a, K) parameter space."""
+    import numpy as np
+    import pandas as pd
+
+    a_vals = np.linspace(args.a_min, args.a_max, args.n)
+    K_vals = np.linspace(args.k_min, args.k_max, args.n)
+
+    print(f"FAWP basin scan: a∈[{args.a_min},{args.a_max}] × K∈[{args.k_min},{args.k_max}] n={args.n}×{args.n}")
+    print(f"Seeds per cell: {args.seeds}  |  Output: {args.out}")
+    print()
+
+    # Inline synthetic delayed plant — no external imports needed
+    from fawp_index.weather import _compute_weather_mi_curves
+
+    rows = []
+    total = len(a_vals) * len(K_vals)
+    done = 0
+
+    for a in a_vals:
+        for K in K_vals:
+            fawp_hits = 0
+            peak_gaps = []
+            for seed in range(args.seeds):
+                try:
+                    rng = np.random.default_rng(seed + 42000)
+                    n = 500
+                    x = np.zeros(n)
+                    u = np.zeros(n)
+                    # Delayed plant: x_{t} = a*x_{t-1} + u_t + noise
+                    #                u_t   = -K*x_{t-1} + control_noise
+                    for t in range(1, n):
+                        u[t] = -K * x[t-1] + rng.normal(0, 0.5)
+                        x[t] = a * x[t-1] + u[t] + rng.normal(0, 1.0)
+
+                    delta = 20
+                    nn    = n - delta
+                    pred   = x[:nn]
+                    future = x[delta:delta + nn]
+                    steer  = np.diff(x)[:nn]
+
+                    odw, _, _, _ = _compute_weather_mi_curves(
+                        pred, future, steer, tau_max=40, n_null=20, epsilon=0.01
+                    )
+                    if odw.fawp_found:
+                        fawp_hits += 1
+                    peak_gaps.append(odw.peak_gap_bits)
+                except Exception:
+                    pass
+
+            detect_rate = fawp_hits / max(1, args.seeds)
+            mean_gap    = float(np.mean(peak_gaps)) if peak_gaps else 0.0
+            rows.append({"a": round(a, 4), "K": round(K, 4),
+                         "fawp_rate": round(detect_rate, 3),
+                         "mean_peak_gap_bits": round(mean_gap, 4)})
+            done += 1
+            if done % 5 == 0 or done == total:
+                print(f"  [{done:3d}/{total}] a={a:.3f} K={K:.3f} → rate={detect_rate:.2f} gap={mean_gap:.4f}")
+
+    df = pd.DataFrame(rows)
+    df.to_csv(args.out, index=False)
+    print(f"\nSaved: {args.out}  ({len(df)} grid points)")
+
+    # Optionally save heatmap
+    if args.plot:
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+            pivot = df.pivot(index="K", columns="a", values="fawp_rate")
+            fig, ax = plt.subplots(figsize=(8, 6))
+            im = ax.imshow(pivot.values, aspect="auto", origin="lower", cmap="YlOrRd",
+                           extent=[pivot.columns.min(), pivot.columns.max(),
+                                   pivot.index.min(), pivot.index.max()])
+            plt.colorbar(im, ax=ax, label="FAWP detection rate")
+            ax.set_xlabel("a (system gain)")
+            ax.set_ylabel("K (control gain)")
+            ax.set_title(f"FAWP Basin — {args.n}×{args.n} grid, {args.seeds} seeds/cell")
+            png = args.out.replace(".csv", ".png")
+            fig.savefig(png, dpi=150, bbox_inches="tight")
+            print(f"Heatmap: {png}")
+        except Exception as e:
+            print(f"Plot skipped: {e}")
+    print()
+
+
+def cmd_forecast(args):
+    """Run FAWP detection on NWP forecast vs observation CSVs."""
+    import pandas as pd
+    from fawp_index.weather import fawp_from_nwp_csvs
+
+    print(f"FAWP NWP Forecast Verification")
+    print(f"  Forecast : {args.forecast}")
+    print(f"  Observed : {args.obs}")
+    print(f"  Variable : {args.variable}")
+    print()
+
+    result = fawp_from_nwp_csvs(
+        forecast_path    = args.forecast,
+        observed_path    = args.obs,
+        forecast_col     = args.forecast_col,
+        observed_col     = args.obs_col,
+        date_col         = args.date_col,
+        variable         = args.variable,
+        location         = args.location,
+        horizon_days     = args.horizon,
+        tau_max          = args.tau_max,
+        epsilon          = args.epsilon,
+        n_null           = args.n_null,
+    )
+
+    print(result.summary())
+
+    if args.out:
+        import json as _j
+        if args.out.endswith(".json"):
+            with open(args.out, "w") as f:
+                _j.dump(result.to_dict(), f, indent=2)
+            print(f"Saved → {args.out}")
+        elif args.out.endswith(".csv"):
+            df = pd.DataFrame({
+                "tau": result.tau,
+                "pred_mi": result.pred_mi,
+                "steer_mi": result.steer_mi,
+            })
+            df.to_csv(args.out, index=False)
+            print(f"Saved → {args.out}")
 
 def main():
     parser = _build_parser()

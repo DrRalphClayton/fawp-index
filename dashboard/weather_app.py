@@ -616,6 +616,40 @@ with st.sidebar:
                               label_visibility="collapsed")
         if preset != "Custom":
             st.session_state["wx_lat"], st.session_state["wx_lon"] = PRESETS[preset]
+        # City name autocomplete (Nominatim / OpenStreetMap — no API key)
+        _city_q = st.text_input("🔍 City search (or enter coordinates below)",
+                                placeholder="e.g. Tokyo, Buenos Aires, Mumbai…",
+                                key="wx_city_q")
+        if _city_q and len(_city_q) >= 3:
+            if st.button("Search", key="wx_city_search", use_container_width=True):
+                try:
+                    import urllib.request, json as _j, urllib.parse
+                    _url = ("https://nominatim.openstreetmap.org/search"
+                            f"?q={urllib.parse.quote(_city_q)}&format=json&limit=5")
+                    _req = urllib.request.Request(_url,
+                           headers={"User-Agent": "fawp-scanner/2.2.1"})
+                    with urllib.request.urlopen(_req, timeout=4) as _r:
+                        _hits = _j.loads(_r.read())
+                    if _hits:
+                        st.session_state["wx_geocode_results"] = _hits
+                    else:
+                        st.warning("No results — try a different city name.")
+                except Exception as _ge:
+                    st.warning(f"Geocode unavailable: {_ge}")
+
+        if "wx_geocode_results" in st.session_state:
+            _hits = st.session_state["wx_geocode_results"]
+            _labels = [f"{h.get('display_name','')[:60]}" for h in _hits]
+            _sel_idx = st.selectbox("Select location", range(len(_labels)),
+                                    format_func=lambda i: _labels[i],
+                                    key="wx_geocode_sel")
+            if st.button("Use this location", key="wx_geocode_use", use_container_width=True):
+                _chosen = _hits[_sel_idx]
+                st.session_state["wx_lat"] = float(_chosen["lat"])
+                st.session_state["wx_lon"] = float(_chosen["lon"])
+                del st.session_state["wx_geocode_results"]
+                st.rerun()
+
         lat = st.number_input("Latitude °N/S",  min_value=-90.0,  max_value=90.0,  step=0.1, format="%.2f", key="wx_lat")
         lon = st.number_input("Longitude °E/W", min_value=-180.0, max_value=180.0, step=0.1, format="%.2f", key="wx_lon")
 
@@ -653,6 +687,8 @@ with st.sidebar:
         horizon_days = st.slider("Forecast horizon (days)", 1, 30, 7)
         tau_max      = st.slider("Max tau", 5, 60, 30, step=5)
         n_null       = st.slider("Null permutations", 0, 200, 50, step=10)
+        estimator    = st.selectbox("MI estimator", ["pearson", "knn"],
+                         help="pearson: fast, Gaussian. knn: non-parametric, better for non-Gaussian data (see E9 methods). Requires scikit-learn.")
         epsilon      = st.number_input("Epsilon (bits)", value=0.01,
                                        min_value=0.001, max_value=0.1,
                                        step=0.001, format="%.3f")
@@ -841,6 +877,7 @@ if run_btn:
                 start_date=start_date, end_date=end_date,
                 horizon_days=horizon_days, tau_max=tau_max,
                 epsilon=epsilon, n_null=n_null,
+                estimator=estimator,
             )
             st.session_state["wx_result"]  = result
             st.session_state["wx_hazard"]  = hazard
@@ -890,6 +927,20 @@ if "wx_result" in st.session_state:
          "var(--red)" if r.fawp_found else "var(--muted)")
     _kpi(c5, f"{r.n_obs:,}", "Observations")
 
+    # E9.7 timing badge
+    import fawp_index as _fi
+    _lead = _fi.E97_MEAN_LEAD_GAP2_TO_CLIFF_U
+    _err  = _fi.E97_MEAN_ABS_ERR_GAP2_VS_ODW_START
+    st.markdown(
+        f'<div style="font-size:.72em;color:#3A4E70;margin:.3em 0 .8em;padding:.3em .6em;'
+        f'background:#0D1729;border-radius:6px;border:1px solid #182540;display:inline-block">'
+        f'📐 gap2 peak leads cliff by <b style="color:#D4AF37">+{_lead:.3f} delays</b> · '
+        f'ODW localisation error <b style="color:#D4AF37">~{_err:.1f} delays</b> · '
+        f'<a href="https://doi.org/10.5281/zenodo.19065421" style="color:#4A7FCC">E9.7</a>'
+        f'</div>',
+        unsafe_allow_html=True
+    )
+
     # Action windows
     if hazard and r.fawp_found:
         _hc = HAZARDS.get(hazard, {}).get('color', '#F2C440')
@@ -898,6 +949,30 @@ if "wx_result" in st.session_state:
     # MI chart
     st.markdown('<div class="wx-sec">Prediction vs Steering MI</div>', unsafe_allow_html=True)
     _mi_chart(r, epsilon)
+    # PNG export of MI chart
+    import io as _io_wx
+    _wx_fig = _mi_chart.__wrapped__(r, epsilon) if hasattr(_mi_chart, '__wrapped__') else None
+    # Simpler: re-render for download
+    import matplotlib.pyplot as _plt_wx, numpy as _np_wx
+    _wx_fig2, _wx_ax = plt.subplots(figsize=(9, 3.5), facecolor="#0D1729")
+    _wx_ax.set_facecolor("#07101E")
+    _wx_ax.plot(r.tau, r.pred_mi,  color="#D4AF37", lw=2,   label="Prediction MI")
+    _wx_ax.plot(r.tau, r.steer_mi, color="#4A7FCC", lw=1.5, ls="--", label="Steering MI")
+    _wx_ax.axhline(epsilon, color="#3A4E70", ls=":", lw=1)
+    if r.fawp_found and r.odw_start:
+        _wx_ax.axvspan(r.odw_start, r.odw_end, color="#C0111A", alpha=0.15)
+    _wx_ax.legend(fontsize=8, framealpha=0.2)
+    _wx_ax.set_xlabel("τ (delay steps)", color="#7A90B8", fontsize=9)
+    _wx_ax.set_ylabel("MI (bits)", color="#7A90B8", fontsize=9)
+    _wx_ax.set_title(f"FAWP Weather — {r.variable} · {r.location}", color="#D4AF37", fontsize=9)
+    _wx_fig2.tight_layout()
+    _wx_buf = _io_wx.BytesIO()
+    _wx_fig2.savefig(_wx_buf, format="png", dpi=150, bbox_inches="tight")
+    plt.close(_wx_fig2)
+    _wx_buf.seek(0)
+    st.download_button("⬇ Download MI chart PNG", data=_wx_buf,
+                       file_name=f"fawp_weather_{r.variable}_{r.location}.png",
+                       mime="image/png", key="wx_png_dl")
 
     # Explanation
     st.markdown('<div class="wx-sec">Interpretation</div>', unsafe_allow_html=True)
@@ -936,14 +1011,33 @@ if "wx_result" in st.session_state:
                     fig.patch.set_facecolor("#030810")
                     ax.set_facecolor("#091220")
                     xs = range(len(tl))
+                    labels = [str(r.window_start)[:7] for r in tl.itertuples()]
+                    step_l = max(1, len(labels)//8)
+
+                    # Dual-axis: gap bits (left) + raw variable mean (right)
+                    ax2 = ax.twinx() if "raw_mean" in tl.columns else None
+
                     ax.plot(list(xs), tl["peak_gap_bits"].values,
-                            color="#F2C440", lw=2, zorder=3)
+                            color="#F2C440", lw=2, zorder=3, label="Peak gap (bits)")
                     for i, row in enumerate(tl.itertuples()):
                         if row.fawp_found:
                             ax.axvspan(i-.4, i+.4, alpha=.2, color="#E83030", zorder=1)
                     ax.axhline(epsilon, color="#1E3050", ls=":", lw=1)
-                    labels = [str(r.window_start)[:7] for r in tl.itertuples()]
-                    step_l = max(1, len(labels)//8)
+
+                    # Overlay raw variable if available
+                    if ax2 is not None and "raw_mean" in tl.columns:
+                        ax2.plot(list(xs), tl["raw_mean"].values,
+                                 color="#4A7FCC", lw=1.2, ls="--", alpha=0.7,
+                                 label=f"{variable} (mean)")
+                        ax2.set_ylabel(f"{variable}", fontsize=7, color="#4A7FCC")
+                        ax2.tick_params(colors="#4A7FCC", labelsize=7)
+                        ax2.spines["right"].set_edgecolor("#4A7FCC")
+                        # Combined legend
+                        lines1, labs1 = ax.get_legend_handles_labels()
+                        lines2, labs2 = ax2.get_legend_handles_labels()
+                        ax.legend(lines1 + lines2, labs1 + labs2,
+                                  fontsize=7, framealpha=0.2, loc="upper left")
+
                     ax.set_xticks(list(xs)[::step_l])
                     ax.set_xticklabels(labels[::step_l], rotation=30, ha="right",
                                        fontsize=7, color="#5070A0")

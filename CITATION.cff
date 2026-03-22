@@ -11,11 +11,12 @@ authors:
   - family-names: Clayton
     given-names: Ralph
     alias: DrRalphClayton
-version: "1.1.9"
+version: "2.2.1"
 date-released: "2026-03-16"
 doi: 10.5281/zenodo.18673949
 repository-code: "https://github.com/DrRalphClayton/fawp-index"
 url: "https://fawp-scanner.info"
+osf: "https://osf.io/hzwgp/"
 license: MIT
 keywords:
   - fawp
@@ -47,4 +48,12 @@ references:
       - family-names: Clayton
         given-names: Ralph
     doi: 10.5281/zenodo.19065421
+    year: 2026
+  - type: dataset
+    title: "fawp-index: research data and supplementary materials"
+    authors:
+      - family-names: Clayton
+        given-names: Ralph
+    doi: 10.6084/m9.figshare.31799104
+    repository-code: "https://doi.org/10.6084/m9.figshare.31799104"
     year: 2026
