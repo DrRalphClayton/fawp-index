@@ -22,17 +22,34 @@ steering MI collapses to zero at τ=4 (agency horizon). This is the
 Information-Control Exclusion Principle: prediction and control are
 conjugate — when control fails, prediction information surges.
 
-Usage:
-    python reproduce_e8.py
-    python reproduce_e8.py --save  # saves PNGs instead of showing
+Running this script
+-------------------
+From a cloned repo:
+    git clone https://github.com/DrRalphClayton/fawp-index
+    cd fawp-index
+    pip install -e .
+    python examples/reproduce_e8.py
+    python examples/reproduce_e8.py --save   # save PNGs to disk
+
+From inside the examples/ directory:
+    python reproduce_e8.py --save
+
+Note: this script requires the bundled E8 data files installed with the
+package.  It will not work from an arbitrary directory without the repo.
 """
+import sys, os as _os
+# Allow running from repo root OR from examples/ directory
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
+_ROOT = _os.path.dirname(_HERE)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 import argparse
 import pandas as pd
 import matplotlib
 import matplotlib.pyplot as plt
 
-# Allow running from examples/ directly
+# Allow running from repo root or examples/ directory (path auto-detected)
 
 from fawp_index.data import E8_DATA, E8_CONFIRM_FULL
 

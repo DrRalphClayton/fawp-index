@@ -18,6 +18,12 @@ Clayton (2026): "The signals were there, but the control channels
 were weak. Seeing that leverage was dangerous did not let you make
 millions of other people unborrow money."
 """
+import sys, os as _os
+# Allow running from repo root OR from examples/ directory
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
+_ROOT = _os.path.dirname(_HERE)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 import numpy as np
 import pandas as pd

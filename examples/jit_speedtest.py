@@ -7,6 +7,12 @@ Run with:
 Install Numba first for the speedup:
     pip install "fawp-index[fast]"
 """
+import sys, os as _os
+# Allow running from repo root OR from examples/ directory
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
+_ROOT = _os.path.dirname(_HERE)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 import time
 import numpy as np

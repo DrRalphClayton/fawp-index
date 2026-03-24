@@ -11,6 +11,12 @@ predictive coupling from price momentum persists.
 This is the "you can see the crash coming but can't stop it" regime
 described in Clayton (2026) Forecasting Without Power.
 """
+import sys, os as _os
+# Allow running from repo root OR from examples/ directory
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
+_ROOT = _os.path.dirname(_HERE)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 import numpy as np
 import pandas as pd

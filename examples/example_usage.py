@@ -2,14 +2,31 @@
 fawp-index — Quick Example
 Demonstrates the FAWP Alpha Index on synthetic E8-style data.
 
-Run after installing:
-    pip install .
+Running this script
+-------------------
+Option A — from a cloned repo (recommended):
+    git clone https://github.com/DrRalphClayton/fawp-index
+    cd fawp-index
+    pip install -e .
+    python examples/example_usage.py
+
+Option B — from the examples/ directory inside the repo:
+    cd fawp-index/examples
     python example_usage.py
 
-Or via PyPI:
-    pip install fawp-index
-    python example_usage.py
+Note for PyPI installs
+----------------------
+If you installed via ``pip install fawp-index`` this script is *not* in
+your working directory.  Either clone the repo and follow Option A above,
+or copy-paste the code from:
+    https://github.com/DrRalphClayton/fawp-index/blob/main/examples/example_usage.py
 """
+import sys, os as _os
+# Allow running from repo root OR from examples/ directory
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
+_ROOT = _os.path.dirname(_HERE)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 from fawp_index import FAWPAlphaIndex
 from fawp_index.io.feeds import load_synthetic_demo

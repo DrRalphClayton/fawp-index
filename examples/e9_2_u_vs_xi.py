@@ -33,6 +33,12 @@ Fast smoke test:
 Heavier E9-style run:
     python e9_2_u_vs_xi.py --out_dir e9_2_out --n_seeds 20 --n_trials 400 --tau_max 80
 """
+import sys, os as _os
+# Allow running from repo root OR from examples/ directory
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
+_ROOT = _os.path.dirname(_HERE)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 import argparse
 import json
