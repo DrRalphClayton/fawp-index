@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.txt)
 [![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.18673949-blue)](https://doi.org/10.5281/zenodo.18673949)
 [![Demo](https://img.shields.io/badge/🔴%20Live%20Demo-fawp--scanner.info-gold)](https://fawp-scanner.info)
-[![Docs](https://img.shields.io/badge/docs-fawp--index-blue?logo=readthedocs)](https://drralphclayton.github.io/fawp-index/)
+[![Docs](https://readthedocs.org/projects/fawp-index/badge/?version=latest)](https://fawp-index.readthedocs.io/en/latest/)
 [![Figshare](https://img.shields.io/badge/data-Figshare-blue)](https://doi.org/10.6084/m9.figshare.31799104)
 [![OSF](https://img.shields.io/badge/project-OSF-teal)](https://osf.io/hzwgp/)
 [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/DrRalphClayton/fawp-index/main?filepath=notebooks/E9_full_replication.ipynb)
@@ -36,7 +36,7 @@
 Scan any stock, ETF, or crypto in your browser.
 Enter tickers → Fetch data → See regime detection in real time.
 
-*Powered by fawp-index v2.2.1 · [pip install it](#install) for full local control*
+*Powered by fawp-index v2.5.0 · [pip install it](#install) for full local control*
 
 </div>
 
@@ -408,7 +408,7 @@ fawp-dashboard                     # opens on http://localhost:8501
 cd dashboard && streamlit run app.py
 ```
 
-**Dashboard features (v2.2.1):**
+**Dashboard features (v2.5.0):**
 - Severity pills (FAWP / HIGH / WATCH / CLEAR) with pulsing indicators
 - Sparkline score trend per asset with ▲/▼ arrows
 - ODW proportional bar showing window position in τ range
@@ -495,7 +495,7 @@ from fawp_index.constants import (
   author  = {Ralph Clayton},
   title   = {fawp-index: Information-Control Exclusion Principle detector},
   year    = {2026},
-  version = {2.2.1},
+  version = {2.5.0},
   url     = {https://github.com/DrRalphClayton/fawp-index},
   doi     = {10.5281/zenodo.18673949}
 }

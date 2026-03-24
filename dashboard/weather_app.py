@@ -570,23 +570,6 @@ def _multi_scan_panel():
             file_name=f"fawp_multiscan_{ms_var}.json", mime="application/json")
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
-# ── Nav bar ─────────────────────────────────────────────────────────────────
-def _wx_nav_switch(mode):
-    for k in ["wl_result","input_dfs","wx_result","wx_hazard","seis_result","seis_raw","seis_daily"]:
-        st.session_state.pop(k, None)
-    if mode is None: st.session_state.pop("_app_mode", None)
-    else: st.session_state["_app_mode"] = mode
-    st.rerun()
-_wx_n1, _wx_n2, _wx_n3, _wx_n4 = st.columns([2, 2, 2, 2])
-with _wx_n1:
-    if st.button("⚡ FAWP", key="wx_nh", use_container_width=True): _wx_nav_switch(None)
-with _wx_n2:
-    if st.button("📈 Finance", key="wx_nf", use_container_width=True): _wx_nav_switch("finance")
-with _wx_n3:
-    st.button("🌦 Weather", key="wx_nw", use_container_width=True, disabled=True, type="primary")
-with _wx_n4:
-    if st.button("🌍 Seismic", key="wx_ns", use_container_width=True): _wx_nav_switch("seismic")
-st.markdown("<hr style='border-color:#182540;margin:.2em 0 .8em'>", unsafe_allow_html=True)
 
 with st.sidebar:
     st.markdown("""
@@ -627,7 +610,7 @@ with st.sidebar:
                     _url = ("https://nominatim.openstreetmap.org/search"
                             f"?q={urllib.parse.quote(_city_q)}&format=json&limit=5")
                     _req = urllib.request.Request(_url,
-                           headers={"User-Agent": "fawp-scanner/2.2.1"})
+                           headers={"User-Agent": "fawp-scanner/2.5.0"})
                     with urllib.request.urlopen(_req, timeout=4) as _r:
                         _hits = _j.loads(_r.read())
                     if _hits:
@@ -687,13 +670,70 @@ with st.sidebar:
         horizon_days = st.slider("Forecast horizon (days)", 1, 30, 7)
         tau_max      = st.slider("Max tau", 5, 60, 30, step=5)
         n_null       = st.slider("Null permutations", 0, 200, 50, step=10)
+        st.toggle("Scan ALL variables", key="wx_multi_mode",
+                  help="Runs FAWP on all ERA5 variables in sequence.")
         estimator    = st.selectbox("MI estimator", ["pearson", "knn"],
                          help="pearson: fast, Gaussian. knn: non-parametric, better for non-Gaussian data (see E9 methods). Requires scikit-learn.")
+        remove_anomaly = st.toggle("Anomaly mode",
+                          help="Subtract climatological mean before detection — separates "
+                               "FAWP-in-trend from FAWP-in-variability. Uses 365-day "
+                               "rolling mean as baseline.", key="wx_anomaly_mode")
         epsilon      = st.number_input("Epsilon (bits)", value=0.01,
                                        min_value=0.001, max_value=0.1,
                                        step=0.001, format="%.3f")
         run_btn = st.button("▶ Run Scan", type="primary",
                             use_container_width=True, key="run_btn")
+
+    st.sidebar.markdown("---")
+    with st.sidebar.expander("📅 Compare two time periods"):
+        st.caption("Detect how FAWP changed between two eras — useful for climate change.")
+        _pc_start_a = st.text_input("Period A start", "1990-01-01", key="pc_start_a")
+        _pc_end_a   = st.text_input("Period A end",   "2004-12-31", key="pc_end_a")
+        _pc_start_b = st.text_input("Period B start", "2010-01-01", key="pc_start_b")
+        _pc_end_b   = st.text_input("Period B end",   "2024-12-31", key="pc_end_b")
+        _pc_run     = st.button("▶ Compare periods", key="pc_run", use_container_width=True)
+        if _pc_run:
+            try:
+                from fawp_index.weather import fawp_from_open_meteo as _fom_pc
+                with st.spinner("Scanning Period A…"):
+                    _res_a = _fom_pc(latitude=lat, longitude=lon, variable=variable,
+                                     start_date=_pc_start_a, end_date=_pc_end_a,
+                                     horizon_days=horizon_days, tau_max=tau_max,
+                                     epsilon=epsilon, n_null=n_null)
+                with st.spinner("Scanning Period B…"):
+                    _res_b = _fom_pc(latitude=lat, longitude=lon, variable=variable,
+                                     start_date=_pc_start_b, end_date=_pc_end_b,
+                                     horizon_days=horizon_days, tau_max=tau_max,
+                                     epsilon=epsilon, n_null=n_null)
+                st.session_state["wx_period_a"] = _res_a
+                st.session_state["wx_period_b"] = _res_b
+            except Exception as _pce:
+                st.error(f"Period comparison failed: {_pce}")
+    if "wx_period_a" in st.session_state and "wx_period_b" in st.session_state:
+        _ra = st.session_state["wx_period_a"]
+        _rb = st.session_state["wx_period_b"]
+        st.markdown('<div class="wx-sec">Period comparison</div>', unsafe_allow_html=True)
+        _pc1, _pc2 = st.columns(2)
+        for _col, _r, _lbl in [(_pc1, _ra, "Period A"), (_pc2, _rb, "Period B")]:
+            with _col:
+                _bc = "fawp-yes" if _r.fawp_found else "fawp-no"
+                st.markdown(
+                    f'<div class="result-banner {_bc}" style="padding:.5em .8em">'
+                    f'<b>{_lbl}</b>: {"🔴 FAWP" if _r.fawp_found else "✅ Clear"} · '
+                    f'gap {_r.peak_gap_bits:.4f}b</div>', unsafe_allow_html=True)
+        import matplotlib.pyplot as _plt_pc, io as _io_pc
+        _fig_pc, _ax_pc = _plt_pc.subplots(figsize=(9, 3.5), facecolor="#0D1729")
+        _ax_pc.set_facecolor("#07101E")
+        _ax_pc.plot(_ra.tau, _ra.pred_mi, color="#D4AF37", lw=2, label="Period A")
+        _ax_pc.plot(_rb.tau, _rb.pred_mi, color="#4A7FCC", lw=2, ls="--", label="Period B")
+        _ax_pc.axhline(epsilon, color="#3A4E70", ls=":", lw=1)
+        _ax_pc.set_xlabel("τ (delay, days)", fontsize=8, color="#7A90B8")
+        _ax_pc.set_ylabel("MI (bits)", fontsize=8, color="#7A90B8")
+        _ax_pc.set_title(f"Period comparison — {variable}", color="#D4AF37", fontsize=9)
+        _ax_pc.legend(fontsize=8, framealpha=0.2)
+        _fig_pc.tight_layout()
+        st.pyplot(_fig_pc, use_container_width=True)
+        _plt_pc.close(_fig_pc)
         st.markdown("---")
         st.caption("ERA5 reanalysis · Open-Meteo · free · no API key")
 
@@ -860,6 +900,20 @@ date,observed
 
 # ── Single location scan ──────────────────────────────────────────────────────
 if run_btn:
+    if st.session_state.get("wx_multi_mode"):
+        _MV_VARS = ["temperature_2m","precipitation","wind_speed_10m",
+                    "surface_pressure","cloud_cover"]
+        from fawp_index.weather import fawp_from_open_meteo as _fom_mv
+        _mv_res, _mv_pg = {}, st.progress(0.0)
+        for _mvi, _mvv in enumerate(_MV_VARS):
+            _mv_pg.progress((_mvi+1)/len(_MV_VARS), f"{_mvv}…")
+            try: _mv_res[_mvv] = _fom_mv(latitude=lat, longitude=lon, variable=_mvv,
+                    start_date=start_date, end_date=end_date, horizon_days=horizon_days,
+                    tau_max=tau_max, epsilon=epsilon, n_null=n_null)
+            except Exception: pass
+        _mv_pg.empty()
+        st.session_state["wx_multi_results"] = _mv_res
+        st.rerun()
     try:
         import openmeteo_requests
     except ImportError:
@@ -872,19 +926,71 @@ if run_btn:
         st.stop()
     with st.spinner(f"Fetching ERA5 {variable} @ {_fmt_loc(lat, lon)}…"):
         try:
-            result = fawp_from_open_meteo(
-                latitude=lat, longitude=lon, variable=variable,
-                start_date=start_date, end_date=end_date,
-                horizon_days=horizon_days, tau_max=tau_max,
-                epsilon=epsilon, n_null=n_null,
-                estimator=estimator,
-            )
+            # Anomaly mode: pre-subtract climatological mean
+            if st.session_state.get("wx_anomaly_mode", False):
+                try:
+                    from fawp_index.weather import (
+                        _fetch_openmeteo_daily_series, _compute_weather_mi_curves,
+                        WeatherFAWPResult, _deseasonalise,
+                    )
+                    import requests_cache, openmeteo_requests
+                    from retry_requests import retry
+                    _cache = requests_cache.CachedSession(".fawp_wx_cache", expire_after=3600)
+                    _session = retry(_cache, retries=5, backoff_factor=0.2)
+                    _om = openmeteo_requests.Client(session=_session)
+                    _times, _vals = _fetch_openmeteo_daily_series(
+                        _om, lat, lon, start_date, end_date, variable)
+                    import numpy as _np_wx
+                    _anom = _deseasonalise(_vals, period=365)
+                    _n = len(_anom) - horizon_days
+                    _pred   = _anom[:_n]
+                    _future = _anom[horizon_days:horizon_days + _n]
+                    _steer  = _np_wx.diff(_anom)[:_n]
+                    _odw, _tau, _pred_mi, _steer_mi = _compute_weather_mi_curves(
+                        _pred, _future, _steer, tau_max=tau_max, epsilon=epsilon, n_null=n_null)
+                    result = WeatherFAWPResult(
+                        variable=variable + " (anomaly)", location=f"({lat:.2f},{lon:.2f})",
+                        odw_result=_odw, tau=_tau, pred_mi=_pred_mi, steer_mi=_steer_mi,
+                        skill_metric="MI", n_obs=_n, horizon_days=horizon_days,
+                        date_range=(start_date, end_date), metadata={"mode": "anomaly"})
+                except Exception as _ae:
+                    st.error(f"Anomaly mode failed: {_ae} — falling back to raw scan")
+                    result = fawp_from_open_meteo(
+                        latitude=lat, longitude=lon, variable=variable,
+                        start_date=start_date, end_date=end_date,
+                        horizon_days=horizon_days, tau_max=tau_max,
+                        epsilon=epsilon, n_null=n_null, estimator=estimator,
+                    )
+            else:
+                result = fawp_from_open_meteo(
+                    latitude=lat, longitude=lon, variable=variable,
+                    start_date=start_date, end_date=end_date,
+                    horizon_days=horizon_days, tau_max=tau_max,
+                    epsilon=epsilon, n_null=n_null,
+                    estimator=estimator,
+                )
             st.session_state["wx_result"]  = result
             st.session_state["wx_hazard"]  = hazard
             st.session_state["wx_epsilon"] = epsilon
         except Exception as e:
             st.error(f"Scan failed: {e}")
             st.stop()
+
+if st.session_state.get("wx_multi_mode") and "wx_multi_results" in st.session_state:
+    st.markdown('<div class="wx-sec">Multi-variable scan results</div>', unsafe_allow_html=True)
+    _mvr = st.session_state["wx_multi_results"]
+    import pandas as _pd_mv
+    _mv_rows = [{"Variable": _vn,
+                 "FAWP": "🔴 YES" if _vr.fawp_found else "✅ No",
+                 "Peak gap": f"{_vr.peak_gap_bits:.4f}b",
+                 "τ⁺ₕ": str(_vr.odw_result.tau_h_plus or "—"),
+                 "n obs": _vr.n_obs}
+                for _vn, _vr in _mvr.items()]
+    st.dataframe(_pd_mv.DataFrame(_mv_rows).sort_values("Peak gap", ascending=False),
+                 use_container_width=True, hide_index=True)
+    _n_fawp_mv = sum(1 for _vr in _mvr.values() if _vr.fawp_found)
+    st.error(f"🔴 {_n_fawp_mv}/{len(_mvr)} variables in FAWP") if _n_fawp_mv else     st.success(f"✅ No FAWP across {len(_mvr)} variables")
+    st.markdown("---")
 
 if "wx_result" in st.session_state:
     r       = st.session_state["wx_result"]
@@ -951,10 +1057,8 @@ if "wx_result" in st.session_state:
     _mi_chart(r, epsilon)
     # PNG export of MI chart
     import io as _io_wx
-    _wx_fig = _mi_chart.__wrapped__(r, epsilon) if hasattr(_mi_chart, '__wrapped__') else None
-    # Simpler: re-render for download
-    import matplotlib.pyplot as _plt_wx, numpy as _np_wx
-    _wx_fig2, _wx_ax = plt.subplots(figsize=(9, 3.5), facecolor="#0D1729")
+    import matplotlib.pyplot as _plt_wx
+    _wx_fig2, _wx_ax = _plt_wx.subplots(figsize=(9, 3.5), facecolor="#0D1729")
     _wx_ax.set_facecolor("#07101E")
     _wx_ax.plot(r.tau, r.pred_mi,  color="#D4AF37", lw=2,   label="Prediction MI")
     _wx_ax.plot(r.tau, r.steer_mi, color="#4A7FCC", lw=1.5, ls="--", label="Steering MI")
@@ -968,7 +1072,7 @@ if "wx_result" in st.session_state:
     _wx_fig2.tight_layout()
     _wx_buf = _io_wx.BytesIO()
     _wx_fig2.savefig(_wx_buf, format="png", dpi=150, bbox_inches="tight")
-    plt.close(_wx_fig2)
+    _plt_wx.close(_wx_fig2)
     _wx_buf.seek(0)
     st.download_button("⬇ Download MI chart PNG", data=_wx_buf,
                        file_name=f"fawp_weather_{r.variable}_{r.location}.png",

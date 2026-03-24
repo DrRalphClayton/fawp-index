@@ -47,7 +47,8 @@ class RegimeResult:
 
     def plot(self, show: bool = True, save_path=None, **kwargs):
         """
-        Plot the regime detection result: score timeline with FAWP windows shaded.
+        Plot the regime detection result — 3-panel chart:
+        top: alpha index, middle: leverage gap, bottom: MI curves.
         Requires matplotlib.
         """
         try:
@@ -57,27 +58,44 @@ class RegimeResult:
         except ImportError:
             raise ImportError("matplotlib required for plot(): pip install matplotlib")
 
-        fig, ax = plt.subplots(figsize=(11, 3))
+        xs = list(range(len(self.in_fawp)))
+
+        fig, axes = plt.subplots(3, 1, figsize=(11, 7), sharex=True)
         fig.patch.set_facecolor("#07101E")
-        ax.set_facecolor("#0D1729")
-        for sp in ax.spines.values():
-            sp.set_edgecolor("#3A4E70")
-        ax.tick_params(colors="#7A90B8")
 
-        xs = range(len(self.in_fawp))
-        ax.fill_between(list(xs), self.scores, alpha=0.3, color="#D4AF37")
-        ax.plot(list(xs), self.scores, color="#D4AF37", lw=1.5, label="FAWP score")
+        for ax in axes:
+            ax.set_facecolor("#0D1729")
+            for sp in ax.spines.values(): sp.set_edgecolor("#3A4E70")
+            ax.tick_params(colors="#7A90B8")
+            for i, f in enumerate(self.in_fawp):
+                if f:
+                    ax.axvspan(i - 0.5, i + 0.5, color="#C0111A", alpha=0.15)
 
-        # Shade FAWP windows
-        for i, f in enumerate(self.in_fawp):
-            if f:
-                ax.axvspan(i - 0.5, i + 0.5, color="#C0111A", alpha=0.2)
+        # Panel 1: alpha index
+        axes[0].fill_between(xs, self.alpha_index, alpha=0.25, color="#D4AF37")
+        axes[0].plot(xs, self.alpha_index, color="#D4AF37", lw=1.5, label="α index")
+        axes[0].set_ylabel("α index", fontsize=8, color="#7A90B8")
+        axes[0].legend(fontsize=7, framealpha=0.2)
+        axes[0].set_title(
+            f"FAWP Regime — {self.n_fawp_windows}/{len(self.in_fawp)} windows "
+            f"({self.fawp_fraction*100:.1f}% active)",
+            color="#D4AF37", fontsize=9, fontweight="bold")
 
-        ax.set_ylabel("FAWP score", fontsize=8, color="#7A90B8")
-        ax.set_title(f"FAWP Regime — {self.n_fawp_windows}/{len(self.in_fawp)} windows active",
-                     color="#D4AF37", fontsize=9, fontweight="bold")
-        ax.legend(fontsize=8, framealpha=0.2)
-        fig.tight_layout()
+        # Panel 2: leverage gap
+        axes[1].fill_between(xs, self.leverage_gap, alpha=0.25, color="#4A7FCC")
+        axes[1].plot(xs, self.leverage_gap, color="#4A7FCC", lw=1.5, label="Leverage gap")
+        axes[1].axhline(0, color="#3A4E70", ls=":", lw=0.8)
+        axes[1].set_ylabel("Gap (bits)", fontsize=8, color="#7A90B8")
+        axes[1].legend(fontsize=7, framealpha=0.2)
+
+        # Panel 3: MI curves
+        axes[2].plot(xs, self.pred_mi,  color="#D4AF37", lw=1.5, label="Pred MI")
+        axes[2].plot(xs, self.steer_mi, color="#4A7FCC", lw=1.2, ls="--", label="Steer MI")
+        axes[2].set_ylabel("MI (bits)", fontsize=8, color="#7A90B8")
+        axes[2].set_xlabel("Window index", fontsize=8, color="#7A90B8")
+        axes[2].legend(fontsize=7, framealpha=0.2)
+
+        fig.tight_layout(pad=0.6)
 
         if save_path:
             fig.savefig(save_path, dpi=150, bbox_inches="tight")

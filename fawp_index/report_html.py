@@ -13,7 +13,7 @@ import base64, io
 from datetime import datetime
 from typing import Optional, Union
 
-_VERSION = "2.2.1"
+_VERSION = "2.5.0"
 
 
 def _b64_chart(fig) -> str:

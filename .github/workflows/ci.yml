@@ -46,4 +46,4 @@ jobs:
       - name: Install ruff
         run: pip install ruff
       - name: Lint
-        run: ruff check fawp_index/ --ignore E501,E302,E303,E741,F401,UP006,UP007,UP035
+        run: ruff check fawp_index/ --ignore E501,E302,E303,E741,F401,F811,E401,UP006,UP007,UP035

@@ -285,6 +285,8 @@ def _build_parser():
             "  fawp-index benchmarks --verify\n"
             "  fawp-index version\n"
             "  fawp-index cite\n"
+            "  fawp-index watch --tickers SPY,QQQ --email you@email.com\n"
+            "  fawp-index report --data scan.json --out report.pdf\n"
             "  fawp-index forecast --forecast fc.csv --obs obs.csv\n"
             "  fawp-index timing\n"
             "  fawp-index verify\n"
@@ -388,6 +390,46 @@ def _build_parser():
     p.set_defaults(func=cmd_verify)
 
     # grid
+    # status
+    p = sub.add_parser("status", help="Print live project status and calibration checks")
+    p.set_defaults(func=cmd_status)
+
+    # backtest
+    p = sub.add_parser("backtest", help="Run rolling FAWP scan and export CSV")
+    p.add_argument("--ticker",  required=True)
+    p.add_argument("--period",  default="5y")
+    p.add_argument("--window",  type=int,   default=252)
+    p.add_argument("--step",    type=int,   default=21)
+    p.add_argument("--delta",   type=int,   default=20)
+    p.add_argument("--tau-max", type=int,   default=40,   dest="tau_max")
+    p.add_argument("--epsilon", type=float, default=0.01)
+    p.add_argument("--n-null",  type=int,   default=50,   dest="n_null")
+    p.add_argument("--out",     default=None)
+    p.set_defaults(func=cmd_backtest)
+
+    # watch
+    p = sub.add_parser("watch", help="Run repeated scans and alert when FAWP fires")
+    p.add_argument("--tickers",  required=True, help="Comma-separated tickers, e.g. SPY,QQQ,GLD")
+    p.add_argument("--period",   default="2y",  help="Data period (default: 2y)")
+    p.add_argument("--interval", type=int, default=3600, help="Seconds between scans (default: 3600)")
+    p.add_argument("--email",    default=None, help="Email address for alerts")
+    p.add_argument("--epsilon",  type=float, default=0.01)
+    p.add_argument("--n-null",   type=int,   default=50,  dest="n_null")
+    p.add_argument("--window",   type=int,   default=252)
+    p.add_argument("--step",     type=int,   default=21)
+    p.add_argument("--once",     action="store_true", help="Run once and exit (no loop)")
+    p.set_defaults(func=cmd_watch)
+
+    # report
+    p = sub.add_parser("report", help="Generate a PDF report from a FAWP result JSON")
+    p.add_argument("--data",   required=True, help="Path to result .json file")
+    p.add_argument("--out",    default=None,  help="Output PDF path (default: <data>.pdf)")
+    p.add_argument("--title",  default=None,  help="Report title")
+    p.add_argument("--mode",   default="report", choices=["report","lab"])
+    p.add_argument("--author", default="Ralph Clayton")
+    p.add_argument("--doi",    default="10.5281/zenodo.18673949")
+    p.set_defaults(func=cmd_report)
+
     # forecast
     p = sub.add_parser("forecast", help="Run FAWP detection on NWP forecast vs observation CSVs")
     p.add_argument("--forecast",     required=True, help="Path to forecast CSV")
@@ -700,6 +742,204 @@ def cmd_forecast(args):
             })
             df.to_csv(args.out, index=False)
             print(f"Saved → {args.out}")
+
+
+def cmd_report(args):
+    """Generate a PDF report from a FAWP result JSON file."""
+    import json
+    from fawp_index.report import generate_report
+
+    with open(args.data) as f:
+        result = json.load(f)
+
+    out = args.out or args.data.replace(".json", ".pdf")
+    path = generate_report(
+        result      = result,
+        output_path = out,
+        title       = args.title,
+        mode        = args.mode,
+        author      = args.author,
+        doi         = args.doi,
+    )
+    print(f"Report saved → {path}")
+
+
+def cmd_watch(args):
+    """Run repeated FAWP scans on a schedule and alert when regimes fire."""
+    import time, json
+    from datetime import datetime
+
+    print(f"FAWP Watch daemon")
+    print(f"  Tickers  : {args.tickers}")
+    print(f"  Period   : {args.period}")
+    print(f"  Interval : every {args.interval} seconds ({args.interval/3600:.1f} hours)")
+    print(f"  Email    : {args.email or 'disabled'}")
+    print()
+
+    def _run_scan():
+        try:
+            import yfinance as yf
+            import pandas as pd
+            from fawp_index.market import MarketScanConfig, scan_market
+
+            tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
+            dfs = {}
+            for t in tickers:
+                try:
+                    df = yf.download(t, period=args.period, auto_adjust=True, progress=False)
+                    if not df.empty and "Close" in df.columns:
+                        dfs[t] = df[["Close"]].rename(columns={"Close": "close"})
+                except Exception:
+                    pass
+
+            if not dfs:
+                print(f"[{datetime.now():%H:%M:%S}] No data fetched")
+                return
+
+            cfg = MarketScanConfig(epsilon=args.epsilon, n_null=args.n_null,
+                                   window=args.window, step=args.step)
+            result = scan_market(dfs, config=cfg)
+
+            flagged = [a for a in result.active_regimes() if a.regime_active]
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+            print(f"[{ts}] {len(dfs)} tickers scanned · {len(flagged)} FAWP active", flush=True)
+
+            for a in flagged:
+                print(f"  🔴 {a.ticker} — score {a.latest_score:.4f} · gap {a.peak_gap_bits:.4f}b",
+                      flush=True)
+
+            if flagged and args.email:
+                try:
+                    import sys, os
+                    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "dashboard"))
+                    from email_digest import send_digest
+                    send_digest(args.email, finance_results=[a.__dict__ for a in flagged],
+                                scan_date=ts)
+                    print(f"  📧 Alert email sent to {args.email}", flush=True)
+                except Exception as e:
+                    print(f"  Email failed: {e}", flush=True)
+
+        except Exception as e:
+            print(f"[{datetime.now():%H:%M:%S}] Scan error: {e}", flush=True)
+
+    while True:
+        _run_scan()
+        if args.once:
+            break
+        print(f"  Next scan in {args.interval}s…", flush=True)
+        time.sleep(args.interval)
+
+
+def cmd_status(_args):
+    """Print live project status: PyPI version, CI, calibration checks."""
+    import urllib.request, json as _j
+    import fawp_index as fi
+
+    print()
+    print("fawp-index project status")
+    print("=" * 48)
+
+    # Installed version
+    print(f"  Installed version : {fi.__version__}")
+
+    # Latest PyPI version
+    try:
+        with urllib.request.urlopen(
+            "https://pypi.org/pypi/fawp-index/json", timeout=4
+        ) as r:
+            _pypi = _j.loads(r.read())
+        latest = _pypi["info"]["version"]
+        up_to_date = fi.__version__ == latest
+        icon = "✅" if up_to_date else "⬆️ "
+        print(f"  PyPI latest       : {latest}  {icon}")
+    except Exception:
+        print("  PyPI latest       : (unavailable)")
+
+    # PyPI downloads
+    try:
+        with urllib.request.urlopen(
+            "https://pypistats.org/api/packages/fawp-index/recent", timeout=4
+        ) as r:
+            _dl = _j.loads(r.read())
+        dm = _dl.get("data", {}).get("last_month", 0)
+        print(f"  Downloads/month   : {dm:,}")
+    except Exception:
+        print("  Downloads/month   : (unavailable)")
+
+    # Calibration self-check
+    print()
+    print("  Calibration checks:")
+    checks = [
+        ("PEAK_PRED_BITS",             fi.PEAK_PRED_BITS,             2.233669, 1e-4),
+        ("TAU_PLUS_H_FLAGSHIP",        fi.TAU_PLUS_H_FLAGSHIP,        4,        0),
+        ("TAU_F_FLAGSHIP",             fi.TAU_F_FLAGSHIP,             35,       0),
+        ("E97_MEAN_LEAD_GAP2_U",       fi.E97_MEAN_LEAD_GAP2_TO_CLIFF_U, 0.7552, 1e-3),
+        ("E97_MEAN_ABS_ERR_GAP2",      fi.E97_MEAN_ABS_ERR_GAP2_VS_ODW_START, 2.108, 0.01),
+    ]
+    all_ok = True
+    for name, val, expected, tol in checks:
+        ok = abs(float(val) - float(expected)) <= tol
+        all_ok = all_ok and ok
+        print(f"    {'✅' if ok else '❌'} {name} = {val}")
+
+    print()
+    print(f"  Calibration : {'✅ PASS' if all_ok else '❌ FAIL'}")
+    print(f"  Docs        : https://fawp-index.readthedocs.io")
+    print(f"  GitHub      : https://github.com/DrRalphClayton/fawp-index")
+    print(f"  Live demo   : https://fawp-scanner.info")
+    print()
+
+
+def cmd_backtest(args):
+    """Run rolling FAWP scan over historical data and export results."""
+    import pandas as pd
+    from fawp_index.market import scan_fawp_market
+
+    print(f"FAWP Backtest")
+    print(f"  Ticker  : {args.ticker}")
+    print(f"  Period  : {args.period}")
+    print(f"  Window  : {args.window} bars  Step: {args.step}")
+    print()
+
+    try:
+        import yfinance as yf
+        df = yf.download(args.ticker, period=args.period,
+                         auto_adjust=True, progress=False)
+        if df.empty:
+            print(f"No data for {args.ticker}")
+            return
+    except ImportError:
+        print("yfinance required: pip install yfinance")
+        return
+
+    result = scan_fawp_market(
+        df, ticker=args.ticker,
+        window=args.window, step=args.step,
+        delta_pred=args.delta, tau_max=args.tau_max,
+        epsilon=args.epsilon, n_null=args.n_null,
+        verbose=True,
+    )
+
+    # Build output DataFrame
+    rows = []
+    for w in result.windows:
+        rows.append({
+            "date":        str(w.date)[:10] if hasattr(w, "date") else "",
+            "fawp_active": w.regime_active,
+            "score":       round(w.regime_score, 6),
+            "peak_gap_bits": round(w.peak_gap_bits, 6),
+            "odw_start":   w.odw_start,
+            "odw_end":     w.odw_end,
+            "tau_h_plus":  w.tau_h_plus,
+        })
+
+    out_df = pd.DataFrame(rows)
+    n_fawp = int(out_df["fawp_active"].sum())
+    print(f"\n  {len(out_df)} windows · {n_fawp} FAWP active ({n_fawp/max(1,len(out_df))*100:.1f}%)")
+
+    out = args.out or f"fawp_backtest_{args.ticker}.csv"
+    out_df.to_csv(out, index=False)
+    print(f"  Saved → {out}")
 
 def main():
     parser = _build_parser()

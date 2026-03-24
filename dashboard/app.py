@@ -1,5 +1,5 @@
 """
-FAWP Dashboard v2.2.1 — Streamlit app
+FAWP Dashboard v2.5.0 — Streamlit app
 ========================================
 Ralph Clayton (2026) · https://doi.org/10.5281/zenodo.18673949
 """
@@ -188,7 +188,7 @@ if _APP_MODE is None:
 
     st.markdown("""
 <div style="text-align:center;margin-top:3em;color:#1E2E4A;font-size:.78em">
-  fawp-index v2.2.1 · Ralph Clayton · 2026 ·
+  fawp-index v2.5.0 · Ralph Clayton · 2026 ·
   <a href="https://github.com/DrRalphClayton/fawp-index"
      style="color:#1E2E4A">GitHub</a> ·
   <a href="https://pypi.org/project/fawp-index/"
@@ -200,6 +200,13 @@ if _APP_MODE is None:
 # ── Top nav bar — Home + direct app switcher ───────────────────────────────────
 _NAV_CSS = """
 <style>
+[data-theme="light"] {
+    --bg-app: #F5F7FA; --bg-card: #FFFFFF; --bg-card2: #EEF1F7;
+    --accent: #B8922A; --text-1: #0D1729; --text-3: #5A6E8A;
+    --crimson: #C0111A; --green: #1A8C42; --blue-mild: #2A5FA8;
+    --muted: #8A9AB8;
+}
+
 .fawp-nav {
     display:flex; align-items:center; gap:.6em;
     padding:.5em 0 .8em; border-bottom:1px solid #182540;
@@ -262,6 +269,20 @@ with _nav_seis:
                  type=_seis_type, use_container_width=True,
                  disabled=(_APP_MODE == "seismic")):
         _switch_mode("seismic")
+
+# Dark/light mode toggle (persists in session)
+if "theme" not in st.session_state:
+    st.session_state["theme"] = "dark"
+_theme_icon = "☀️" if st.session_state["theme"] == "dark" else "🌙"
+if st.sidebar.button(f"{_theme_icon} Toggle theme", key="theme_toggle",
+                     use_container_width=True):
+    st.session_state["theme"] = "light" if st.session_state["theme"] == "dark" else "dark"
+    st.rerun()
+if st.session_state["theme"] == "light":
+    st.markdown(
+        "<script>document.documentElement.setAttribute('data-theme','light')</script>",
+        unsafe_allow_html=True,
+    )
 
 # ── Route to correct app ───────────────────────────────────────────────────────
 if _APP_MODE == "weather":
@@ -807,6 +828,66 @@ with st.sidebar:
 
     _notification_bell()
 
+    # Webhook alerts config (Slack / Discord)
+    with st.sidebar.expander("🔔 Webhook alerts", expanded=False):
+        _wh_slack   = st.text_input("Slack webhook URL",
+                                    value=st.session_state.get("_slack_url",""),
+                                    type="password", key="slack_url_input",
+                                    placeholder="https://hooks.slack.com/services/…")
+        _wh_discord = st.text_input("Discord webhook URL",
+                                    value=st.session_state.get("_discord_url",""),
+                                    type="password", key="discord_url_input",
+                                    placeholder="https://discord.com/api/webhooks/…")
+        if st.button("Save webhook settings", key="save_webhooks",
+                     use_container_width=True):
+            st.session_state["_slack_url"]   = _wh_slack
+            st.session_state["_discord_url"] = _wh_discord
+            st.success("Saved — alerts will fire on next FAWP detection.")
+        _wh_test = st.button("Send test alert", key="test_webhook",
+                             use_container_width=True)
+        if _wh_test:
+            try:
+                from fawp_index.alerts import AlertEngine, FAWPAlert
+                _eng = AlertEngine()
+                if st.session_state.get("_slack_url"):
+                    _eng.add_slack(st.session_state["_slack_url"])
+                if st.session_state.get("_discord_url"):
+                    _eng.add_discord(st.session_state["_discord_url"])
+                if not _eng._backends:
+                    st.warning("No webhook URLs saved yet.")
+                else:
+                    _eng.fire(FAWPAlert(
+                        ticker="TEST", timeframe="1d", score=0.042,
+                        gap_bits=0.042, odw_start=28, odw_end=34,
+                        alert_type="fawp_detected",
+                    ))
+                    st.success("Test alert sent!")
+            except Exception as _we:
+                st.error(f"Webhook test failed: {_we}")
+    # Auto-fire webhooks when scan completes with FAWP active
+    if (st.session_state.get("_slack_url") or st.session_state.get("_discord_url")):
+        if "wl_result" in st.session_state:
+            _wl = st.session_state["wl_result"]
+            _wh_fired_key = f"wh_fired_{id(_wl)}"
+            if not st.session_state.get(_wh_fired_key) and _wl.n_flagged > 0:
+                try:
+                    from fawp_index.alerts import AlertEngine, FAWPAlert
+                    _eng2 = AlertEngine()
+                    if st.session_state.get("_slack_url"):
+                        _eng2.add_slack(st.session_state["_slack_url"])
+                    if st.session_state.get("_discord_url"):
+                        _eng2.add_discord(st.session_state["_discord_url"])
+                    for _a in _wl.active_regimes()[:5]:
+                        _eng2.fire(FAWPAlert(
+                            ticker=_a.ticker, timeframe=_a.timeframe,
+                            score=_a.latest_score, gap_bits=_a.peak_gap_bits,
+                            odw_start=_a.peak_odw_start, odw_end=_a.peak_odw_end,
+                            alert_type="fawp_detected",
+                        ))
+                    st.session_state[_wh_fired_key] = True
+                except Exception:
+                    pass
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Data loaders
@@ -931,8 +1012,17 @@ elif source == "Upload CSV(s)":
         "Upload CSV files — one per asset. Needs a date column and a Close column.",
         type=["csv"], accept_multiple_files=True,
     )
+    st.checkbox("Auto re-scan when file changes", key="csv_auto_refresh")
     if uploaded:
-        st.session_state["input_dfs"] = _load_uploaded(uploaded)
+        _nh = hash(tuple(f.getvalue() for f in uploaded))
+        _oh = st.session_state.get("_csv_hash")
+        if _nh != _oh:
+            st.session_state["input_dfs"] = _load_uploaded(uploaded)
+            st.session_state["_csv_hash"] = _nh
+            if st.session_state.get("csv_auto_refresh") and _oh is not None:
+                st.toast("📂 File changed — re-scanning…", icon="📂")
+                st.session_state.pop("wl_result", None)
+                st.rerun()
     dfs = st.session_state.get("input_dfs", {})
 
 elif source == "Enter tickers (yfinance)":
@@ -942,6 +1032,25 @@ elif source == "Enter tickers (yfinance)":
         _max_t = get_limit("max_tickers") or 999
         if not is_pro() and _AUTH_ENABLED:
             st.caption(f"Free plan: up to {_max_t} tickers")
+        # Preset portfolio buttons
+        _PRESETS = {
+            "📈 S&P core":   "SPY, QQQ, IWM, DIA",
+            "₿ Crypto":      "BTC-USD, ETH-USD, SOL-USD, BNB-USD",
+            "🥇 Commodities":"GLD, SLV, USO, CORN",
+            "🌍 Global ETF": "EFA, EEM, VEU, ACWI",
+            "🏦 Sectors":    "XLF, XLK, XLE, XLV, XLI",
+        }
+        _p_cols = st.columns(len(_PRESETS))
+        for _pi, (_plbl, _ptickers) in enumerate(_PRESETS.items()):
+            with _p_cols[_pi]:
+                if st.button(_plbl, key=f"preset_{_pi}", use_container_width=True,
+                             help=_ptickers):
+                    st.session_state["_preset_tickers"] = _ptickers
+                    st.rerun()
+        if "preset_tickers" in st.session_state.get("_preset_tickers", ""):
+            _default_tickers = st.session_state.pop("_preset_tickers", _default_tickers)
+        elif "_preset_tickers" in st.session_state:
+            _default_tickers = st.session_state.pop("_preset_tickers")
         ticker_str = st.text_input("Tickers (comma-separated)", _default_tickers)
     with col2:
         period = st.selectbox("Period", ["1y", "2y", "5y", "max"], index=1)
@@ -1160,6 +1269,18 @@ Follow these steps to run your first scan:
         f'</div>',
         unsafe_allow_html=True,
     )
+    # E9.7 calibration callout
+    import fawp_index as _fi_cal
+    st.markdown(
+        f'<div style="font-size:.72em;color:#3A4E70;padding:.3em .6em;'
+        f'background:#0D1729;border-radius:6px;border:1px solid #182540;'
+        f'display:inline-block;margin-bottom:.6em">'
+        f'📐 gap2 peak leads cliff by <b style="color:#D4AF37">+{_fi_cal.E97_MEAN_LEAD_GAP2_TO_CLIFF_U:.3f} delays</b> · '
+        f'ODW localisation error <b style="color:#D4AF37">~{_fi_cal.E97_MEAN_ABS_ERR_GAP2_VS_ODW_START:.1f} delays</b> · '
+        f'<a href="https://doi.org/10.5281/zenodo.19065421" style="color:#4A7FCC">E9.7</a>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
     # Sort + filter controls
     col_sort, col_filter = st.columns([1, 3])
@@ -1198,12 +1319,31 @@ Follow these steps to run your first scan:
                          "asset-row high-risk" if a.latest_score >= 0.005 else "asset-row")
             days_str   = f"{a.days_in_regime}d" if a.days_in_regime else "—"
             age_str    = f"age {a.signal_age_days}d"
+            # Streak: consecutive scans in FAWP from history
+            _streak = 0
+            try:
+                _hist_store = get_store()
+                if hasattr(_hist_store, "asset_timeline"):
+                    _tl_s = _hist_store.asset_timeline(a.ticker, a.timeframe)
+                    if not _tl_s.empty and "regime_active" in _tl_s.columns:
+                        _acts = _tl_s["regime_active"].values[::-1]
+                        for _v in _acts:
+                            if _v: _streak += 1
+                            else: break
+            except Exception:
+                pass
+            streak_html = (
+                f'<span style="font-size:.72em;background:#4A1A1A;color:#FF6B6B;'
+                f'border-radius:4px;padding:.1em .4em;margin-left:.3em">🔥 {_streak} scans</span>'
+                if _streak >= 2 else ""
+            )
 
             conf_html  = _confidence_html(a)
             st.markdown(
                 f'<div class="{row_cls}">'
                 f'<span class="asset-ticker">{a.ticker}</span>'
                 f'<span class="asset-tf">{a.timeframe}</span>'
+                f'{streak_html}'
                 f'{pill_html}'
                 f'<span class="{score_cls}" style="min-width:64px">{a.latest_score:.4f}</span>'
                 f'{spark_html}'
@@ -1216,10 +1356,36 @@ Follow these steps to run your first scan:
                 unsafe_allow_html=True,
             )
 
-            # Inline explain expander for flagged/high-risk assets
+            # Inline explain + MI curve expander for flagged/high-risk assets
             if a.regime_active or a.latest_score >= 0.005:
                 with st.expander(f"Why {a.ticker} is flagged", expanded=False):
                     st.markdown(_explain_html(a), unsafe_allow_html=True)
+                    # Full MI curve chart on expand
+                    if HAS_MPL and a.scan is not None:
+                        try:
+                            _pred_mi  = [w.pred_mi  for w in a.scan.windows if hasattr(w, "pred_mi")]
+                            _steer_mi = [w.steer_mi for w in a.scan.windows if hasattr(w, "steer_mi")]
+                            if not _pred_mi:
+                                raise ValueError("no MI data")
+                            import matplotlib.pyplot as _plt_mi2, numpy as _np_mi2
+                            _tau2 = _np_mi2.arange(1, len(_pred_mi[-1]) + 1)
+                            _fig_mi2, _ax_mi2 = _plt_mi2.subplots(figsize=(8, 3), facecolor="#0D1729")
+                            _ax_mi2.set_facecolor("#07101E")
+                            _ax_mi2.plot(_tau2, _pred_mi[-1], color="#D4AF37", lw=2, label="Pred MI (latest)")
+                            _ax_mi2.plot(_tau2, _steer_mi[-1], color="#4A7FCC", lw=1.5, ls="--", label="Steer MI")
+                            _ax_mi2.axhline(epsilon, color="#3A4E70", ls=":", lw=1, label=f"ε={epsilon}")
+                            _ax_mi2.set_xlabel("τ (delay)", fontsize=8, color="#7A90B8")
+                            _ax_mi2.set_ylabel("MI (bits)", fontsize=8, color="#7A90B8")
+                            _ax_mi2.set_title(f"{a.ticker} [{a.timeframe}] MI curves",
+                                             color="#D4AF37", fontsize=9)
+                            _ax_mi2.legend(fontsize=7, framealpha=0.2)
+                            for _sp2 in _ax_mi2.spines.values(): _sp2.set_edgecolor("#3A4E70")
+                            _ax_mi2.tick_params(colors="#7A90B8")
+                            _fig_mi2.tight_layout()
+                            st.pyplot(_fig_mi2, use_container_width=True)
+                            _plt_mi2.close(_fig_mi2)
+                        except Exception:
+                            pass
 
     # Multi-ticker comparison chart
     if len(filtered) > 1 and HAS_MPL:
@@ -1276,6 +1442,42 @@ Follow these steps to run your first scan:
             )
     except Exception as e:
         st.caption(f"Leaderboard unavailable: {e}")
+
+    # Global community leaderboard (anonymised, shared via Supabase)
+    st.markdown(_sec("Global leaderboard — top flagged assets today"), unsafe_allow_html=True)
+    try:
+        _store_gl = get_store()
+        if hasattr(_store_gl, "_db") and _store_gl._db is not None:
+            # Write today's FAWP-active assets to shared table
+            if wl and wl.n_flagged > 0:
+                import json as _jgl
+                _today = pd.Timestamp.now().strftime("%Y-%m-%d")
+                for _ga in wl.active_regimes():
+                    _store_gl._db.table("fawp_global_lb").upsert({
+                        "ticker":     _ga.ticker,
+                        "timeframe":  _ga.timeframe,
+                        "score":      round(_ga.latest_score, 4),
+                        "gap_bits":   round(_ga.peak_gap_bits, 4),
+                        "scan_date":  _today,
+                        "count":      1,
+                    }, on_conflict="ticker,timeframe,scan_date").execute()
+            # Read global top 10
+            _gl_res = (_store_gl._db.table("fawp_global_lb")
+                       .select("ticker,timeframe,score,gap_bits,count")
+                       .order("gap_bits", desc=True)
+                       .limit(10).execute())
+            _gl_rows = _gl_res.data or []
+            if _gl_rows:
+                import pandas as _pd_gl
+                _gl_df = _pd_gl.DataFrame(_gl_rows)
+                st.dataframe(_gl_df, use_container_width=True, hide_index=True)
+                st.caption("Anonymised — shows asset symbols only, no user data.")
+            else:
+                st.caption("No global data yet — run scans to contribute.")
+        else:
+            st.caption("Sign in to contribute to and view the global leaderboard.")
+    except Exception as _gle:
+        st.caption(f"Global leaderboard unavailable: {_gle}")
 
     # Threshold alerts
     if alert_threshold > 0:
@@ -1436,7 +1638,43 @@ with tab_heatmap:
             st.pyplot(fig, use_container_width=True)
             plt.close(fig)
 
-        st.markdown(_sec("Regime score heatmap"), unsafe_allow_html=True)
+        st.markdown(_sec("FAWP regime heatmap"), unsafe_allow_html=True)
+        st.caption("🔴 = FAWP active · Color intensity = score magnitude · Numbers = peak gap (bits)")
+
+        # Richer heatmap: FAWP active cells highlighted with red border
+        mat_active = np.full((n_t, n_tf), False)
+        for a in wl.assets:
+            if not a.error:
+                mat_active[tickers_h.index(a.ticker), tfs_h.index(a.timeframe)] = a.regime_active
+
+        fig_h2, ax_h2 = plt.subplots(figsize=(max(4, n_tf * 1.8), max(3, n_t * 0.8)))
+        fig_h2.patch.set_facecolor("#0D1729")
+        ax_h2.set_facecolor("#0D1729")
+        im_h2 = ax_h2.imshow(mat, aspect="auto", cmap="RdYlGn_r",
+                              vmin=0, vmax=max(0.01, float(np.nanmax(mat))))
+        ax_h2.set_xticks(range(n_tf)); ax_h2.set_xticklabels(tfs_h, fontsize=9, color="#7A90B8")
+        ax_h2.set_yticks(range(n_t));  ax_h2.set_yticklabels(tickers_h, fontsize=9, color="#7A90B8")
+        cb_h2 = plt.colorbar(im_h2, ax=ax_h2)
+        cb_h2.ax.yaxis.set_tick_params(color="#7A90B8", labelsize=7)
+        cb_h2.set_label("Score", color="#7A90B8", fontsize=8)
+        for i in range(n_t):
+            for j in range(n_tf):
+                if not np.isnan(mat[i, j]):
+                    # Show gap bits in cell
+                    _gap = mat_gap[i, j] if not np.isnan(mat_gap[i, j]) else 0
+                    ax_h2.text(j, i, f"{_gap:.3f}", ha="center", va="center",
+                               fontsize=7, color="white", fontfamily="monospace")
+                    # Red border for FAWP active cells
+                    if mat_active[i, j]:
+                        from matplotlib.patches import Rectangle
+                        ax_h2.add_patch(Rectangle((j - 0.48, i - 0.48), 0.96, 0.96,
+                                                   fill=False, edgecolor="#C0111A", lw=2.5))
+        for spine in ax_h2.spines.values(): spine.set_edgecolor("#182540")
+        plt.tight_layout(pad=0.4)
+        st.pyplot(fig_h2, use_container_width=True)
+        plt.close(fig_h2)
+
+        st.markdown(_sec("Regime score heatmap (numeric)"), unsafe_allow_html=True)
         st.caption("Rows = assets · Columns = timeframes · Color = latest score")
         _heatmap(mat, "Score", "Score")
 
@@ -1791,6 +2029,33 @@ with tab_history:
     except Exception as e:
         st.error(f"History unavailable: {e}")
 
+    # Email digest subscription toggle
+    st.markdown(_sec("Weekly email digest"), unsafe_allow_html=True)
+    _user_email = get_user_email() if _AUTH_ENABLED else None
+    if _user_email:
+        _digest_key = f"digest_sub_{_user_email}"
+        _subscribed = st.session_state.get(_digest_key, False)
+        _tog = st.toggle("Subscribe to weekly FAWP digest",
+                         value=_subscribed, key="digest_toggle")
+        if _tog != _subscribed:
+            st.session_state[_digest_key] = _tog
+            if _tog:
+                st.success(f"✅ Digest enabled — weekly summary will be sent to {_user_email}")
+            else:
+                st.info("Digest unsubscribed.")
+        if _subscribed:
+            st.caption(f"Weekly digest → {_user_email} · Sent every Monday")
+            if st.button("Send test digest now", key="test_digest"):
+                try:
+                    from email_digest import send_digest
+                    _wl_data = get_store().all_assets() if hasattr(get_store(), "all_assets") else []
+                    ok = send_digest(_user_email, finance_results=_wl_data)
+                    st.success("Test digest sent!" if ok else "Send failed — check RESEND_API_KEY.")
+                except Exception as _de:
+                    st.error(f"Digest error: {_de}")
+    else:
+        st.caption("Sign in to subscribe to weekly digest emails.")
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # Compare tab
@@ -2121,17 +2386,43 @@ with tab_export:
     st.markdown(_sec("Download report"), unsafe_allow_html=True)
     if wl:
         _scan_ts = st.session_state.get("scan_timestamp", "scan")
-        if st.button("Generate HTML report", key="gen_html_report"):
-            with st.spinner("Building report…"):
-                _html = generate_html_report(
-                    wl, title=f"FAWP Finance Scan — {_scan_ts}")
-            st.download_button(
-                "📄 Download HTML report",
-                data=_html.encode(),
-                file_name=f"fawp_scan_{_scan_ts.replace(' ','_')}.html",
-                mime="text/html",
-                key="dl_html_report",
-            )
+        _exp_col1, _exp_col2 = st.columns(2)
+        with _exp_col1:
+            if st.button("Generate HTML report", key="gen_html_report", use_container_width=True):
+                with st.spinner("Building report…"):
+                    _html = generate_html_report(
+                        wl, title=f"FAWP Finance Scan — {_scan_ts}")
+                st.download_button(
+                    "📄 Download HTML report",
+                    data=_html.encode(),
+                    file_name=f"fawp_scan_{_scan_ts.replace(' ','_')}.html",
+                    mime="text/html",
+                    key="dl_html_report",
+                )
+        with _exp_col2:
+            if st.button("Generate PDF report", key="gen_pdf_report", use_container_width=True):
+                with st.spinner("Building PDF…"):
+                    try:
+                        import tempfile as _tmpf2, json as _json_pdf
+                        from fawp_index.report import generate_report as _gen_report
+                        _wl_dict = json.loads(wl.to_json_str()) if hasattr(wl, "to_json_str") else wl.to_dataframe().to_dict("records")
+                        with _tmpf2.NamedTemporaryFile(suffix=".pdf", delete=False) as _tf_pdf:
+                            _pdf_path = _gen_report(
+                                result=_wl_dict,
+                                output_path=_tf_pdf.name,
+                                title=f"FAWP Finance Scan — {_scan_ts}",
+                                mode="report",
+                            )
+                        _pdf_bytes = open(str(_pdf_path), "rb").read()
+                        st.download_button(
+                            "📥 Download PDF report",
+                            data=_pdf_bytes,
+                            file_name=f"fawp_scan_{_scan_ts.replace(' ','_')}.pdf",
+                            mime="application/pdf",
+                            key="dl_pdf_report",
+                        )
+                    except Exception as _pdf_err:
+                        st.error(f"PDF failed: {_pdf_err}. Install: pip install reportlab")
     st.markdown("---")
     st.markdown(_sec("Download results"), unsafe_allow_html=True)
 

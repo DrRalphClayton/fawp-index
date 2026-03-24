@@ -115,8 +115,13 @@ def share_button(result_type: str, title: str, payload: Any, user_id: Optional[s
         with st.spinner("Creating shareable link…"):
             url = create_share(result_type, title, payload, user_id)
         if url:
-            st.success(f"Shareable link created!")
-            st.code(url)
+            st.success("✅ Shareable link created!")
+            col_url, col_copy = st.columns([4, 1])
+            with col_url:
+                st.text_input("Share URL", value=url, key=f"share_url_{hash(title)}",
+                              label_visibility="collapsed")
+            with col_copy:
+                st.link_button("🔗 Open", url, use_container_width=True)
             st.caption("Anyone with this link can view your result — no login needed.")
         else:
             # Fallback: show JSON

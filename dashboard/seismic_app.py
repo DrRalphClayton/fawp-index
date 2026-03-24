@@ -347,26 +347,6 @@ def _kpi(col, val, label, color=None):
 # ── Main render ────────────────────────────────────────────────────────────────
 st.markdown(_CSS, unsafe_allow_html=True)
 
-# ── Nav bar ──────────────────────────────────────────────────────────────────
-def _seis_nav_switch(mode):
-    for k in ["wl_result","input_dfs","wx_result","wx_hazard","seis_result","seis_raw","seis_daily"]:
-        st.session_state.pop(k, None)
-    if mode is None:
-        st.session_state.pop("_app_mode", None)
-    else:
-        st.session_state["_app_mode"] = mode
-    st.rerun()
-
-_sn1, _sn2, _sn3, _sn4 = st.columns([2, 2, 2, 2])
-with _sn1:
-    if st.button("⚡ FAWP", key="sn_h", use_container_width=True): _seis_nav_switch(None)
-with _sn2:
-    if st.button("📈 Finance", key="sn_f", use_container_width=True): _seis_nav_switch("finance")
-with _sn3:
-    if st.button("🌦 Weather", key="sn_w", use_container_width=True): _seis_nav_switch("weather")
-with _sn4:
-    st.button("🌍 Seismic", key="sn_s", use_container_width=True, disabled=True, type="primary")
-st.markdown("<hr style='border-color:#182540;margin:.2em 0 .8em'>", unsafe_allow_html=True)
 
 st.markdown(
     '<div class="seis-header">🌍 FAWP Seismic Scanner</div>'
@@ -418,6 +398,54 @@ with st.sidebar:
                                    max_value=0.5, format="%.3f")
 
     run_btn = st.button("🌍 Run Seismic Scan", type="primary", use_container_width=True)
+    st.sidebar.markdown("---")
+    _rt_on = st.sidebar.toggle("⚡ Live 30-day feed", key="seis_realtime",
+                               help="USGS real-time, refreshes every 5 min")
+    if _rt_on:
+        import time as _trt
+        _rt_age = _trt.time() - st.session_state.get("seis_rt_ts", 0)
+        if _rt_age > 300 or "seis_rt_raw" not in st.session_state:
+            with st.spinner("Fetching real-time data…"):
+                try:
+                    import urllib.request as _urt2, json as _jrt2
+                    _now = pd.Timestamp.now()
+                    _rt_url = (f"https://earthquake.usgs.gov/fdsnws/event/1/query"
+                               f"?format=geojson&starttime={(_now-pd.Timedelta(days=30)):%Y-%m-%d}"
+                               f"&endtime={_now:%Y-%m-%d}"
+                               f"&minlatitude={minlat}&maxlatitude={maxlat}"
+                               f"&minlongitude={minlon}&maxlongitude={maxlon}"
+                               f"&minmagnitude={min_mag}&orderby=time-asc&limit=5000")
+                    with _urt2.urlopen(_rt_url, timeout=15) as _r2:
+                        _rtd = _jrt2.loads(_r2.read())
+                    _rtrows = []
+                    for _f2 in _rtd.get("features", []):
+                        _p2 = _f2["properties"]; _c2 = _f2["geometry"]["coordinates"]
+                        _t2 = pd.to_datetime(_p2["time"], unit="ms", utc=True).tz_localize(None)
+                        if _p2.get("mag"):
+                            _rtrows.append({"time": _t2, "magnitude": float(_p2["mag"]),
+                                            "depth": float(_c2[2]) if len(_c2) > 2 else float("nan"),
+                                            "lon": _c2[0], "lat": _c2[1], "date": _t2.normalize()})
+                    if _rtrows:
+                        st.session_state["seis_rt_raw"] = pd.DataFrame(_rtrows)
+                        st.session_state["seis_rt_ts"]  = _trt.time()
+                        st.sidebar.success(f"✅ {len(_rtrows)} live events")
+                except Exception as _rte2:
+                    st.sidebar.error(f"Real-time fetch failed: {_rte2}")
+        else:
+            _secs = max(0, 300 - int(_rt_age))
+            st.sidebar.caption(f"Cached · next update in {_secs//60}m {_secs%60}s")
+        if "seis_rt_raw" in st.session_state:
+            if st.sidebar.button("▶ FAWP on live data", key="rt_fawp", use_container_width=True):
+                _rtf = st.session_state["seis_rt_raw"]
+                _rtd2 = _build_daily_series(_rtf, variable)
+                with st.spinner("Running FAWP on live data…"):
+                    _rtr = _run_seismic_fawp(_rtd2, horizon_days, tau_max, n_null, epsilon)
+                    st.session_state.update({
+                        "seis_result": _rtr, "seis_raw": _rtf, "seis_daily": _rtd2,
+                        "seis_epsilon": epsilon, "seis_region": f"Live ({region_name})",
+                        "seis_var": variable, "seis_start": str(_rtf["date"].min())[:10],
+                        "seis_end": str(_rtf["date"].max())[:10]})
+                st.rerun()
     _render_seis_wl()
 
 # ── Run scan ───────────────────────────────────────────────────────────────────
@@ -580,7 +608,218 @@ if "seis_result" in st.session_state:
     _kpi(sc4, f"{len(_raw_view) / max(1,(pd.Timestamp(end_date)-pd.Timestamp(start_date)).days):.1f}/day",
          "Avg events/day (filtered)")
 
+    # Focal depth profile
+    st.markdown('<div class="seis-sec">Focal depth profile</div>', unsafe_allow_html=True)
+    if len(_raw_view) >= 10 and _raw_view["depth"].notna().sum() >= 10:
+        try:
+            import matplotlib.pyplot as _plt_dp, numpy as _np_dp, io as _io_dp
+            _depths = _raw_view["depth"].dropna().values
+            _mags_dp = _raw_view.loc[_raw_view["depth"].notna(), "magnitude"].values
+            _fig_dp, (_ax_d1, _ax_d2) = _plt_dp.subplots(1, 2, figsize=(9, 3.5),
+                                                            facecolor="#0D1729")
+            for _axd in (_ax_d1, _ax_d2):
+                _axd.set_facecolor("#07101E")
+                for _sp in _axd.spines.values(): _sp.set_edgecolor("#3A4E70")
+                _axd.tick_params(colors="#7A90B8", labelsize=8)
+            _bins_d = _np_dp.linspace(0, min(_depths.max(), 700), 30)
+            _ax_d1.hist(_depths, bins=_bins_d, color="#4A7FCC", alpha=0.7, edgecolor="none")
+            _ax_d1.axvline(70,  color="#D4AF37", ls="--", lw=1, label="Crust/mantle (70km)")
+            _ax_d1.axvline(300, color="#C0111A", ls="--", lw=1, label="Deep slab (300km)")
+            _ax_d1.set_xlabel("Depth (km)", fontsize=8, color="#7A90B8")
+            _ax_d1.set_ylabel("Event count", fontsize=8, color="#7A90B8")
+            _ax_d1.set_title("Depth histogram", color="#D4AF37", fontsize=9, fontweight="bold")
+            _ax_d1.legend(fontsize=7, framealpha=0.2)
+            _sc_d = _ax_d2.scatter(_depths, _mags_dp, c=_mags_dp, cmap="YlOrRd",
+                                    s=15, alpha=0.6, linewidths=0)
+            _plt_dp.colorbar(_sc_d, ax=_ax_d2, label="Magnitude").ax.tick_params(
+                colors="#7A90B8", labelsize=7)
+            _ax_d2.set_xlabel("Depth (km)", fontsize=8, color="#7A90B8")
+            _ax_d2.set_ylabel("Magnitude", fontsize=8, color="#7A90B8")
+            _shallow_d  = int((_depths < 70).sum())
+            _inter_d    = int(((_depths >= 70) & (_depths < 300)).sum())
+            _deep_d     = int((_depths >= 300).sum())
+            _dom_d      = max([("shallow", _shallow_d), ("intermediate", _inter_d),
+                               ("deep", _deep_d)], key=lambda x: x[1])[0]
+            _ax_d2.set_title(f"Depth vs Magnitude (dominant: {_dom_d})",
+                             color="#D4AF37", fontsize=8, fontweight="bold")
+            _fig_dp.tight_layout()
+            st.pyplot(_fig_dp, use_container_width=True)
+            _dp_buf = _io_dp.BytesIO()
+            _fig_dp.savefig(_dp_buf, format="png", dpi=150, bbox_inches="tight")
+            _plt_dp.close(_fig_dp); _dp_buf.seek(0)
+            st.download_button("⬇ Depth profile PNG", data=_dp_buf,
+                               file_name=f"depth_{region_lbl.replace(' ','_')}.png",
+                               mime="image/png", key="dp_dl")
+        except Exception as _dpe:
+            st.caption(f"Depth profile unavailable: {_dpe}")
+    else:
+        st.caption("Need ≥10 events with depth data.")
+
+    # Gutenberg-Richter b-value analysis
+    st.markdown('<div class="seis-sec">Gutenberg-Richter Analysis</div>', unsafe_allow_html=True)
+    if len(_raw_view) >= 20:
+        try:
+            import numpy as _np_gr, matplotlib.pyplot as _plt_gr, io as _io_gr
+            _mags = _raw_view["magnitude"].dropna().values
+            _mc   = float(_mags.min())
+            _b    = 1.0 / (_np_gr.log(10) * (_np_gr.mean(_mags) - _mc + 0.05))
+            _a    = _np_gr.log10(len(_mags)) + _b * _mc
+            _gc1, _gc2, _gc3 = st.columns(3)
+            _kpi(_gc1, f"{_b:.3f}", "b-value (Aki MLE)",
+                 "#1DB954" if 0.6 <= _b <= 1.4 else "#C0111A")
+            _kpi(_gc2, f"{_a:.2f}", "a-value")
+            _kpi(_gc3, f"M≥{_mc:.1f}", "Completeness Mc")
+            if _b < 0.6:
+                st.warning(f"⚠️ b={_b:.3f} — low, may indicate stress accumulation.")
+            elif _b > 1.4:
+                st.info(f"ℹ️ b={_b:.3f} — high, typical of volcanic/aftershock regions.")
+            else:
+                st.success(f"✅ b={_b:.3f} within typical tectonic range (0.6–1.4).")
+            _mb = _np_gr.arange(_mc, _mags.max() + 0.5, 0.5)
+            _cc = [_np_gr.sum(_mags >= m) for m in _mb]
+            _fg, _ax = _plt_gr.subplots(figsize=(7, 3), facecolor="#0D1729")
+            _ax.set_facecolor("#07101E")
+            _ax.scatter(_mb, _np_gr.log10(_np_gr.maximum(_cc, 1)),
+                        color="#D4AF37", s=25, zorder=3, label="Observed")
+            _ax.plot(_mb, _a - _b * _mb, color="#4A7FCC", lw=1.5, ls="--",
+                     label=f"G-R fit (b={_b:.2f})")
+            for _sp in _ax.spines.values(): _sp.set_edgecolor("#3A4E70")
+            _ax.tick_params(colors="#7A90B8", labelsize=8)
+            _ax.set_xlabel("Magnitude", fontsize=8, color="#7A90B8")
+            _ax.set_ylabel("log₁₀(N ≥ M)", fontsize=8, color="#7A90B8")
+            _ax.set_title("Gutenberg-Richter", color="#D4AF37", fontsize=9, fontweight="bold")
+            _ax.legend(fontsize=8, framealpha=0.2)
+            _fg.tight_layout()
+            st.pyplot(_fg, use_container_width=True)
+            _grbuf = _io_gr.BytesIO()
+            _fg.savefig(_grbuf, format="png", dpi=150, bbox_inches="tight")
+            _plt_gr.close(_fg); _grbuf.seek(0)
+            st.download_button("⬇ Download G-R PNG", data=_grbuf,
+                               file_name=f"gr_{region_lbl.replace(' ','_')}.png",
+                               mime="image/png", key="gr_dl")
+        except Exception as _gre:
+            st.caption(f"G-R analysis unavailable: {_gre}")
+    else:
+        st.caption("Need ≥20 events for G-R analysis.")
+
     # Download
+    with st.expander("🔬 Aftershock sequence analysis"):
+        st.caption("Detects mainshock-aftershock patterns via inter-event time distribution (Omori-Utsu proxy).")
+        if len(_raw_view) >= 20:
+            try:
+                import numpy as _np_as, matplotlib.pyplot as _plt_as, io as _io_as
+                _t_as = _raw_view.sort_values("time")["time"].values
+                _t_s  = _np_as.array([_np_as.datetime64(t, "s").astype(float) for t in _t_as])
+                _iet  = _np_as.diff(_t_s) / 3600
+                _iet  = _iet[_iet > 0]
+                if len(_iet) >= 10:
+                    _log_iet = _np_as.log10(_iet)
+                    _hv, _hb = _np_as.histogram(_log_iet, bins=20)
+                    _bc = (_hb[:-1] + _hb[1:]) / 2
+                    _mk = _hv > 0
+                    if _mk.sum() >= 4:
+                        _slope_as = _np_as.polyfit(_bc[_mk], _np_as.log10(_hv[_mk]+1), 1)[0]
+                        _is_as = _slope_as < -0.5
+                        _lbl_as = "🔴 Aftershock sequence (Omori decay)" if _is_as else "✅ Background seismicity"
+                        st.markdown(f"**{_lbl_as}**")
+                        st.caption(f"Log-log IET slope: {_slope_as:.3f} (threshold: −0.5)")
+                        _fig_as, _ax_as = _plt_as.subplots(figsize=(7, 3), facecolor="#0D1729")
+                        _ax_as.set_facecolor("#07101E")
+                        for _sp in _ax_as.spines.values(): _sp.set_edgecolor("#3A4E70")
+                        _ax_as.tick_params(colors="#7A90B8", labelsize=8)
+                        _bw = _bc[1]-_bc[0] if len(_bc)>1 else 0.1
+                        _ax_as.bar(_bc, _hv, width=_bw,
+                                   color="#C0111A" if _is_as else "#1DB954", alpha=0.7)
+                        _xf = _np_as.linspace(_bc[_mk].min(), _bc[_mk].max(), 40)
+                        _c0 = _np_as.polyfit(_bc[_mk], _np_as.log10(_hv[_mk]+1), 1)[1]
+                        _yf = _np_as.maximum(10**(_c0 + _slope_as*_xf) - 1, 0)
+                        _ax_as.plot(_xf, _yf, color="#D4AF37", lw=1.5, ls="--",
+                                    label=f"slope={_slope_as:.2f}")
+                        _ax_as.set_xlabel("log₁₀(inter-event time, hours)", fontsize=8, color="#7A90B8")
+                        _ax_as.set_ylabel("Count", fontsize=8, color="#7A90B8")
+                        _ax_as.set_title("Inter-event time distribution (Omori-Utsu proxy)",
+                                         color="#D4AF37", fontsize=9)
+                        _ax_as.legend(fontsize=7, framealpha=0.2)
+                        _fig_as.tight_layout()
+                        st.pyplot(_fig_as, use_container_width=True)
+                        _plt_as.close(_fig_as)
+            except Exception as _ase:
+                st.caption(f"Aftershock analysis failed: {_ase}")
+        else:
+            st.caption("Need ≥20 events for aftershock analysis.")
+
+    with st.expander("🌐 Global batch scan — all regions"):
+        st.caption("Scans all 10 presets and shows a summary table.")
+        _bvar  = st.selectbox("Variable", list(VARIABLES.keys()),
+                              format_func=lambda k: VARIABLES[k], key="batch_var")
+        _bst   = st.text_input("Start", "2015-01-01", key="batch_st")
+        _ben   = st.text_input("End",   "2024-12-31", key="batch_en")
+        _bmag  = st.slider("Min magnitude", 1.0, 5.0, 2.0, 0.5, key="batch_mag")
+        if st.button("🌐 Run batch scan", key="run_batch", type="primary",
+                     use_container_width=True):
+            _brows = []
+            _bprog = st.progress(0.0)
+            _brl   = [(n, c) for n, c in REGIONS.items() if c]
+            for _bi, (_bn, _bc) in enumerate(_brl):
+                _bprog.progress((_bi + 1) / len(_brl), f"{_bn}…")
+                try:
+                    _brd  = _fetch_usgs(_bc["minlat"], _bc["maxlat"],
+                                        _bc["minlon"], _bc["maxlon"],
+                                        _bst, _ben, _bmag)
+                    _bdd  = _build_daily_series(_brd, _bvar)
+                    _brr  = _run_seismic_fawp(_bdd, 7, 30, 20, 0.01)
+                    _brows.append({
+                        "Region":   _bn,
+                        "FAWP":     "🔴 YES" if _brr.fawp_found else "—",
+                        "Peak gap": f"{_brr.peak_gap_bits:.4f}",
+                        "ODW":      f"τ{_brr.odw_start}–{_brr.odw_end}" if _brr.fawp_found else "—",
+                        "Events":   len(_brd),
+                    })
+                except Exception as _berr:
+                    _brows.append({"Region": _bn, "FAWP": "ERR",
+                                   "Peak gap": str(_berr)[:40], "ODW": "—", "Events": 0})
+            _bprog.empty()
+            import pandas as _pd_b
+            _bdf = _pd_b.DataFrame(_brows).sort_values("Peak gap", ascending=False)
+            st.dataframe(_bdf, use_container_width=True, hide_index=True)
+            st.download_button("⬇ Download batch CSV", data=_bdf.to_csv(index=False).encode(),
+                               file_name="fawp_batch.csv", mime="text/csv", key="batch_dl")
+
+            # World map overlay of batch results
+            try:
+                import folium, streamlit.components.v1 as _comp
+                _wm = folium.Map(location=[20, 0], zoom_start=2, tiles="CartoDB dark_matter")
+                _REGION_CENTERS = {
+                    "California (San Andreas)":  [37.0, -119.0],
+                    "Japan":                     [38.0, 137.0],
+                    "Turkey (Anatolian Fault)":  [39.0, 35.0],
+                    "Chile":                     [-36.0, -71.0],
+                    "New Zealand":               [-41.0, 172.0],
+                    "Indonesia / Sumatra":       [-2.0, 118.0],
+                    "Alaska":                    [62.0, -155.0],
+                    "Greece / Aegean":           [38.5, 24.0],
+                    "Italy (Apennines)":         [42.0, 13.0],
+                    "Mexico (Pacific coast)":    [18.0, -96.0],
+                }
+                for _, _row in _bdf.iterrows():
+                    _ctr = _REGION_CENTERS.get(_row["Region"])
+                    if not _ctr: continue
+                    _is_fawp = "🔴" in str(_row["FAWP"])
+                    _gap_f = 0.0
+                    try: _gap_f = float(_row["Peak gap"])
+                    except Exception: pass
+                    folium.CircleMarker(
+                        location=_ctr,
+                        radius=max(8, min(25, _gap_f * 60)),
+                        color="#C0111A" if _is_fawp else "#1DB954",
+                        fill=True, fill_color="#C0111A" if _is_fawp else "#1DB954",
+                        fill_opacity=0.7, weight=2,
+                        tooltip=f"{_row['Region']}: FAWP={'YES' if _is_fawp else 'NO'} · gap={_gap_f:.4f}b",
+                    ).add_to(_wm)
+                _comp.html(_wm._repr_html_(), height=420)
+            except ImportError:
+                st.caption("Install folium for world map: pip install folium")
+
     st.markdown('<div class="seis-sec">Export</div>', unsafe_allow_html=True)
     import json as _json
     export = {
