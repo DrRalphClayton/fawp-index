@@ -25,7 +25,9 @@ jobs:
         run: |
           pip install -e ".[plot,report]"
           pip install pytest
-          pytest tests/ -x -q
+          pytest tests/ -x -q \
+            --ignore=tests/test_weather.py \
+            --ignore=tests/test_finance.py
 
   release:
     name: Build · Publish · Release

@@ -1,7 +1,6 @@
-fawp-index
 matplotlib
 pandas
 numpy
-sklearn
+scikit-learn
 mkdocs>=1.5
 mkdocs-material>=9.0
