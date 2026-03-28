@@ -1,9 +1,11 @@
 site_name: fawp-index
 site_description: FAWP Alpha Index — Information-Control Exclusion Principle detector
-site_url: https://drralphclayton.github.io/fawp-index/
+site_url: https://fawp-index.readthedocs.io/en/latest/
 repo_url: https://github.com/DrRalphClayton/fawp-index
 repo_name: DrRalphClayton/fawp-index
 copyright: Ralph Clayton (2026) · doi:10.5281/zenodo.18673949
+
+docs_dir: docs
 
 theme:
   name: material
@@ -24,19 +26,19 @@ theme:
     repo: fontawesome/brands/github
 
 nav:
-  - Home: README.md
-  - Getting started: docs/quickstart.md
+  - Home: index.md
+  - Getting started: quickstart.md
   - Scanners:
-    - Finance: docs/market.md
-    - Weather: docs/weather.md
-    - Alerts: docs/alerts.md
+      - Finance: market.md
+      - Weather: weather.md
+      - Alerts: alerts.md
   - API reference:
-    - Examples: docs/examples.md
-    - Dashboard: docs/dashboard.md
-    - Watchlist: docs/watchlist.md
-    - Significance: docs/significance.md
-    - Benchmarks: docs/benchmarks.md
-  - Changelog: CHANGELOG.md
+      - Examples: examples.md
+      - Dashboard: dashboard.md
+      - Watchlist: watchlist.md
+      - Significance: significance.md
+      - Benchmarks: benchmarks.md
+  - Changelog: release_v0_23_0.md
 
 plugins:
   - search
@@ -58,8 +60,6 @@ extra:
       link: https://github.com/DrRalphClayton/fawp-index
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/fawp-index/
-  analytics:
-    provider: google
 
 extra_css:
-  - docs/assets/fawp.css
+  - assets/fawp.css

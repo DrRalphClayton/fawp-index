@@ -439,6 +439,9 @@ with st.sidebar:
     _rt_on = st.sidebar.toggle("⚡ Live 30-day feed", key="seis_realtime",
                                help="USGS real-time, refreshes every 5 min")
     if _rt_on:
+        st.sidebar.slider("🔔 Alert threshold (M≥)", 3.0, 8.0, 5.0, 0.5,
+                          key="seis_alert_mag",
+                          help="Toast alert when a new event ≥ this magnitude appears.")
         import time as _trt
         _rt_age = _trt.time() - st.session_state.get("seis_rt_ts", 0)
         if _rt_age > 300 or "seis_rt_raw" not in st.session_state:
@@ -466,6 +469,27 @@ with st.sidebar:
                         st.session_state["seis_rt_raw"] = pd.DataFrame(_rtrows)
                         st.session_state["seis_rt_ts"]  = _trt.time()
                         st.sidebar.success(f"✅ {len(_rtrows)} live events")
+
+                        # ── Real-time magnitude alerts ──────────────────────────────────
+                        _alert_thresh = st.session_state.get("seis_alert_mag", 5.0)
+                        _prev_max_t   = st.session_state.get("seis_rt_prev_max_t", pd.Timestamp("1970-01-01"))
+                        _new_df       = pd.DataFrame(_rtrows)
+                        # Find events NEW since last fetch AND above threshold
+                        _new_events   = _new_df[
+                            (_new_df["time"] > _prev_max_t) &
+                            (_new_df["magnitude"] >= _alert_thresh)
+                        ].sort_values("magnitude", ascending=False)
+                        if len(_new_events) > 0:
+                            for _, _ev in _new_events.head(3).iterrows():
+                                _icon = "🔴" if _ev["magnitude"] >= 6.0 else "🟠" if _ev["magnitude"] >= 5.0 else "🟡"
+                                st.toast(
+                                    f"{_icon} M{_ev['magnitude']:.1f} — {region_name}\n"
+                                    f"Depth {_ev['depth']:.0f}km · {str(_ev['time'])[:16]}",
+                                    icon=_icon,
+                                )
+                        # Update last-seen timestamp
+                        if _rtrows:
+                            st.session_state["seis_rt_prev_max_t"] = _new_df["time"].max()
                 except Exception as _rte2:
                     st.sidebar.error(f"Real-time fetch failed: {_rte2}")
         else:
