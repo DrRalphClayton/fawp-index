@@ -93,6 +93,7 @@ VARIABLES = {
     "mean_magnitude":    "Mean magnitude per day",
     "seismic_energy":    "Seismic energy release (J/day)",
     "depth_mean":        "Mean focal depth (km/day)",
+    "energy_flux":       "Cumulative energy flux (J/day, 30d MA)",
 }
 
 
@@ -159,6 +160,13 @@ def _build_daily_series(raw_df, variable):
         series = grp["magnitude"].max().rename("value")
     elif variable == "mean_magnitude":
         series = grp["magnitude"].mean().rename("value")
+    elif variable == "energy_flux":
+        # 30-day rolling cumulative seismic energy flux
+        df["_e"] = 10 ** (1.5 * df["magnitude"] + 4.8)
+        _raw_ef = df.groupby("date")["_e"].sum().reindex(date_range, fill_value=0.0)
+        daily = _raw_ef.rolling(30, min_periods=1).mean()
+        return daily
+
     elif variable == "seismic_energy":
         # E = 10^(1.5*M + 4.8)  (Gutenberg–Richter energy relation, Joules)
         def energy(mags):
@@ -171,7 +179,7 @@ def _build_daily_series(raw_df, variable):
 
     # Reindex to fill missing days with 0 (no events = 0 count / 0 energy)
     date_range = pd.date_range(raw_df["date"].min(), raw_df["date"].max(), freq="D")
-    fill_val = 0.0 if variable in ("daily_count", "seismic_energy") else np.nan
+    fill_val = 0.0 if variable in ("daily_count", "seismic_energy", "energy_flux") else np.nan
     series = series.reindex(date_range, fill_value=fill_val)
     series = series.interpolate(method="linear", limit=7)
     return series
@@ -359,9 +367,38 @@ st.markdown(
 # ── Sidebar controls ───────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("### 🌍 Region")
-    region_name = st.selectbox("Region preset", list(REGIONS.keys()))
+    # Custom region presets — save/recall bounding boxes
+    _saved_presets = st.session_state.get("seis_saved_presets", {})
+    _all_region_options = list(REGIONS.keys()) + list(_saved_presets.keys())
+    region_name = st.selectbox("Region preset", _all_region_options,
+                               help="Built-in or saved custom regions")
+    _sp_col1, _sp_col2 = st.columns([1,1])
+    with _sp_col1:
+        _sp_name = st.text_input("Save current box as", placeholder="My Region", key="sp_name")
+    with _sp_col2:
+        if st.button("💾 Save", key="sp_save", use_container_width=True):
+            if _sp_name.strip():
+                _saved_presets[_sp_name.strip()] = {
+                    "minlat": float(st.session_state.get("seis_minlat", -90)),
+                    "maxlat": float(st.session_state.get("seis_maxlat", 90)),
+                    "minlon": float(st.session_state.get("seis_minlon", -180)),
+                    "maxlon": float(st.session_state.get("seis_maxlon", 180)),
+                }
+                st.session_state["seis_saved_presets"] = _saved_presets
+                st.success(f"Saved: {_sp_name.strip()}")
+            else:
+                st.warning("Enter a name first.")
+    if _saved_presets:
+        _del_name = st.selectbox("Delete saved preset", ["—"] + list(_saved_presets.keys()),
+                                 key="sp_del")
+        if _del_name != "—" and st.button("🗑 Delete", key="sp_del_btn"):
+            _saved_presets.pop(_del_name, None)
+            st.session_state["seis_saved_presets"] = _saved_presets
+            st.rerun()
 
-    region = REGIONS[region_name]
+    region = REGIONS.get(region_name) or st.session_state.get("seis_saved_presets", {}).get(region_name)
+    if region is None:
+        region = list(REGIONS.values())[0]  # fallback
     if region_name == "Custom bounding box":
         col_a, col_b = st.columns(2)
         with col_a:

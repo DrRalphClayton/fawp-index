@@ -4,11 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fawp-index"
-version = "2.5.0"
+version = "2.8.0"
 description = "FAWP Alpha Index — Information-Control Exclusion Principle detector"
 readme = "README.md"
-license = "MIT"
-license-files = ["LICENSE.txt"]
+license = { file = "LICENSE.txt" }
 authors = [{ name = "Ralph Clayton" }]
 requires-python = ">=3.9"
 keywords = [
@@ -152,6 +151,7 @@ ignore = [
     "UP006",  # use built-in list/dict/tuple — py3.9 compat but pervasive in codebase
     "UP007",  # use X|Y for union types — py3.9 compat
     "UP035",  # deprecated typing imports — keeping for py3.9 compat
+    "I001",   # import sort order — pre-existing throughout scientific codebase
 ]
 [tool.ruff.lint.per-file-ignores]
 "fawp_index/__init__.py" = ["F401"]

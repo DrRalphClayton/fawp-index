@@ -1,0 +1,70 @@
+name: Zenodo Sync
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+
+jobs:
+  zenodo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Create Zenodo deposition draft
+        env:
+          ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}
+        run: |
+          python - << 'PYEOF'
+          import os, json, urllib.request, tomllib, re
+
+          token = os.environ.get("ZENODO_TOKEN", "")
+          if not token:
+              print("ZENODO_TOKEN not set — skipping Zenodo sync")
+              exit(0)
+
+          p = tomllib.loads(open("pyproject.toml").read())
+          version = p["project"]["version"]
+          description = p["project"]["description"]
+          authors = p["project"]["authors"]
+
+          # Read tag from GITHUB_REF
+          tag = os.environ.get("GITHUB_REF", "").replace("refs/tags/", "")
+          print(f"Syncing Zenodo for {tag} (v{version})")
+
+          metadata = {
+              "metadata": {
+                  "title":       f"fawp-index v{version}",
+                  "description": description,
+                  "upload_type": "software",
+                  "version":     version,
+                  "creators":    [{"name": a.get("name", "Ralph Clayton")} for a in authors],
+                  "license":     "MIT",
+                  "keywords":    ["FAWP", "information-theory", "agency-horizon",
+                                  "volumetric-time-model", "python"],
+                  "related_identifiers": [
+                      {"identifier": "https://github.com/DrRalphClayton/fawp-index",
+                       "relation": "isSupplementTo", "scheme": "url"},
+                      {"identifier": "10.5281/zenodo.18673949",
+                       "relation": "isVersionOf", "scheme": "doi"},
+                  ],
+              }
+          }
+
+          req = urllib.request.Request(
+              "https://zenodo.org/api/deposit/depositions",
+              data=json.dumps(metadata).encode(),
+              headers={"Content-Type": "application/json",
+                       "Authorization": f"Bearer {token}"},
+              method="POST",
+          )
+          with urllib.request.urlopen(req, timeout=15) as r:
+              result = json.loads(r.read())
+
+          dep_id = result.get("id", "?")
+          edit_url = result.get("links", {}).get("html", "")
+          print(f"Zenodo deposition draft created: {dep_id}")
+          print(f"Review and publish at: {edit_url}")
+          PYEOF

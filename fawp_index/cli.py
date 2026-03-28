@@ -390,6 +390,57 @@ def _build_parser():
     p.set_defaults(func=cmd_verify)
 
     # grid
+    # sweep
+    p = sub.add_parser("sweep", help="Sweep parameters and show FAWP detection sensitivity")
+    p.add_argument("--data",    required=True, help="Path to scan JSON with pred_mi/steer_mi")
+    p.add_argument("--epsilon", default="0.005,0.01,0.02",
+                   help="Comma-separated epsilon values (default: 0.005,0.01,0.02)")
+    p.add_argument("--tau-max", default="20,30,40", dest="tau_max",
+                   help="Comma-separated tau_max values (default: 20,30,40)")
+    p.add_argument("--n-null",  default="0,50,100", dest="n_null",
+                   help="Comma-separated n_null values (default: 0,50,100)")
+    p.add_argument("--out",     default=None)
+    p.set_defaults(func=cmd_sweep)
+
+    # export
+    p = sub.add_parser("export", help="Export a FAWP result JSON to csv/html/pdf")
+    p.add_argument("--data",   required=True, help="Path to result .json file")
+    p.add_argument("--out",    default=None,  help="Output path (auto-detected from format)")
+    p.add_argument("--format", default=None,  choices=["csv","html","pdf"],
+                   help="Output format (default: inferred from --out extension)")
+    p.add_argument("--title",  default=None)
+    p.add_argument("--mode",   default="report", choices=["report","lab"])
+    p.set_defaults(func=cmd_export)
+
+    # compare
+    p = sub.add_parser("compare", help="Compare FAWP signals for two assets or weather locations")
+    p.add_argument("--mode",    default="finance", choices=["finance","weather"])
+    # finance mode
+    p.add_argument("--a",       default="SPY",  help="First ticker")
+    p.add_argument("--b",       default="QQQ",  help="Second ticker")
+    p.add_argument("--period",  default="2y")
+    p.add_argument("--window",  type=int,   default=252)
+    p.add_argument("--step",    type=int,   default=21)
+    # weather mode
+    p.add_argument("--lat-a",   type=float, default=51.5,  dest="lat_a")
+    p.add_argument("--lon-a",   type=float, default=-0.1,  dest="lon_a")
+    p.add_argument("--lat-b",   type=float, default=48.9,  dest="lat_b")
+    p.add_argument("--lon-b",   type=float, default=2.4,   dest="lon_b")
+    p.add_argument("--variable",default="temperature_2m")
+    p.add_argument("--start",   default="2010-01-01")
+    p.add_argument("--end",     default="2024-12-31")
+    p.add_argument("--horizon", type=int,   default=7)
+    # shared
+    p.add_argument("--epsilon", type=float, default=0.01)
+    p.add_argument("--n-null",  type=int,   default=50,   dest="n_null")
+    p.add_argument("--out",     default=None)
+    p.set_defaults(func=cmd_compare)
+
+    # notebook
+    p = sub.add_parser("notebook", help="Open the E9 replication notebook in Jupyter")
+    p.add_argument("--lab", action="store_true", help="Open in JupyterLab instead of Jupyter Notebook")
+    p.set_defaults(func=cmd_notebook)
+
     # status
     p = sub.add_parser("status", help="Print live project status and calibration checks")
     p.set_defaults(func=cmd_status)
@@ -539,17 +590,20 @@ def cmd_timing(_args):
     print("=" * 58)
     print(f"  {'Detector':<28} {'Leads cliff (u)':<16} {'Leads cliff (ξ)':<16} {'Err vs ODW'}")
     print(f"  {'-'*28} {'-'*16} {'-'*16} {'-'*12}")
+    _g_u  = f"+{fi.E97_MEAN_LEAD_GAP2_TO_CLIFF_U:.4f}"
+    _g_xi = f"+{fi.E97_MEAN_LEAD_GAP2_TO_CLIFF_XI:.4f}"
+    _a2_u = f"+{fi.E97_MEAN_LEAD_ALPHA2_TO_CLIFF_U:.4f}"
+    _a2_xi= f"+{fi.E97_MEAN_LEAD_ALPHA2_TO_CLIFF_XI:.4f}"
+    _a_u  = f"{fi.E97_MEAN_LEAD_ALPHA_TO_CLIFF_U:.4f}"
+    _a_xi = f"{fi.E97_MEAN_LEAD_ALPHA_TO_CLIFF_XI:.4f}"
     print(f"  {'gap2 peak (raw lever. gap)':<28} "
-          f"{'+{:.4f}'.format(fi.E97_MEAN_LEAD_GAP2_TO_CLIFF_U):<16} "
-          f"{'+{:.4f}'.format(fi.E97_MEAN_LEAD_GAP2_TO_CLIFF_XI):<16} "
+          f"{_g_u:<16} {_g_xi:<16} "
           f"~{fi.E97_MEAN_ABS_ERR_GAP2_VS_ODW_START:.1f} delays  ✅ BEST")
     print(f"  {'α₂  (SPHERE-16)':<28} "
-          f"{'+{:.4f}'.format(fi.E97_MEAN_LEAD_ALPHA2_TO_CLIFF_U):<16} "
-          f"{'+{:.4f}'.format(fi.E97_MEAN_LEAD_ALPHA2_TO_CLIFF_XI):<16} "
+          f"{_a2_u:<16} {_a2_xi:<16} "
           f"~{fi.E97_MEAN_ABS_ERR_ALPHA2_VS_ODW_START:.1f} delays  ✅ Good")
     print(f"  {'α   (baseline, old)':<28} "
-          f"{'{:.4f}'.format(fi.E97_MEAN_LEAD_ALPHA_TO_CLIFF_U):<16} "
-          f"{'{:.4f}'.format(fi.E97_MEAN_LEAD_ALPHA_TO_CLIFF_XI):<16} "
+          f"{_a_u:<16} {_a_xi:<16} "
           f"~{fi.E97_MEAN_ABS_ERR_ALPHA_VS_ODW_START:.1f} delays  ❌ Lags")
     print()
     print(f"  Total runs : {fi.E97_N_RUNS}")
@@ -884,6 +938,13 @@ def cmd_status(_args):
 
     print()
     print(f"  Calibration : {'✅ PASS' if all_ok else '❌ FAIL'}")
+    print()
+    print("  E9.7 detector timing (4,244-run sweep):")
+    print(f"    gap2 peak  leads cliff by  +{fi.E97_MEAN_LEAD_GAP2_TO_CLIFF_U:.4f} delays  ✅ BEST")
+    print(f"    α₂         leads cliff by  +{fi.E97_MEAN_LEAD_ALPHA2_TO_CLIFF_U:.4f} delays  ✅ Good")
+    print(f"    α baseline lags  cliff by   {fi.E97_MEAN_LEAD_ALPHA_TO_CLIFF_U:.4f} delays  ❌ Lags")
+    print(f"    ODW localisation error: ~{fi.E97_MEAN_ABS_ERR_GAP2_VS_ODW_START:.1f} delays")
+    print()
     print(f"  Docs        : https://fawp-index.readthedocs.io")
     print(f"  GitHub      : https://github.com/DrRalphClayton/fawp-index")
     print(f"  Live demo   : https://fawp-scanner.info")
@@ -941,7 +1002,225 @@ def cmd_backtest(args):
     out_df.to_csv(out, index=False)
     print(f"  Saved → {out}")
 
+
+def cmd_notebook(args):
+    """Open the E9 replication notebook in Jupyter."""
+    import subprocess, sys, os
+    from pathlib import Path
+
+    # Find the notebook — prefer repo clone, fall back to installed data path
+    candidates = [
+        Path(__file__).parent.parent / "notebooks" / "E9_full_replication.ipynb",
+        Path(sys.prefix) / "share" / "fawp-index" / "notebooks" / "E9_full_replication.ipynb",
+    ]
+    nb_path = next((p for p in candidates if p.exists()), None)
+
+    if nb_path is None:
+        print("Notebook not found. Clone the repo:")
+        print("  git clone https://github.com/DrRalphClayton/fawp-index")
+        print("  cd fawp-index && fawp-index notebook")
+        return
+
+    print(f"Opening: {nb_path}")
+
+    if args.lab:
+        cmd = [sys.executable, "-m", "jupyter", "lab", str(nb_path)]
+        label = "JupyterLab"
+    else:
+        cmd = [sys.executable, "-m", "jupyter", "notebook", str(nb_path)]
+        label = "Jupyter Notebook"
+
+    print(f"Starting {label}…")
+    try:
+        subprocess.run(cmd, check=True)
+    except FileNotFoundError:
+        print(f"Jupyter not installed. Install it:")
+        print("  pip install jupyter")
+    except KeyboardInterrupt:
+        print("\nNotebook server stopped.")
+
+
+def cmd_compare(args):
+    """Compare FAWP signals for two assets or two weather locations side by side."""
+    import pandas as pd
+
+    if args.mode == "finance":
+        try:
+            import yfinance as yf
+            print(f"FAWP Comparison: {args.a} vs {args.b}  [{args.period}]")
+            print()
+            from fawp_index.market import scan_fawp_market
+            results = {}
+            for ticker in [args.a, args.b]:
+                df = yf.download(ticker, period=args.period, auto_adjust=True, progress=False)
+                if df.empty:
+                    print(f"  {ticker}: no data")
+                    continue
+                r = scan_fawp_market(df, ticker=ticker, window=args.window,
+                                     step=args.step, epsilon=args.epsilon,
+                                     n_null=args.n_null, verbose=False)
+                results[ticker] = r
+        except ImportError:
+            print("yfinance required: pip install yfinance")
+            return
+    elif args.mode == "weather":
+        from fawp_index.weather import fawp_from_open_meteo
+        print(f"FAWP Comparison: ({args.lat_a},{args.lon_a}) vs ({args.lat_b},{args.lon_b})")
+        print(f"  Variable : {args.variable}  Period: {args.start} → {args.end}")
+        print()
+        results = {}
+        for name, lat, lon in [("A", args.lat_a, args.lon_a), ("B", args.lat_b, args.lon_b)]:
+            r = fawp_from_open_meteo(latitude=lat, longitude=lon, variable=args.variable,
+                                     start_date=args.start, end_date=args.end,
+                                     horizon_days=args.horizon, epsilon=args.epsilon,
+                                     n_null=args.n_null)
+            results[f"Location {name} ({lat:.2f},{lon:.2f})"] = r
+
+    # Print comparison table
+    print(f"{'Label':<28} {'FAWP':>6} {'Peak gap':>10} {'τ⁺ₕ':>5} {'τf':>5} {'n obs':>7}")
+    print("-" * 62)
+    for label, r in results.items():
+        fawp = "🔴 YES" if getattr(r, "fawp_found", False) or getattr(r, "in_fawp", [False])[-1] else "—"
+        gap  = getattr(r, "peak_gap_bits", 0) or 0
+        tau_h = getattr(r.odw_result if hasattr(r,"odw_result") else r, "tau_h_plus", "—") or "—"
+        tau_f = getattr(r.odw_result if hasattr(r,"odw_result") else r, "tau_f",     "—") or "—"
+        n_obs = getattr(r, "n_obs", getattr(r, "n_windows", "—"))
+        print(f"{label:<28} {fawp:>6} {gap:>10.4f} {str(tau_h):>5} {str(tau_f):>5} {str(n_obs):>7}")
+    print()
+
+    if args.out:
+        rows = []
+        for label, r in results.items():
+            rows.append({"label": label,
+                         "fawp": bool(getattr(r,"fawp_found",False)),
+                         "peak_gap_bits": getattr(r,"peak_gap_bits",0) or 0})
+        pd.DataFrame(rows).to_csv(args.out, index=False)
+        print(f"Saved → {args.out}")
+
+
+def cmd_export(args):
+    """Export a FAWP result JSON to CSV, HTML, or PDF."""
+    import json
+    from pathlib import Path
+
+    with open(args.data) as f:
+        result = json.load(f)
+
+    fmt = args.format or Path(args.out).suffix.lstrip('.') if args.out else "csv"
+    out = args.out or args.data.replace(".json", f".{fmt}")
+
+    print(f"Exporting {args.data} → {out} [{fmt}]")
+
+    if fmt == "csv":
+        import pandas as pd
+        if isinstance(result, list):
+            df = pd.DataFrame(result)
+        elif "assets" in result:
+            df = pd.DataFrame(result["assets"])
+        else:
+            df = pd.DataFrame([result])
+        df.to_csv(out, index=False)
+
+    elif fmt == "html":
+        try:
+            from fawp_index.exports import odw_to_html
+            odw_to_html(result, out)
+        except Exception:
+            with open(out, "w") as fh:
+                fh.write(f"<pre>{json.dumps(result, indent=2)}</pre>")
+
+    elif fmt == "pdf":
+        from fawp_index.report import generate_report
+        generate_report(result=result, output_path=out,
+                        title=args.title or f"FAWP Export — {Path(args.data).stem}",
+                        mode=args.mode)
+    else:
+        print(f"Unknown format: {fmt}. Use csv, html, or pdf.")
+        return
+
+    print(f"Saved → {out}")
+
+
+def cmd_sweep(args):
+    """Sweep (epsilon, tau_max, n_null) and show FAWP detection sensitivity table."""
+    import json, itertools
+    import pandas as pd
+    from fawp_index.weather import _compute_weather_mi_curves
+    import numpy as np
+
+    print(f"FAWP parameter sweep on: {args.data}")
+    with open(args.data) as f:
+        d = json.load(f)
+
+    # Extract series — support weather or finance JSON
+    if "pred_mi" in d and "steer_mi" in d:
+        pred_mi  = np.array(d["pred_mi"],  dtype=float)
+        steer_mi = np.array(d["steer_mi"], dtype=float)
+        tau      = np.array(d.get("tau", list(range(1, len(pred_mi)+1))), dtype=int)
+        _has_raw = False
+    else:
+        print("JSON must contain pred_mi + steer_mi arrays (from a weather or finance scan).")
+        return
+
+    epsilons  = [float(e) for e in args.epsilon.split(",")]
+    tau_maxes = [int(t)   for t in args.tau_max.split(",")]
+    n_nulls   = [int(n)   for n in args.n_null.split(",")]
+
+    rows = []
+    from fawp_index.detection.odw import ODWDetector
+    from fawp_index.constants import PERSISTENCE_RULE_M, PERSISTENCE_RULE_N
+
+    for eps, tm, nn in itertools.product(epsilons, tau_maxes, n_nulls):
+        # Trim curves to tau_max
+        mask = tau <= tm
+        pm = pred_mi[mask]; sm = steer_mi[mask]; ta = tau[mask]
+        fail = np.zeros(len(ta))
+        det = ODWDetector(epsilon=eps, persistence_m=PERSISTENCE_RULE_M,
+                          persistence_n=PERSISTENCE_RULE_N)
+        try:
+            odw = det.detect(tau=ta, pred_corr=pm, steer_corr=sm, fail_rate=fail)
+            rows.append({
+                "epsilon": eps, "tau_max": tm, "n_null": nn,
+                "fawp":         odw.fawp_found,
+                "peak_gap":     round(odw.peak_gap_bits, 4),
+                "odw_start":    odw.odw_start,
+                "odw_end":      odw.odw_end,
+                "tau_h_plus":   odw.tau_h_plus,
+            })
+        except Exception as e:
+            rows.append({"epsilon": eps, "tau_max": tm, "n_null": nn,
+                         "fawp": None, "peak_gap": None, "error": str(e)})
+
+    df = pd.DataFrame(rows)
+    print(df.to_string(index=False))
+    out = args.out or args.data.replace(".json", "_sweep.csv")
+    df.to_csv(out, index=False)
+    n_fawp = int(df["fawp"].sum()) if "fawp" in df else 0
+    print(f"\n{n_fawp}/{len(df)} configurations detect FAWP")
+    print(f"Saved → {out}")
+
+def _check_version_update():
+    """Check if a newer version is available on PyPI and print a notice."""
+    try:
+        import urllib.request, json as _j
+        import fawp_index as fi
+        with urllib.request.urlopen(
+            "https://pypi.org/pypi/fawp-index/json", timeout=2
+        ) as r:
+            latest = _j.loads(r.read())["info"]["version"]
+        cur = fi.__version__
+        # Simple string compare — works for CalVer/SemVer alike
+        cur_t = tuple(int(x) for x in cur.split(".")[:3])
+        lat_t = tuple(int(x) for x in latest.split(".")[:3])
+        if lat_t > cur_t:
+            print(f"\u2b06  Update available: {cur} \u2192 {latest}")
+            print(f"   pip install --upgrade fawp-index\n")
+    except Exception:
+        pass
+
+
 def main():
+    _check_version_update()
     parser = _build_parser()
     args = parser.parse_args()
     args.func(args)

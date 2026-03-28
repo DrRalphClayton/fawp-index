@@ -1,5 +1,5 @@
 """
-FAWP Dashboard v2.5.0 — Streamlit app
+FAWP Dashboard v2.8.0 — Streamlit app
 ========================================
 Ralph Clayton (2026) · https://doi.org/10.5281/zenodo.18673949
 """
@@ -101,6 +101,23 @@ if _APP_MODE is None:
 """, unsafe_allow_html=True)
 
     # ── Live stats ─────────────────────────────────────────────
+    @st.cache_data(ttl=7200)
+    def _check_update():
+        try:
+            import urllib.request, json as _jv, fawp_index as _fiv
+            with urllib.request.urlopen(
+                "https://pypi.org/pypi/fawp-index/json", timeout=2
+            ) as r:
+                _lat = _jv.loads(r.read())["info"]["version"]
+            _cv  = tuple(int(x) for x in _fiv.__version__.split(".")[:3])
+            _ltv = tuple(int(x) for x in _lat.split(".")[:3])
+            return _lat if _ltv > _cv else None
+        except Exception:
+            return None
+    _upd = _check_update()
+    if _upd:
+        st.sidebar.info(f"\u2b06 v{_upd} available  \u2014  `pip install --upgrade fawp-index`")
+
     @st.cache_data(ttl=3600)
     def _pypi_downloads():
         try:
@@ -113,12 +130,31 @@ if _APP_MODE is None:
             return None
     _dl = _pypi_downloads()
     _dl_str = f"{_dl:,}/month" if _dl else "1.5k+/month"
+    @st.cache_data(ttl=300)
+    def _today_scan_count():
+        try:
+            _store_sc = get_store()
+            if hasattr(_store_sc, "_db") and _store_sc._db is not None:
+                import pandas as _pd_sc
+                _today_sc = _pd_sc.Timestamp.now().strftime("%Y-%m-%d")
+                _res_sc = (_store_sc._db.table("fawp_scan_history")
+                           .select("id", count="exact")
+                           .gte("scanned_at", _today_sc)
+                           .execute())
+                return _res_sc.count or 0
+        except Exception:
+            pass
+        return None
+    _sc = _today_scan_count()
+    _scan_count_str = f"{_sc:,}" if _sc is not None else "—"
     st.markdown(
         f'<div style="display:flex;justify-content:center;gap:2.5em;margin:-1em 0 2em;flex-wrap:wrap">'  
         f'<div style="text-align:center"><div style="font-size:1.5em;font-weight:800;color:#D4AF37">{_dl_str}</div>'
         f'<div style="font-size:.72em;color:#3A4E70;text-transform:uppercase">PyPI downloads</div></div>'
         f'<div style="text-align:center"><div style="font-size:1.5em;font-weight:800;color:#D4AF37">3</div>'
         f'<div style="font-size:.72em;color:#3A4E70;text-transform:uppercase">Live scanners</div></div>'
+        f'<div style="text-align:center"><div style="font-size:1.5em;font-weight:800;color:#D4AF37">{_scan_count_str}</div>'
+        f'<div style="font-size:.72em;color:#3A4E70;text-transform:uppercase">Scans run today</div></div>'
         f'<div style="text-align:center"><div style="font-size:1.5em;font-weight:800;color:#D4AF37">4,244</div>'
         f'<div style="font-size:.72em;color:#3A4E70;text-transform:uppercase">E9 validation runs</div></div>'
         f'<div style="text-align:center"><div style="font-size:1.5em;font-weight:800;color:#D4AF37">2.234 bits</div>'
@@ -188,7 +224,7 @@ if _APP_MODE is None:
 
     st.markdown("""
 <div style="text-align:center;margin-top:3em;color:#1E2E4A;font-size:.78em">
-  fawp-index v2.5.0 · Ralph Clayton · 2026 ·
+  fawp-index v2.8.0 · Ralph Clayton · 2026 ·
   <a href="https://github.com/DrRalphClayton/fawp-index"
      style="color:#1E2E4A">GitHub</a> ·
   <a href="https://pypi.org/project/fawp-index/"
@@ -271,13 +307,19 @@ with _nav_seis:
         _switch_mode("seismic")
 
 # Dark/light mode toggle (persists in session)
+# Dark/light — persist via URL query param so it survives page reload
+_qp = st.query_params
 if "theme" not in st.session_state:
-    st.session_state["theme"] = "dark"
+    st.session_state["theme"] = _qp.get("theme", "dark")
 _theme_icon = "☀️" if st.session_state["theme"] == "dark" else "🌙"
 if st.sidebar.button(f"{_theme_icon} Toggle theme", key="theme_toggle",
                      use_container_width=True):
-    st.session_state["theme"] = "light" if st.session_state["theme"] == "dark" else "dark"
+    _new_theme = "light" if st.session_state["theme"] == "dark" else "dark"
+    st.session_state["theme"] = _new_theme
+    st.query_params["theme"] = _new_theme
     st.rerun()
+if st.session_state.get("theme", "dark") != _qp.get("theme", "dark"):
+    st.query_params["theme"] = st.session_state.get("theme", "dark")
 if st.session_state["theme"] == "light":
     st.markdown(
         "<script>document.documentElement.setAttribute('data-theme','light')</script>",
@@ -1100,13 +1142,27 @@ if not dfs:
 # ── Run scan ───────────────────────────────────────────────────────────────
 if run_btn:
     _t0 = time.time()
-    with st.spinner("Scanning…"):
-        st.session_state["wl_result"]      = _run_scan(dfs, window, step, tau_max, n_null, epsilon, tuple(timeframes))
-        st.session_state["scan_duration"]  = round(time.time() - _t0, 1)
-        st.session_state["scan_timestamp"] = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")
-        _n_f = st.session_state["wl_result"].n_flagged
-        st.toast(f"🔴 {_n_f} FAWP regime(s) active" if _n_f else "✅ Scan complete — no FAWP active",
-                 icon="🔴" if _n_f else "✅")
+    _n_tickers = len(dfs)
+    _prog_bar = st.progress(0.0, f"Scanning 0/{_n_tickers} assets…")
+    import threading as _thr
+    _done_flag = [False]
+    def _fake_progress():
+        import time as _tp
+        _step = 0
+        while not _done_flag[0] and _step < 95:
+            _frac = min(0.95, _step / 100)
+            _prog_bar.progress(_frac, f"Scanning {max(1,int(_frac*_n_tickers))}/{_n_tickers}…")
+            _tp.sleep(0.3); _step += 3
+    _thr.Thread(target=_fake_progress, daemon=True).start()
+    st.session_state["wl_result"]      = _run_scan(dfs, window, step, tau_max, n_null, epsilon, tuple(timeframes))
+    _done_flag[0] = True
+    _prog_bar.progress(1.0, f"✅ {_n_tickers}/{_n_tickers} assets scanned")
+    import time as _tc; _tc.sleep(0.35); _prog_bar.empty()
+    st.session_state["scan_duration"]  = round(time.time() - _t0, 1)
+    st.session_state["scan_timestamp"] = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")
+    _n_f = st.session_state["wl_result"].n_flagged
+    st.toast(f"🔴 {_n_f} FAWP regime(s) active" if _n_f else "✅ Scan complete — no FAWP active",
+             icon="🔴" if _n_f else "✅")
     # Auto-save to per-user store
     try:
         get_store().save_scan(st.session_state["wl_result"])
@@ -1192,9 +1248,17 @@ with tab_scanner:
 border-radius:8px;padding:2em 2.2em 1.8em;max-width:640px;margin:2em auto">
 <div style="font-family:'Syne',sans-serif;font-size:1.25em;font-weight:800;
 color:#D4AF37;margin-bottom:.3em">Welcome to FAWP Scanner</div>
-<div style="color:#7A90B8;font-size:.88em;margin-bottom:1.4em">
+<div style="color:#7A90B8;font-size:.88em;margin-bottom:.6em">
 Detecting the Information-Control Exclusion Principle in real-time.<br>
 Follow these steps to run your first scan:
+</div>
+<div style="background:#0A1520;border:1px solid #1E3050;border-radius:6px;padding:.6em .9em;
+margin-bottom:1em;font-size:.82em;color:#5A8ABA">
+💡 <b style="color:#D4AF37">Quick start:</b>
+Use the sidebar presets (S&P core, Crypto, etc.) to fill tickers instantly,
+then click <b style="color:#EDF0F8">▶ Run Scan</b>.
+The <b style="color:#EDF0F8">MI chart</b> shows forecast vs steering coupling —
+when gold rises and blue collapses, that's FAWP.
 </div>
 <div style="display:flex;flex-direction:column;gap:.8em">
 <div style="display:flex;align-items:flex-start;gap:.9em">
@@ -1282,6 +1346,22 @@ Follow these steps to run your first scan:
         unsafe_allow_html=True,
     )
 
+    # Regime confidence interval — estimate ±σ from scan windows
+    _ci_note = ""
+    if wl and ranked:
+        _top = ranked[0]
+        if _top.scan is not None and len(_top.scan.windows) >= 5:
+            import numpy as _np_ci
+            _gap_vals = [w.odw_result.peak_gap_bits for w in _top.scan.windows
+                         if hasattr(w, "odw_result") and w.odw_result is not None]
+            if len(_gap_vals) >= 5:
+                _gap_arr = _np_ci.array(_gap_vals, dtype=float)
+                _ci_lo = max(0.0, float(_gap_arr.mean() - 1.96*_gap_arr.std()))
+                _ci_hi = float(_gap_arr.mean() + 1.96*_gap_arr.std())
+                _ci_note = (f"Top asset 95% CI: [{_ci_lo:.4f}, {_ci_hi:.4f}]b  "
+                            f"(n={len(_gap_vals)} windows)")
+                st.caption(f"📊 {_ci_note}")
+
     # Sort + filter controls
     col_sort, col_filter = st.columns([1, 3])
     with col_sort:
@@ -1317,6 +1397,14 @@ Follow these steps to run your first scan:
             score_cls  = _score_cls(a)
             row_cls    = "asset-row fawp-active" if a.regime_active else (
                          "asset-row high-risk" if a.latest_score >= 0.005 else "asset-row")
+            threshold_badge = (
+                '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;'
+                'background:#FF3040;animation:blink 1.4s ease-in-out infinite;'
+                'margin-right:.35em;vertical-align:middle"'
+                ' title="Gap ≥ threshold {alert_threshold:.3f}b"></span>'
+                if alert_threshold > 0 and a.peak_gap_bits >= alert_threshold and a.regime_active
+                else ""
+            )
             days_str   = f"{a.days_in_regime}d" if a.days_in_regime else "—"
             age_str    = f"age {a.signal_age_days}d"
             # Streak: consecutive scans in FAWP from history
@@ -1341,7 +1429,7 @@ Follow these steps to run your first scan:
             conf_html  = _confidence_html(a)
             st.markdown(
                 f'<div class="{row_cls}">'
-                f'<span class="asset-ticker">{a.ticker}</span>'
+                f'{threshold_badge}<span class="asset-ticker">{a.ticker}</span>'
                 f'<span class="asset-tf">{a.timeframe}</span>'
                 f'{streak_html}'
                 f'{pill_html}'
@@ -1423,6 +1511,36 @@ Follow these steps to run your first scan:
         st.download_button("⬇ Download comparison PNG", data=_cb,
                            file_name="fawp_comparison.png", mime="image/png", key="cmp_dl")
 
+    # FAWP age chart — how old is the current signal?
+    fawp_assets = [a for a in filtered if a.regime_active and a.odw_result is not None]
+    if fawp_assets and HAS_MPL:
+        import matplotlib.pyplot as _plt_age
+        st.markdown(_sec("Signal age — time inside detection window"), unsafe_allow_html=True)
+        st.caption("Bar = position within ODW. Full bar = at cliff edge. Dashed = τ⁺ₕ horizon.")
+        _fig_age, _ax_age = _plt_age.subplots(figsize=(8, max(1.5, len(fawp_assets)*0.4)))
+        _fig_age.patch.set_facecolor("#07101E"); _ax_age.set_facecolor("#0D1729")
+        for _sp in _ax_age.spines.values(): _sp.set_edgecolor("#3A4E70")
+        _ax_age.tick_params(colors="#7A90B8", labelsize=8)
+        for _ai, _aa in enumerate(fawp_assets):
+            _odw = _aa.odw_result
+            _win_len = max(1, (_odw.odw_end or 35) - (_odw.odw_start or 30))
+            _age_bars = _aa.days_in_regime or 1
+            _pct = min(1.0, _age_bars / _win_len)
+            _col = "#C0111A" if _pct > 0.7 else "#D4AF37" if _pct > 0.4 else "#1DB954"
+            _ax_age.barh(_ai, _pct, color=_col, alpha=0.8, height=0.6)
+            _ax_age.text(_pct+0.02, _ai, f"{_age_bars}d / {_win_len}d ({_pct*100:.0f}%)",
+                        va="center", fontsize=7, color="#EDF0F8")
+            if _odw.tau_h_plus and _odw.odw_end:
+                _h_pct = min(1.0, (_odw.tau_h_plus - (_odw.odw_start or 30)) / _win_len)
+                _ax_age.axvline(_h_pct, color="#4A7FCC", ls="--", lw=1, alpha=0.7)
+        _ax_age.set_yticks(range(len(fawp_assets)))
+        _ax_age.set_yticklabels([f"{a.ticker} [{a.timeframe}]" for a in fawp_assets],
+                                fontsize=8, color="#EDF0F8")
+        _ax_age.set_xlim(0, 1.35); _ax_age.set_xlabel("ODW progress", fontsize=8, color="#7A90B8")
+        _ax_age.axvline(1.0, color="#C0111A", lw=1.5, ls=":", alpha=0.5)
+        _fig_age.tight_layout(); st.pyplot(_fig_age, use_container_width=True)
+        _plt_age.close(_fig_age)
+
     # Mini leaderboard
     st.markdown(_sec("Leaderboard"), unsafe_allow_html=True)
     try:
@@ -1440,6 +1558,42 @@ Follow these steps to run your first scan:
                 file_name="fawp_leaderboard.html",
                 mime="text/html",
             )
+        # 📸 Quick screenshot export of KPI + results
+        if HAS_MPL and col_lb2:
+            with col_lb2:
+                if st.button("📸 Screenshot", key="screenshot_btn", use_container_width=True,
+                             help="Export KPI summary + top results as a PNG"):
+                    try:
+                        import matplotlib.pyplot as _plt_ss, io as _io_ss, numpy as _np_ss
+                        _fig_ss, _ax_ss = _plt_ss.subplots(figsize=(10, 4), facecolor="#07101E")
+                        _ax_ss.set_facecolor("#0D1729")
+                        _ax_ss.axis("off")
+                        _ss_rows = [["Ticker","TF","FAWP","Score","Gap (bits)"]]
+                        for _ssa in filtered[:8]:
+                            _ss_rows.append([
+                                _ssa.ticker, _ssa.timeframe,
+                                "🔴 YES" if _ssa.regime_active else "—",
+                                f"{_ssa.latest_score:.4f}", f"{_ssa.peak_gap_bits:.4f}",
+                            ])
+                        _tbl = _ax_ss.table(_ss_rows, cellLoc="center", loc="center",
+                                            bbox=[0,0,1,1])
+                        _tbl.auto_set_font_size(False); _tbl.set_fontsize(9)
+                        for (_r,_c), _cell in _tbl.get_celld().items():
+                            _cell.set_facecolor("#182540" if _r==0 else "#0D1729")
+                            _cell.set_edgecolor("#3A4E70")
+                            _cell.set_text_props(color="#D4AF37" if _r==0 else "#EDF0F8")
+                        _ax_ss.set_title(f"FAWP Finance Scan — {scan_timestamp}  ·  ε={epsilon:.3f}",
+                                        color="#D4AF37", fontsize=10, pad=12)
+                        _fig_ss.tight_layout()
+                        _ss_buf = _io_ss.BytesIO()
+                        _fig_ss.savefig(_ss_buf, format="png", dpi=150, bbox_inches="tight",
+                                        facecolor="#07101E")
+                        _plt_ss.close(_fig_ss); _ss_buf.seek(0)
+                        st.download_button("⬇ Download screenshot", data=_ss_buf,
+                                           file_name=f"fawp_scan_{scan_timestamp.replace(' ','_')}.png",
+                                           mime="image/png", key="ss_dl")
+                    except Exception as _sse:
+                        st.caption(f"Screenshot: {_sse}")
     except Exception as e:
         st.caption(f"Leaderboard unavailable: {e}")
 
@@ -1935,6 +2089,61 @@ with tab_history:
                 c2.metric("First onset", onset or "never")
                 c3.metric("Last active", last or "never")
 
+                # Rolling time×ticker heatmap
+                st.markdown(_sec("Time × ticker FAWP heatmap"), unsafe_allow_html=True)
+                st.caption("Rows = assets from last scan · Columns = scan history · Color = FAWP score")
+                try:
+                    if HAS_MPL and hasattr(hist, "all_assets") and hasattr(hist, "asset_timeline"):
+                        _all_a = hist.all_assets()
+                        _hm_tickers = [f"{a['ticker']}|{a['timeframe']}" for a in _all_a[:15]]
+                        _hm_data = {}
+                        for _hma in _all_a[:15]:
+                            _hm_tl = hist.asset_timeline(_hma["ticker"], _hma["timeframe"], last_n=20)
+                            if not _hm_tl.empty:
+                                _hm_data[f"{_hma['ticker']}|{_hma['timeframe']}"] = (
+                                    _hm_tl["latest_score"].values,
+                                    _hm_tl["scanned_at"].dt.strftime("%m-%d").values,
+                                    _hm_tl["regime_active"].values,
+                                )
+                        if _hm_data:
+                            import matplotlib.pyplot as _plt_hm, numpy as _np_hm
+                            _rows = list(_hm_data.keys())
+                            _max_cols = max(len(v[0]) for v in _hm_data.values())
+                            _mat_hm = _np_hm.full((len(_rows), _max_cols), _np_hm.nan)
+                            _act_hm = _np_hm.zeros((len(_rows), _max_cols), dtype=bool)
+                            _date_lbls = []
+                            for _ri, _rk in enumerate(_rows):
+                                _scores, _dates, _active = _hm_data[_rk]
+                                _mat_hm[_ri, :len(_scores)] = _scores
+                                _act_hm[_ri, :len(_active)] = _active
+                                if len(_dates) > len(_date_lbls):
+                                    _date_lbls = list(_dates)
+                            _fig_hm, _ax_hm = _plt_hm.subplots(
+                                figsize=(max(6, _max_cols * 0.5), max(3, len(_rows) * 0.5)))
+                            _fig_hm.patch.set_facecolor("#07101E")
+                            _ax_hm.set_facecolor("#0D1729")
+                            _im_hm = _ax_hm.imshow(_mat_hm, aspect="auto", cmap="RdYlGn_r",
+                                                    vmin=0, vmax=max(0.01, float(_np_hm.nanmax(_mat_hm))))
+                            # Red border on active cells
+                            for _ri in range(len(_rows)):
+                                for _ci in range(_max_cols):
+                                    if _act_hm[_ri, _ci]:
+                                        from matplotlib.patches import Rectangle as _Rect
+                                        _ax_hm.add_patch(_Rect((_ci-0.48,_ri-0.48),0.96,0.96,
+                                                               fill=False,edgecolor="#C0111A",lw=2))
+                            _plt_hm.colorbar(_im_hm, ax=_ax_hm, label="Score",
+                                             shrink=0.7).ax.tick_params(colors="#7A90B8",labelsize=7)
+                            _ax_hm.set_yticks(range(len(_rows)))
+                            _ax_hm.set_yticklabels(_rows, fontsize=7, color="#EDF0F8")
+                            _ax_hm.set_xticks(range(len(_date_lbls)))
+                            _ax_hm.set_xticklabels(_date_lbls, fontsize=7, color="#7A90B8", rotation=30, ha="right")
+                            for _sp in _ax_hm.spines.values(): _sp.set_edgecolor("#3A4E70")
+                            _fig_hm.tight_layout()
+                            st.pyplot(_fig_hm, use_container_width=True)
+                            _plt_hm.close(_fig_hm)
+                except Exception as _hme:
+                    st.caption(f"Heatmap unavailable: {_hme}")
+
                 st.markdown(_sec("Score & gap timeline"), unsafe_allow_html=True)
 
                 if HAS_MPL:
@@ -2019,6 +2228,48 @@ with tab_history:
                         f'</div>',
                         unsafe_allow_html=True,
                     )
+
+                # Regime duration histogram
+                if HAS_MPL:
+                    try:
+                        import matplotlib.pyplot as _plt_dur, numpy as _np_dur
+                        # Calculate regime run lengths from regime_active column
+                        _acts = tl["regime_active"].values
+                        _durations = []
+                        _run = 0
+                        for _v in _acts:
+                            if _v:
+                                _run += 1
+                            elif _run > 0:
+                                _durations.append(_run)
+                                _run = 0
+                        if _run > 0:
+                            _durations.append(_run)
+
+                        if _durations:
+                            _fig_dur, _ax_dur = _plt_dur.subplots(figsize=(6, 2.5),
+                                                                    facecolor="#0D1729")
+                            _ax_dur.set_facecolor("#07101E")
+                            for _sp in _ax_dur.spines.values(): _sp.set_edgecolor("#3A4E70")
+                            _ax_dur.tick_params(colors="#7A90B8", labelsize=8)
+                            _ax_dur.hist(_durations, bins=max(5, len(_durations)//2),
+                                        color="#C0111A", alpha=0.75, edgecolor="#3A4E70")
+                            _ax_dur.axvline(_np_dur.mean(_durations), color="#D4AF37",
+                                           ls="--", lw=1.5, label=f"Mean: {_np_dur.mean(_durations):.1f}")
+                            _ax_dur.set_xlabel("Regime duration (scans)", fontsize=8, color="#7A90B8")
+                            _ax_dur.set_ylabel("Count", fontsize=8, color="#7A90B8")
+                            _ax_dur.set_title(f"FAWP regime durations — {hticker}",
+                                             color="#D4AF37", fontsize=9)
+                            _ax_dur.legend(fontsize=7, framealpha=0.2)
+                            _fig_dur.tight_layout()
+                            st.markdown(_sec("Regime duration distribution"), unsafe_allow_html=True)
+                            st.pyplot(_fig_dur, use_container_width=True)
+                            _plt_dur.close(_fig_dur)
+                            st.caption(f"{len(_durations)} regime episode(s) · "
+                                      f"mean duration {_np_dur.mean(_durations):.1f} scans · "
+                                      f"longest {max(_durations)} scans")
+                    except Exception as _due:
+                        st.caption(f"Duration histogram: {_due}")
 
                 st.download_button(
                     "Download timeline CSV",

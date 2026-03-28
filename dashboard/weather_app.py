@@ -595,10 +595,16 @@ with st.sidebar:
                    f'{city}</span>'
                    for city in PRESETS.keys()) +
             '</div>', unsafe_allow_html=True)
-        preset = st.selectbox("Quick select", ["Custom"] + list(PRESETS.keys()),
-                              label_visibility="collapsed")
-        if preset != "Custom":
-            st.session_state["wx_lat"], st.session_state["wx_lon"] = PRESETS[preset]
+        # City preset buttons — one click fills lat/lon AND triggers scan
+        _pcols = st.columns(len(PRESETS))
+        for _pi, (_pcity, (_plat, _plon)) in enumerate(PRESETS.items()):
+            with _pcols[_pi]:
+                if st.button(_pcity, key=f"cpbtn_{_pi}", use_container_width=True,
+                             help=f"{_plat:.2f}°, {_plon:.2f}°"):
+                    st.session_state["wx_lat"] = _plat
+                    st.session_state["wx_lon"] = _plon
+                    st.session_state["_city_auto_run"] = True
+                    st.rerun()
         # City name autocomplete (Nominatim / OpenStreetMap — no API key)
         _city_q = st.text_input("🔍 City search (or enter coordinates below)",
                                 placeholder="e.g. Tokyo, Buenos Aires, Mumbai…",
@@ -610,7 +616,7 @@ with st.sidebar:
                     _url = ("https://nominatim.openstreetmap.org/search"
                             f"?q={urllib.parse.quote(_city_q)}&format=json&limit=5")
                     _req = urllib.request.Request(_url,
-                           headers={"User-Agent": "fawp-scanner/2.5.0"})
+                           headers={"User-Agent": "fawp-scanner/2.8.0"})
                     with urllib.request.urlopen(_req, timeout=4) as _r:
                         _hits = _j.loads(_r.read())
                     if _hits:
@@ -899,7 +905,7 @@ date,observed
     st.stop()
 
 # ── Single location scan ──────────────────────────────────────────────────────
-if run_btn:
+if run_btn or st.session_state.pop("_city_auto_run", False):
     if st.session_state.get("wx_multi_mode"):
         _MV_VARS = ["temperature_2m","precipitation","wind_speed_10m",
                     "surface_pressure","cloud_cover"]
@@ -990,6 +996,30 @@ if st.session_state.get("wx_multi_mode") and "wx_multi_results" in st.session_st
                  use_container_width=True, hide_index=True)
     _n_fawp_mv = sum(1 for _vr in _mvr.values() if _vr.fawp_found)
     st.error(f"🔴 {_n_fawp_mv}/{len(_mvr)} variables in FAWP") if _n_fawp_mv else     st.success(f"✅ No FAWP across {len(_mvr)} variables")
+    # ERA5 variable comparison chart
+    try:
+        import matplotlib.pyplot as _plt_mv
+        _fig_mv, (_ax_p, _ax_s) = _plt_mv.subplots(1, 2, figsize=(11, 3.5), facecolor="#0D1729")
+        _MVC = ["#D4AF37","#4A7FCC","#1DB954","#C0111A","#FF8C00"]
+        for _ax in (_ax_p, _ax_s):
+            _ax.set_facecolor("#07101E")
+            for _sp in _ax.spines.values(): _sp.set_edgecolor("#3A4E70")
+            _ax.tick_params(colors="#7A90B8", labelsize=8)
+        for _mvi, (_mvv, _mvr2) in enumerate(_mvr.items()):
+            _c = _MVC[_mvi % len(_MVC)]
+            _ax_p.plot(_mvr2.tau, _mvr2.pred_mi,  color=_c, lw=1.5, alpha=0.85, label=_mvv.replace("_"," "))
+            _ax_s.plot(_mvr2.tau, _mvr2.steer_mi, color=_c, lw=1.2, ls="--", alpha=0.7)
+        for _ax in (_ax_p, _ax_s):
+            _ax.axhline(epsilon, color="#3A4E70", ls=":", lw=1)
+            _ax.set_xlabel("τ (delay, days)", fontsize=8, color="#7A90B8")
+            _ax.set_ylabel("MI (bits)", fontsize=8, color="#7A90B8")
+        _ax_p.set_title("Prediction MI — all variables", color="#D4AF37", fontsize=9, fontweight="bold")
+        _ax_s.set_title("Steering MI — all variables", color="#4A7FCC", fontsize=9, fontweight="bold")
+        _ax_p.legend(fontsize=7, framealpha=0.2)
+        _fig_mv.tight_layout(); st.pyplot(_fig_mv, use_container_width=True)
+        _plt_mv.close(_fig_mv)
+    except Exception as _mve:
+        st.caption(f"Comparison chart: {_mve}")
     st.markdown("---")
 
 if "wx_result" in st.session_state:
@@ -1034,6 +1064,29 @@ if "wx_result" in st.session_state:
     _kpi(c5, f"{r.n_obs:,}", "Observations")
 
     # E9.7 timing badge
+    # Weather anomaly flag — check if FAWP window coincides with extreme values
+    try:
+        import numpy as _np_anm
+        _pred_series = getattr(r, "_pred_series", None) or (
+            r.pred_mi if hasattr(r, "pred_mi") else None
+        )
+        # Use the raw MI curve peak as proxy for extreme event timing
+        if r.fawp_found and r.odw_start and r.odw_end:
+            _odw_pred = r.pred_mi[r.odw_start-1:r.odw_end] if hasattr(r, 'pred_mi') else []
+            _all_pred = r.pred_mi if hasattr(r, 'pred_mi') else []
+            if len(_all_pred) > 0 and len(_odw_pred) > 0:
+                _p95 = _np_anm.percentile(_all_pred, 95)
+                _p05 = _np_anm.percentile(_all_pred, 5)
+                _odw_max = float(_np_anm.max(_odw_pred))
+                if _odw_max >= _p95:
+                    st.warning(f"⚡ **Extreme forecast signal in ODW** — peak MI ({_odw_max:.4f}b) "
+                               f"is in the top 5% of all τ values. "
+                               f"The detection window coincides with a strong predictability spike.")
+                elif _odw_max <= _p05:
+                    st.info(f"ℹ️ ODW shows low MI ({_odw_max:.4f}b) — marginal FAWP signal.")
+    except Exception:
+        pass
+
     import fawp_index as _fi
     _lead = _fi.E97_MEAN_LEAD_GAP2_TO_CLIFF_U
     _err  = _fi.E97_MEAN_ABS_ERR_GAP2_VS_ODW_START

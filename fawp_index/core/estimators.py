@@ -26,11 +26,14 @@ from fawp_index.constants import BETA_NULL_QUANTILE
 # NumPy implementation with identical results and public API.
 
 _HAS_NUMBA = False
+_numba     = None
 try:
     import numba as _numba
     _HAS_NUMBA = True
-except ImportError:
-    pass
+except Exception:          # covers ImportError AND broken installs
+    # e.g. AttributeError from numba/coverage interaction,
+    # LLVM missing, incompatible C extensions, etc.
+    _numba = None
 
 
 def has_numba() -> bool:

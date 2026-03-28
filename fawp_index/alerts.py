@@ -472,7 +472,7 @@ class AlertEngine:
         horizon_warn_tau:        Optional[int] = None,
         state_path:              Optional[Union[str, Path]] = None,
         suppress_errors:         bool = True,
-        # ── New in v2.5.0 ───────────────────────────────────────────────
+        # ── New in v2.8.0 ───────────────────────────────────────────────
         cooldown_hours:          float = 0.0,
         min_consecutive_windows: int   = 1,
         score_change_threshold:  float = 0.0,
