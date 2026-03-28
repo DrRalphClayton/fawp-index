@@ -163,7 +163,7 @@ if _APP_MODE is None:
         unsafe_allow_html=True,
     )
 
-    col_l, col_fin, col_gap, col_wx, col_gap2, col_seis, col_r = st.columns([0.5, 3, 0.4, 3, 0.4, 3, 0.5])
+    col_l, col_fin, col_gap, col_wx, col_gap2, col_seis, col_gap3, col_ctrl, col_r = st.columns([0.2, 3, 0.25, 3, 0.25, 3, 0.25, 3, 0.2])
 
     with col_fin:
         st.markdown("""
@@ -222,6 +222,25 @@ if _APP_MODE is None:
             st.session_state["_app_mode"] = "seismic"
             st.rerun()
 
+    with col_ctrl:
+        st.markdown("""
+<div class="mode-card">
+  <div class="mode-icon">⚙️</div>
+  <div class="mode-name">FAWP Dynamic Systems</div>
+  <svg viewBox="0 0 120 40" style="width:100%;height:40px;margin:.4em 0"><path d="M0,38 C8,38 12,38 16,38 C20,38 20,8 24,8 C28,8 28,28 32,28 C36,28 36,18 44,18 C52,18 52,32 58,32 C64,32 64,14 70,14 C76,14 76,24 82,24 C88,24 88,20 94,20 C100,20 106,38 120,38" fill="none" stroke="#D4AF37" stroke-width="2"/><path d="M0,38 C20,36 40,35 60,37 C80,39 100,38 120,38" fill="none" stroke="#4A7FCC" stroke-width="1.2" stroke-dasharray="3,2"/><rect x="42" y="0" width="38" height="40" fill="#C0111A" opacity="0.12"/></svg>
+  <div class="mode-desc">
+    Upload any state + action CSV.<br>
+    Control systems, ML training logs, Kalman filters —
+    detect when prediction persists but steering has collapsed.
+  </div>
+</div>
+""", unsafe_allow_html=True)
+        if st.button("▶  Open Dynamo Scanner",
+                     use_container_width=True, type="primary",
+                     key="goto_control"):
+            st.session_state["_app_mode"] = "control"
+            st.rerun()
+
     st.markdown("""
 <div style="text-align:center;margin-top:3em;color:#1E2E4A;font-size:.78em">
   fawp-index v2.8.0 · Ralph Clayton · 2026 ·
@@ -272,7 +291,7 @@ st.markdown(_NAV_CSS, unsafe_allow_html=True)
 def _switch_mode(new_mode):
     """Clear current mode state and switch to new_mode."""
     for _k in ["wl_result","input_dfs","_fetched_key","wx_result","wx_hazard",
-               "seis_result","seis_raw","seis_daily"]:
+               "seis_result","seis_raw","seis_daily","dynamo_result"]:
         st.session_state.pop(_k, None)
     if new_mode is None:
         st.session_state.pop("_app_mode", None)
@@ -281,7 +300,7 @@ def _switch_mode(new_mode):
     st.rerun()
 
 # Render nav row: FAWP home | 📈 Finance | 🌦 Weather | 🌍 Seismic
-_nav_home, _nav_fin, _nav_wx, _nav_seis = st.columns([2, 2, 2, 2])
+_nav_home, _nav_fin, _nav_wx, _nav_seis, _nav_ctrl = st.columns([2, 2, 2, 2, 2])
 with _nav_home:
     if st.button("⚡ FAWP", key="nav_home",
                  help="Back to launcher",
@@ -305,6 +324,12 @@ with _nav_seis:
                  type=_seis_type, use_container_width=True,
                  disabled=(_APP_MODE == "seismic")):
         _switch_mode("seismic")
+with _nav_ctrl:
+    _ctrl_type = "primary" if _APP_MODE == "control" else "secondary"
+    if st.button("⚙️ Dynamo", key="nav_control",
+                 type=_ctrl_type, use_container_width=True,
+                 disabled=(_APP_MODE == "control")):
+        _switch_mode("control")
 
 # Dark/light mode toggle (persists in session)
 # Dark/light — persist via URL query param so it survives page reload
@@ -337,6 +362,17 @@ if _APP_MODE == "weather":
     _wxmod   = _ilu.module_from_spec(_spec)
     try:
         _spec.loader.exec_module(_wxmod)
+    except SystemExit:
+        pass
+    st.stop()
+
+if _APP_MODE == "control":
+    import importlib.util as _ilu3, os as _os4
+    _ctrl_path = _os4.path.join(_THIS_DIR, "control_app.py")
+    _spec3     = _ilu3.spec_from_file_location("control_app", _ctrl_path)
+    _ctrlmod   = _ilu3.module_from_spec(_spec3)
+    try:
+        _spec3.loader.exec_module(_ctrlmod)
     except SystemExit:
         pass
     st.stop()
@@ -1163,6 +1199,16 @@ if run_btn:
     _n_f = st.session_state["wl_result"].n_flagged
     st.toast(f"🔴 {_n_f} FAWP regime(s) active" if _n_f else "✅ Scan complete — no FAWP active",
              icon="🔴" if _n_f else "✅")
+    # Encode key scan params into URL for sharing
+    try:
+        import base64 as _b64, json as _jsurl
+        _url_data = _b64.urlsafe_b64encode(_jsurl.dumps({
+            "t": ",".join(list(dfs.keys())[:5]),
+            "w": window, "e": epsilon, "n": _n_f
+        }).encode()).decode()[:80]
+        st.query_params["scan"] = _url_data
+    except Exception:
+        pass
     # Auto-save to per-user store
     try:
         get_store().save_scan(st.session_state["wl_result"])
@@ -1193,6 +1239,10 @@ if wl is None:
 ranked = wl.rank_by("score")
 scan_duration  = st.session_state.get("scan_duration", "—")
 scan_timestamp = st.session_state.get("scan_timestamp", "—")
+if "scan" in st.query_params:
+    _share_url = f"https://fawp-scanner.info/?theme={st.session_state.get('theme','dark')}&scan={st.query_params['scan']}"
+    st.sidebar.text_input("🔗 Share this scan", value=_share_url,
+                          key="share_url_box", help="Copy link to share this scan result")
 # Email alert if FAWP fired and user is logged in
 if _AUTH_ENABLED and wl.n_flagged > 0 and run_btn:
     try:
@@ -1229,9 +1279,10 @@ if _IS_DEMO and not st.session_state.get("_demo_banner_dismissed"):
         if st.button("✕", key="dismiss_demo_banner"):
             st.session_state["_demo_banner_dismissed"] = True
             st.rerun()
-tab_scanner, tab_curves, tab_heatmap, tab_significance, tab_validation, tab_history, tab_compare, tab_weather, tab_admin, tab_export = st.tabs([
-    "Scanner", "Curves", "Heatmap", "Significance",
-    "Validation", "History", "Compare", "🌦 Weather", "⚙ Admin", "Export",
+tab_scanner, tab_curves, tab_heatmap, tab_significance, tab_validation, tab_history, tab_xdomain, tab_compare, tab_weather, tab_admin, tab_export = st.tabs([
+    "📊 Scanner", "📈 Curves", "🔥 Heatmap", "📐 Significance",
+    "✅ Validation", "📜 History", "🌐 All Scanners", "⚖ Compare",
+    "🌦 Weather", "⚙ Admin", "📤 Export",
 ])
 
 
@@ -1361,6 +1412,36 @@ when gold rises and blue collapses, that's FAWP.
                 _ci_note = (f"Top asset 95% CI: [{_ci_lo:.4f}, {_ci_hi:.4f}]b  "
                             f"(n={len(_gap_vals)} windows)")
                 st.caption(f"📊 {_ci_note}")
+
+    # Portfolio mode: aggregate FAWP exposure score
+    with st.expander("💼 Portfolio FAWP exposure", expanded=False):
+        st.caption("Enter position weights to compute aggregate FAWP exposure score.")
+        if wl and ranked:
+            _port_weights = {}
+            _pw_cols = st.columns(min(5, len(ranked[:10])))
+            for _pi, _pa in enumerate(ranked[:10]):
+                with _pw_cols[_pi % len(_pw_cols)]:
+                    _pw = st.number_input(
+                        f"{_pa.ticker}", 0.0, 100.0, 10.0, 5.0,
+                        key=f"pw_{_pa.ticker}_{_pa.timeframe}",
+                        help=f"{_pa.timeframe} · gap {_pa.peak_gap_bits:.4f}b"
+                    )
+                _port_weights[_pa] = _pw / 100.0
+            _total_w = sum(_port_weights.values())
+            if _total_w > 0:
+                _fawp_exp = sum(w for a, w in _port_weights.items() if a.regime_active) / _total_w
+                _gap_exp  = sum(float(a.peak_gap_bits or 0) * w
+                                for a, w in _port_weights.items()) / _total_w
+                _col = "#C0111A" if _fawp_exp > 0.4 else "#D4AF37" if _fawp_exp > 0.1 else "#1DB954"
+                st.markdown(
+                    f'<div style="background:#0D1729;border:1px solid #1E3050;border-radius:6px;'
+                    f'padding:.6em 1em;margin-top:.4em">'
+                    f'<span style="font-size:1.25em;font-weight:800;color:{_col}">'
+                    f'{_fawp_exp*100:.1f}% of portfolio in FAWP</span>'
+                    f'<span style="color:#7A90B8;font-size:.82em;margin-left:.8em">'
+                    f'· weighted avg gap {_gap_exp:.4f} bits</span></div>',
+                    unsafe_allow_html=True
+                )
 
     # Sort + filter controls
     col_sort, col_filter = st.columns([1, 3])
@@ -2090,6 +2171,42 @@ with tab_history:
                 c3.metric("Last active", last or "never")
 
                 # Rolling time×ticker heatmap
+                # Multi-asset FAWP correlation matrix
+                if HAS_MPL and hasattr(hist, "all_assets"):
+                    try:
+                        import matplotlib.pyplot as _plt_corr, numpy as _np_corr
+                        _corr_assets = hist.all_assets()[:12]
+                        _corr_vecs = []
+                        _corr_labels = []
+                        for _ca in _corr_assets:
+                            _tl = hist.asset_timeline(_ca["ticker"], _ca.get("timeframe","1d"), last_n=30)
+                            if not _tl.empty and "regime_active" in _tl.columns:
+                                _corr_vecs.append(_tl["regime_active"].astype(float).values)
+                                _corr_labels.append(_ca["ticker"])
+                        if len(_corr_vecs) >= 2:
+                            _min_len = min(len(v) for v in _corr_vecs)
+                            _corr_mtx = _np_corr.corrcoef([v[:_min_len] for v in _corr_vecs])
+                            _fig_corr, _ax_corr = _plt_corr.subplots(
+                                figsize=(max(4, len(_corr_labels)*0.6),
+                                         max(4, len(_corr_labels)*0.6)), facecolor="#0D1729")
+                            _ax_corr.set_facecolor("#07101E")
+                            _im_c = _ax_corr.imshow(_corr_mtx, cmap="RdYlGn", vmin=-1, vmax=1)
+                            _plt_corr.colorbar(_im_c, ax=_ax_corr, shrink=0.8,
+                                               label="correlation").ax.tick_params(colors="#7A90B8", labelsize=7)
+                            _ax_corr.set_xticks(range(len(_corr_labels)))
+                            _ax_corr.set_yticks(range(len(_corr_labels)))
+                            _ax_corr.set_xticklabels(_corr_labels, rotation=45, ha="right", fontsize=7, color="#EDF0F8")
+                            _ax_corr.set_yticklabels(_corr_labels, fontsize=7, color="#EDF0F8")
+                            for _sp in _ax_corr.spines.values(): _sp.set_edgecolor("#3A4E70")
+                            _ax_corr.set_title("FAWP onset correlation", color="#D4AF37", fontsize=9)
+                            _fig_corr.tight_layout()
+                            st.markdown(_sec("Multi-asset FAWP correlation"), unsafe_allow_html=True)
+                            st.caption("Pairwise correlation of FAWP regime timing.")
+                            st.pyplot(_fig_corr, use_container_width=True)
+                            _plt_corr.close(_fig_corr)
+                    except Exception as _ce:
+                        st.caption(f"Correlation matrix: {_ce}")
+
                 st.markdown(_sec("Time × ticker FAWP heatmap"), unsafe_allow_html=True)
                 st.caption("Rows = assets from last scan · Columns = scan history · Color = FAWP score")
                 try:
@@ -2300,7 +2417,17 @@ with tab_history:
                 try:
                     from email_digest import send_digest
                     _wl_data = get_store().all_assets() if hasattr(get_store(), "all_assets") else []
-                    ok = send_digest(_user_email, finance_results=_wl_data)
+                    _resend_key = st.session_state.get("resend_api_key", "")
+                    if not _resend_key:
+                        st.warning("Add your Resend API key in Admin tab to enable email delivery.")
+                        ok = False
+                    else:
+                        ok = send_digest(
+                            _user_email, api_key=_resend_key,
+                            finance_results=_wl_data,
+                            seismic_result=st.session_state.get("seis_result"),
+                            dynamo_result=st.session_state.get("dynamo_result"),
+                        )
                     st.success("Test digest sent!" if ok else "Send failed — check RESEND_API_KEY.")
                 except Exception as _de:
                     st.error(f"Digest error: {_de}")
@@ -2311,6 +2438,85 @@ with tab_history:
 # ──────────────────────────────────────────────────────────────────────────
 # Compare tab
 # ──────────────────────────────────────────────────────────────────────────
+with tab_xdomain:
+    st.markdown("### 🌐 Cross-Scanner FAWP Leaderboard")
+    st.caption("All active FAWP signals across Finance · Weather · Seismic · Dynamic Systems, ranked by peak gap.")
+    _xd_rows = []
+    if "wl_result" in st.session_state and st.session_state["wl_result"] is not None:
+        for _xa in getattr(st.session_state["wl_result"], "assets", []):
+            if getattr(_xa, "regime_active", False):
+                _xd_rows.append({
+                    "Scanner": "📈 Finance", "Asset": getattr(_xa,"ticker","—"),
+                    "TF": getattr(_xa,"timeframe","—"),
+                    "Peak Gap (bits)": round(float(getattr(_xa,"peak_gap_bits",0) or 0), 4),
+                    "τ⁺ₕ": getattr(getattr(_xa,"odw_result",None),"tau_h_plus","—") or "—",
+                })
+    if "wx_result" in st.session_state:
+        _wxr = st.session_state["wx_result"]
+        if getattr(_wxr, "fawp_found", False):
+            _xd_rows.append({
+                "Scanner": "🌦 Weather",
+                "Asset": f"{getattr(_wxr,'location','?')} / {getattr(_wxr,'variable','?')}",
+                "TF": "daily",
+                "Peak Gap (bits)": round(float(getattr(_wxr,"peak_gap_bits",0) or 0), 4),
+                "τ⁺ₕ": getattr(getattr(_wxr,"odw_result",None),"tau_h_plus","—") or "—",
+            })
+    if "seis_result" in st.session_state:
+        _sr = st.session_state["seis_result"]
+        if getattr(_sr, "fawp_found", False):
+            _xd_rows.append({
+                "Scanner": "🌍 Seismic",
+                "Asset": st.session_state.get("seis_region","Region"),
+                "TF": "daily",
+                "Peak Gap (bits)": round(float(getattr(_sr,"peak_gap_bits",0) or 0), 4),
+                "τ⁺ₕ": getattr(_sr,"tau_h_plus","—") or "—",
+            })
+    if "dynamo_result" in st.session_state:
+        _dr = st.session_state["dynamo_result"]
+        _dodw = _dr.get("odw")
+        if _dodw and getattr(_dodw,"fawp_found",False):
+            _xd_rows.append({
+                "Scanner": "⚙️ Dynamic Systems",
+                "Asset": _dr.get("domain","Custom"),
+                "TF": "steps",
+                "Peak Gap (bits)": round(float(getattr(_dodw,"peak_gap_bits",0) or 0), 4),
+                "τ⁺ₕ": getattr(_dodw,"tau_h_plus","—") or "—",
+            })
+    if _xd_rows:
+        import pandas as _pd_xd
+        _xd_df = _pd_xd.DataFrame(_xd_rows).sort_values("Peak Gap (bits)", ascending=False)
+        st.dataframe(_xd_df, use_container_width=True, hide_index=True)
+        st.success(f"**{len(_xd_rows)} active FAWP signal(s)** — "
+                   f"peak: **{_xd_df['Peak Gap (bits)'].max():.4f} bits** "
+                   f"({_xd_df.iloc[0]['Scanner']} · {_xd_df.iloc[0]['Asset']})")
+    else:
+        st.info("No active FAWP signals in this session. Run scans in any of the 4 scanners.")
+
+    # First-warning timestamps from history
+    st.markdown("---")
+    st.markdown("### 🕐 First-Warning Timestamps")
+    st.caption("Date each asset first entered FAWP, from scan history.")
+    try:
+        _fw_rows = []
+        for _fwa in (hist.all_assets() if hasattr(hist,"all_assets") else [])[:20]:
+            _tl = hist.asset_timeline(_fwa["ticker"], _fwa.get("timeframe","1d"))
+            if not _tl.empty and "regime_active" in _tl.columns:
+                _first = _tl[_tl["regime_active"] == True]
+                if not _first.empty:
+                    _fw_rows.append({
+                        "Asset": _fwa["ticker"], "TF": _fwa.get("timeframe","1d"),
+                        "First FAWP": str(_first["scanned_at"].min())[:16],
+                        "Last scan": str(_tl["scanned_at"].max())[:16],
+                        "Active scans": int(_first["regime_active"].sum()),
+                    })
+        if _fw_rows:
+            import pandas as _pd_fw
+            st.dataframe(_pd_fw.DataFrame(_fw_rows), use_container_width=True, hide_index=True)
+        else:
+            st.caption("No FAWP history yet.")
+    except Exception as _fwe:
+        st.caption(f"History unavailable: {_fwe}")
+
 with tab_compare:
     st.markdown(_sec("FAWP vs classic signals"), unsafe_allow_html=True)
     st.caption(

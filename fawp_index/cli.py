@@ -390,6 +390,40 @@ def _build_parser():
     p.set_defaults(func=cmd_verify)
 
     # grid
+    # leaderboard push/list
+    lb_p = sub.add_parser("leaderboard", help="Push or list global FAWP leaderboard entries")
+    lb_sub = lb_p.add_subparsers(dest="subcommand")
+    # push
+    lb_push = lb_sub.add_parser("push", help="Push a scan JSON to the global leaderboard")
+    lb_push.add_argument("--data",  required=True, help="Path to FAWP result .json")
+    lb_push.add_argument("--url",   default=None,  help="Supabase URL (or FAWP_SUPABASE_URL env)")
+    lb_push.add_argument("--token", default=None,  help="Supabase token (or FAWP_SUPABASE_TOKEN env)")
+    # list
+    lb_list = lb_sub.add_parser("list", help="Show global leaderboard top entries")
+    lb_list.add_argument("--top",   type=int, default=20)
+    lb_list.add_argument("--url",   default=None)
+    lb_list.add_argument("--token", default=None)
+    lb_p.set_defaults(func=cmd_leaderboard)
+
+    # latent (LERI)
+    p = sub.add_parser("latent", help="LERI: Latent Environmental Residual Inference access horizon")
+    p.add_argument("--P",        type=float, default=1.0,   help="Signal power (action variance)")
+    p.add_argument("--sigma0",   type=float, default=1.0,   help="Baseline noise σ²₀")
+    p.add_argument("--alpha",    type=float, default=0.25,  help="Noise growth rate α")
+    p.add_argument("--epsilon",  type=float, default=0.01,  help="Detectability threshold ε (bits)")
+    p.add_argument("--beta",     type=float, default=0.99,  help="Null quantile β")
+    p.add_argument("--persist",  type=int,   default=5,     help="Persistence gate m steps")
+    p.add_argument("--tau-max",  type=int,   default=400,   dest="tau_max")
+    p.add_argument("--n-null",   type=int,   default=50,    dest="n_null")
+    p.add_argument("--seed",     type=int,   default=42)
+    p.add_argument("--out",      default=None)
+    p.set_defaults(func=cmd_latent)
+
+    # diagnose
+    p = sub.add_parser("diagnose", help="Plain-English diagnosis of a FAWP result JSON")
+    p.add_argument("--data", required=True, help="Path to result .json file")
+    p.set_defaults(func=cmd_diagnose)
+
     # sweep
     p = sub.add_parser("sweep", help="Sweep parameters and show FAWP detection sensitivity")
     p.add_argument("--data",    required=True, help="Path to scan JSON with pred_mi/steer_mi")
@@ -1218,6 +1252,247 @@ def _check_version_update():
     except Exception:
         pass
 
+
+
+def cmd_diagnose(args):
+    """Load a FAWP result JSON and print a plain-English diagnosis."""
+    import json
+    from fawp_index.explain import explain_fawp
+    from fawp_index.detection.odw import ODWResult
+
+    with open(args.data) as f:
+        d = json.load(f)
+
+    # Reconstruct ODWResult-like namespace for explain
+    class _R:
+        pass
+
+    r = _R()
+    r.fawp_found    = d.get("fawp_found", False)
+    r.peak_gap_bits = d.get("peak_gap_bits", 0.0)
+    r.tau_h_plus    = d.get("tau_h_plus")
+    r.tau_f         = d.get("tau_f")
+    r.odw_start     = d.get("odw_start")
+    r.odw_end       = d.get("odw_end")
+    r.epsilon       = d.get("epsilon", 0.01)
+    r.n_obs         = d.get("n_obs", 0)
+    r.domain        = d.get("domain", "unknown")
+
+    import numpy as np
+    r.pred_mi  = np.array(d.get("pred_mi",  []))
+    r.steer_mi = np.array(d.get("steer_mi", []))
+    r.tau      = np.array(d.get("tau",      []))
+
+    # Build ODW-like subobject
+    r.odw_result = _R()
+    r.odw_result.fawp_found    = r.fawp_found
+    r.odw_result.peak_gap_bits = r.peak_gap_bits
+    r.odw_result.tau_h_plus    = r.tau_h_plus
+    r.odw_result.tau_f         = r.tau_f
+    r.odw_result.odw_start     = r.odw_start
+    r.odw_result.odw_end       = r.odw_end
+
+    print(f"FAWP Diagnosis — {args.data}")
+    print(f"Domain        : {r.domain}")
+    print(f"Observations  : {r.n_obs}")
+    print()
+
+    status = "🔴 FAWP DETECTED" if r.fawp_found else "✅ No FAWP"
+    print(f"Status        : {status}")
+    print(f"Peak gap      : {r.peak_gap_bits:.4f} bits")
+    print(f"Agency horizon: τ⁺ₕ = {r.tau_h_plus or 'not reached'}")
+    print(f"Failure cliff : τf  = {r.tau_f      or 'not reached'}")
+    print(f"Detection window: τ = {r.odw_start or '?'}–{r.odw_end or '?'}")
+    print()
+
+    if r.fawp_found:
+        lead = (r.odw_end or 0) - (r.odw_start or 0)
+        print("Plain-English diagnosis:")
+        print(f"  Your system entered FAWP at τ = {r.odw_start}.")
+        if r.peak_gap_bits:
+            print(f"  Prediction peaked at {r.peak_gap_bits:.4f} bits while steering collapsed.")
+        if r.tau_h_plus and r.tau_f:
+            print(f"  Steering authority was lost at τ = {r.tau_h_plus}.")
+            print(f"  Full control failure occurred at τ = {r.tau_f}.")
+            print(f"  The operational detection window spans {lead} delay steps (τ = {r.odw_start}–{r.odw_end}).")
+            print(f"  You had {lead} delay steps of warning before the cliff.")
+    else:
+        print("  No FAWP regime detected. Prediction and steering remain coupled.")
+        print("  Forecast skill has not diverged from control authority.")
+
+    # E9.7 calibration note
+    try:
+        import fawp_index as fi
+        print()
+        print(f"E9.7 calibration: gap2 peak leads cliff by +{fi.E97_MEAN_LEAD_GAP2_TO_CLIFF_U:.4f} delays")
+        print(f"  ODW localisation error: ~{fi.E97_MEAN_ABS_ERR_GAP2_VS_ODW_START:.1f} steps")
+    except Exception:
+        pass
+
+
+def cmd_latent(args):
+    """
+    Latent Environmental Residual Inference (LERI) CLI.
+
+    Simulates the E-LERI record chain X → R → Y_τ → D_τ and computes
+    the operational access horizon from your LERI paper.
+
+    Reference: Clayton (2026) "Latent Environmental Residual Inference
+    in the Volumetric Time Model", doi:10.5281/zenodo.18663547
+    """
+    import numpy as np
+
+    # ── Parameters ────────────────────────────────────────────────────────
+    P      = args.P
+    sigma0 = args.sigma0
+    alpha  = args.alpha
+    eps    = args.epsilon
+    beta   = args.beta
+    m      = args.persist
+    tau_max = args.tau_max
+    n_null  = args.n_null
+    seed    = args.seed
+
+    # ── Analytic horizon (Eq. 15–16 from LERI paper) ──────────────────────
+    denom = 2 ** (2 * eps) - 1
+    if denom <= 0 or alpha <= 0:
+        tau_analytic = float("inf")
+    else:
+        tau_analytic = max(0.0, (P / denom - sigma0) / alpha)
+
+    print(f"LERI — Latent Environmental Residual Inference")
+    print(f"  Parameters: P={P}  σ²₀={sigma0}  α={alpha}  ε={eps}b")
+    print(f"  Analytic access horizon τ⁺ₕ ≈ {tau_analytic:.3f}")
+    print()
+
+    # ── Simulate record chain X → R → Y_τ → D_τ ──────────────────────────
+    rng = np.random.default_rng(seed)
+    n   = max(500, tau_max * 4)
+    tau_arr = np.arange(1, tau_max + 1)
+
+    X = rng.normal(0, 1, n)
+    R = X + rng.normal(0, np.sqrt(sigma0), n)   # record with baseline noise
+
+    from fawp_index.core.estimators import mi_from_arrays, conservative_null_floor
+
+    mi_vals   = np.zeros(len(tau_arr))
+    null_vals = np.zeros(len(tau_arr))
+    scores    = np.zeros(len(tau_arr))
+
+    print(f"  Simulating record chain (n={n}, τ_max={tau_max}, n_null={n_null})…")
+    for ti, tau in enumerate(tau_arr):
+        noise_tau = rng.normal(0, np.sqrt(sigma0 + alpha * tau), n)
+        D_tau = R + noise_tau    # delayed readout with latency-dependent noise
+
+        x_v = X[:-tau]; d_v = D_tau[tau:]
+        raw  = mi_from_arrays(x_v, d_v)
+        floor = conservative_null_floor(x_v, d_v, n_null, quantile=beta)
+        mi_vals[ti]   = max(0.0, raw)
+        null_vals[ti] = floor
+        scores[ti]    = max(0.0, raw - floor)
+
+    # ── Persistence-gated horizon ─────────────────────────────────────────
+    tau_numeric = None
+    run_below = 0
+    for ti, tau in enumerate(tau_arr):
+        if scores[ti] < 1e-4:
+            run_below += 1
+            if run_below >= m:
+                tau_numeric = int(tau_arr[max(0, ti - m + 1)])
+                break
+        else:
+            run_below = 0
+
+    print(f"  Numeric operational horizon τₕ = {tau_numeric or 'not reached in τ_max'}")
+    print()
+    print(f"  {'tau':>5}  {'MI (bits)':>12}  {'null floor':>12}  {'score':>10}")
+    print(f"  {'---':>5}  {'----------':>12}  {'----------':>12}  {'-----':>10}")
+    step = max(1, len(tau_arr) // 20)
+    for ti, tau in enumerate(tau_arr[::step]):
+        idx = ti * step
+        print(f"  {tau:>5}  {mi_vals[idx]:>12.6f}  {null_vals[idx]:>12.6f}  {scores[idx]:>10.6f}")
+    print()
+
+    # ── Save if requested ─────────────────────────────────────────────────
+    if args.out:
+        import pandas as pd
+        df = pd.DataFrame({"tau": tau_arr, "mi": mi_vals,
+                           "null_floor": null_vals, "score": scores})
+        df.to_csv(args.out, index=False)
+        print(f"Saved → {args.out}")
+
+    print(f"LERI horizon: analytic = {tau_analytic:.2f}  numeric = {tau_numeric or '∞'}")
+    print(f"LERI photon constants: {14005.0:.1f} m horizon · {4.6683e-5:.4e} s")
+
+
+def cmd_leaderboard(args):
+    """Push a local scan result to the global FAWP leaderboard on Supabase."""
+    import json, os
+    from pathlib import Path
+
+    if args.subcommand == "push":
+        with open(args.data) as f:
+            d = json.load(f)
+
+        url   = args.url   or os.environ.get("FAWP_SUPABASE_URL",   "")
+        token = args.token or os.environ.get("FAWP_SUPABASE_TOKEN", "")
+
+        if not url or not token:
+            print("Supabase URL and token required.")
+            print("  Set --url / --token, or env vars FAWP_SUPABASE_URL / FAWP_SUPABASE_TOKEN")
+            return
+
+        try:
+            from supabase import create_client
+        except ImportError:
+            print("supabase package required: pip install supabase")
+            return
+
+        db = create_client(url, token)
+        row = {
+            "ticker":         d.get("ticker") or d.get("asset") or Path(args.data).stem,
+            "timeframe":      d.get("timeframe", "custom"),
+            "peak_gap_bits":  round(float(d.get("peak_gap_bits", 0) or 0), 6),
+            "fawp_found":     bool(d.get("fawp_found", False)),
+            "tau_h_plus":     d.get("tau_h_plus"),
+            "tau_f":          d.get("tau_f"),
+            "odw_start":      d.get("odw_start"),
+            "odw_end":        d.get("odw_end"),
+            "epsilon":        float(d.get("epsilon", 0.01)),
+            "n_obs":          int(d.get("n_obs", 0)),
+            "domain":         d.get("domain", "custom"),
+            "source":         "cli",
+        }
+        result = db.table("fawp_global_lb").upsert(row).execute()
+        print(f"✅ Pushed to leaderboard: {row['ticker']} — gap {row['peak_gap_bits']:.4f} bits")
+        print(f"   fawp_found={row['fawp_found']}  τ⁺ₕ={row['tau_h_plus']}  domain={row['domain']}")
+
+    elif args.subcommand == "list":
+        url   = args.url   or os.environ.get("FAWP_SUPABASE_URL",   "")
+        token = args.token or os.environ.get("FAWP_SUPABASE_TOKEN", "")
+        if not url or not token:
+            print("Supabase credentials required.")
+            return
+        try:
+            from supabase import create_client
+        except ImportError:
+            print("pip install supabase"); return
+
+        db  = create_client(url, token)
+        res = (db.table("fawp_global_lb")
+               .select("*")
+               .order("peak_gap_bits", desc=True)
+               .limit(args.top)
+               .execute())
+        rows = res.data or []
+        print(f"Global FAWP Leaderboard (top {args.top})")
+        print(f"{'Rank':>4}  {'Ticker':<20} {'Gap (bits)':>12} {'FAWP':>6} {'Domain':<16}")
+        print("-" * 65)
+        for i, r in enumerate(rows, 1):
+            print(f"  {i:>2}.  {r.get('ticker','?'):<20} "
+                  f"{float(r.get('peak_gap_bits',0)):>12.4f} "
+                  f"{'🔴' if r.get('fawp_found') else '—':>6}  "
+                  f"{r.get('domain','?'):<16}")
 
 def main():
     _check_version_update()
