@@ -2,6 +2,27 @@
 
 ## v2.8.0 — 2026-03-28
 
+- fix: RTD config simplified, scikit-learn in binder deps, publish.yml test ignores
+- docs: auto-update CHANGELOG for v2.8.0
+- feat v2.8.0: 30+ features, fix license PEP 621, numba guard, UP032 ruff, RTD config
+- feat v2.5.0: status/backtest CLI, depth profile, multi-var wx, streak, aftershock, global LB, webhooks, CSV refresh
+- fix: sys.path bootstrap in all examples, complete [all] and [dashboard] extras
+- fix v2.2.1: cmd_grid dead imports, RegimeResult.plot missing module, detect off-by-one, MANIFEST.in packaging
+- fix: weather plot NameError, FAWPStreamDetector removed, PEAK_GAP_BITS_E9 constant names
+- fix v1.1.9: supabase import, remove_seasonality wired, dedup CI publish
+- feat v1.1.8: FAWP Seismic Scanner — USGS catalog, 10 regions, 5 variables
+- fix: remove License classifier (PEP 639 conflict with license field on Python 3.14)
+- feat v1.1.6: PyPI glow-up, CITATION.cff, CI workflow, README science section
+- fix: add docs/images to gitignore whitelist — screenshots now tracked
+- fix v1.1.4: full debug audit — 6 bugs fixed across weather, app, alerts
+- fawp-index v1.1.0 — shared links, weather watchlist, email digest, screenshots
+- fawp-index v1.0.0 — first stable release
+- fawp-index v0.4.0
+
+
+
+## v2.8.0 — 2026-03-28
+
 - feat v2.8.0: 30+ features, fix license PEP 621, numba guard, UP032 ruff, RTD config
 - feat v2.5.0: status/backtest CLI, depth profile, multi-var wx, streak, aftershock, global LB, webhooks, CSV refresh
 - fix: sys.path bootstrap in all examples, complete [all] and [dashboard] extras
