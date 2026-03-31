@@ -19,7 +19,13 @@ _DASHBOARD = Path(__file__).parent.parent / "dashboard" / "app.py"
 
 
 def launch():
-    """Launch the Streamlit dashboard."""
+    # Parse args FIRST so --help/--version work without optional imports
+    import argparse as _ap_l
+    _ap_l.ArgumentParser(
+        prog="dashboard",
+        description=f"FAWP Scanner (fawp-index v{_VERSION})",
+    ).parse_known_args()  # non-fatal; real parsing below
+
     # Verify Streamlit is available
     try:
         import streamlit  # noqa: F401
@@ -58,3 +64,7 @@ def launch():
     ]
     print(f"fawp-index v{_VERSION} | Starting dashboard on http://localhost:{args.port}")
     subprocess.run(cmd)
+
+
+if __name__ == "__main__":
+    launch()

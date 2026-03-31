@@ -3,6 +3,7 @@ Tests for fawp_index.market — FAWPMarketScanner
 """
 import json
 import pytest
+import fawp_index
 import numpy as np
 import pandas as pd
 
@@ -203,7 +204,7 @@ class TestMarketScanSeries:
         p = tmp_path / "scan.json"
         fast_scan.to_json(p)
         d = json.loads(p.read_text())
-        assert d["meta"]["fawp_index_version"] == "2.8.0"
+        assert d["meta"]["fawp_index_version"] == fawp_index.__version__
         assert d["meta"]["ticker"] == "TEST"
         assert len(d["windows"]) == len(fast_scan.windows)
         assert "fawp_fraction" in d["summary"]

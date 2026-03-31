@@ -146,6 +146,25 @@ class ScanHistory:
 
         p = self._dir / fname
         p.write_text(json.dumps(snapshot, indent=2))
+        # Persist to Supabase for cross-session history
+        try:
+            import os
+            _url   = os.environ.get("FAWP_SUPABASE_URL",   "")
+            _token = os.environ.get("FAWP_SUPABASE_TOKEN", "")
+            if _url and _token:
+                from supabase import create_client as _sbc
+                _db = _sbc(_url, _token)
+                for _a in snapshot.get("assets", []):
+                    _db.table("fawp_scan_history").upsert({
+                        "ticker":        _a.get("ticker",""),
+                        "timeframe":     _a.get("timeframe","1d"),
+                        "scanned_at":    snapshot.get("scanned_at",""),
+                        "regime_active": bool(_a.get("regime_active",False)),
+                        "latest_score":  float(_a.get("latest_score",0) or 0),
+                        "peak_gap_bits": float(_a.get("peak_gap_bits",0) or 0),
+                    }).execute()
+        except Exception:
+            pass  # Never crash scanner due to persistence failure
         self._prune()
         return p
 

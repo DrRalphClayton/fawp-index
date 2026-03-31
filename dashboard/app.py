@@ -1,5 +1,5 @@
 """
-FAWP Dashboard v2.8.0 — Streamlit app
+FAWP Dashboard v3.7.27 — Streamlit app
 ========================================
 Ralph Clayton (2026) · https://doi.org/10.5281/zenodo.18673949
 """
@@ -119,6 +119,18 @@ if _APP_MODE is None:
         st.sidebar.info(f"\u2b06 v{_upd} available  \u2014  `pip install --upgrade fawp-index`")
 
     @st.cache_data(ttl=3600)
+    def _github_stars():
+        try:
+            import urllib.request, json as _j
+            with urllib.request.urlopen(
+                "https://api.github.com/repos/DrRalphClayton/fawp-index", timeout=3) as r:
+                return _j.loads(r.read()).get("stargazers_count", 0)
+        except Exception:
+            return None
+    _stars = _github_stars()
+    _stars_str = str(_stars) if _stars else "★"
+
+    @st.cache_data(ttl=3600)
     def _pypi_downloads():
         try:
             import urllib.request, json as _j
@@ -151,8 +163,10 @@ if _APP_MODE is None:
         f'<div style="display:flex;justify-content:center;gap:2.5em;margin:-1em 0 2em;flex-wrap:wrap">'  
         f'<div style="text-align:center"><div style="font-size:1.5em;font-weight:800;color:#D4AF37">{_dl_str}</div>'
         f'<div style="font-size:.72em;color:#3A4E70;text-transform:uppercase">PyPI downloads</div></div>'
-        f'<div style="text-align:center"><div style="font-size:1.5em;font-weight:800;color:#D4AF37">3</div>'
+        f'<div style="text-align:center"><div style="font-size:1.5em;font-weight:800;color:#D4AF37">4</div>'
         f'<div style="font-size:.72em;color:#3A4E70;text-transform:uppercase">Live scanners</div></div>'
+        f'<div style="text-align:center"><div style="font-size:1.5em;font-weight:800;color:#D4AF37">{_stars_str}</div>'
+        f'<div style="font-size:.72em;color:#3A4E70;text-transform:uppercase">GitHub stars</div></div>'
         f'<div style="text-align:center"><div style="font-size:1.5em;font-weight:800;color:#D4AF37">{_scan_count_str}</div>'
         f'<div style="font-size:.72em;color:#3A4E70;text-transform:uppercase">Scans run today</div></div>'
         f'<div style="text-align:center"><div style="font-size:1.5em;font-weight:800;color:#D4AF37">4,244</div>'
@@ -241,15 +255,22 @@ if _APP_MODE is None:
             st.session_state["_app_mode"] = "control"
             st.rerun()
 
-    st.markdown("""
-<div style="text-align:center;margin-top:3em;color:#1E2E4A;font-size:.78em">
-  fawp-index v2.8.0 · Ralph Clayton · 2026 ·
-  <a href="https://github.com/DrRalphClayton/fawp-index"
-     style="color:#1E2E4A">GitHub</a> ·
-  <a href="https://pypi.org/project/fawp-index/"
-     style="color:#1E2E4A">PyPI</a>
-</div>
-""", unsafe_allow_html=True)
+    # Footer — resolve version before embedding in markdown
+    try:
+        import fawp_index as _fi_ver
+        _APP_VER = _fi_ver.__version__
+    except Exception:
+        _APP_VER = "?"
+    st.markdown(
+        f'<div style="text-align:center;margin-top:3em;'
+        f'color:#1E2E4A;font-size:.78em">'
+        f'fawp-index v{_APP_VER} · Ralph Clayton · 2026 · '
+        f'<a href="https://github.com/DrRalphClayton/fawp-index"'
+        f'   style="color:#1E2E4A">GitHub</a> · '
+        f'<a href="https://pypi.org/project/fawp-index/"'
+        f'   style="color:#1E2E4A">PyPI</a></div>',
+        unsafe_allow_html=True
+    )
     st.stop()
 
 # ── Top nav bar — Home + direct app switcher ───────────────────────────────────
@@ -334,8 +355,14 @@ with _nav_ctrl:
 # Dark/light mode toggle (persists in session)
 # Dark/light — persist via URL query param so it survives page reload
 _qp = st.query_params
+# Persist dark/light preference: on load, read theme from URL param
 if "theme" not in st.session_state:
-    st.session_state["theme"] = _qp.get("theme", "dark")
+    _saved_theme = _qp.get("theme", "dark")
+    if _saved_theme not in ("dark", "light"): _saved_theme = "dark"
+    st.session_state["theme"] = _saved_theme
+else:
+    # Write session theme back to URL so F5 preserves it
+    _qp["theme"] = st.session_state["theme"]
 _theme_icon = "☀️" if st.session_state["theme"] == "dark" else "🌙"
 if st.sidebar.button(f"{_theme_icon} Toggle theme", key="theme_toggle",
                      use_container_width=True):
@@ -476,6 +503,8 @@ section[data-testid="stSidebar"] .stRadio label { color: var(--text-1) !importan
 /* ── Status pills ── */
 .pill { display: inline-flex; align-items: center; gap: 5px; padding: 0.18em 0.65em; border-radius: 100px; font-family: 'JetBrains Mono', monospace; font-size: 0.68em; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; }
 .pill-fawp   { background: rgba(192,17,26,0.15);  color: #FF3040; border: 1px solid rgba(192,17,26,0.35); }
+.pill-wall   { background: rgba(255,107,43,0.15); color: #FF6B2B; border: 1px solid rgba(255,107,43,0.35); }
+.pill-resid  { background: rgba(74,127,204,0.15); color: #4A7FCC; border: 1px solid rgba(74,127,204,0.35); }
 .pill-high   { background: rgba(212,175,55,0.12);  color: #D4AF37; border: 1px solid rgba(212,175,55,0.3); }
 .pill-watch  { background: rgba(74,127,204,0.10);  color: #6A9FD8; border: 1px solid rgba(74,127,204,0.25); }
 .pill-clear  { background: rgba(29,185,84,0.08);   color: #1DB954; border: 1px solid rgba(29,185,84,0.2); }
@@ -512,10 +541,20 @@ section[data-testid="stSidebar"] .stRadio label { color: var(--text-1) !importan
 .fbtn.on { background: var(--accent); color: #07101E; border-color: var(--accent); }
 
 /* ── Asset rows ── */
-.asset-row { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 0.7em 1em; margin-bottom: 5px; display: flex; align-items: center; gap: 14px; font-size: 0.85em; transition: border-color 0.15s; }
+.asset-row { background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 0.7em 1em; margin-bottom: 5px; display: flex; align-items: center; gap: 14px; font-size: 0.85em; transition: border-color 0.15s; flex-wrap: wrap; }
+@media (max-width: 768px) {
+  .asset-row { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .kpi-card  { min-width: 100px; }
+  .mode-card { padding: 1em .8em; }
+  .mode-name { font-size: 1em; }
+}
 .asset-row:hover { border-color: var(--border-2); }
 .asset-row.fawp-active { border-left: 3px solid var(--crimson); }
 .asset-row.high-risk   { border-left: 3px solid var(--accent); }
+.asset-row.sev-critical{ border-left: 4px solid #8B0000; background: rgba(139,0,0,0.12); }
+.asset-row.sev-high    { border-left: 4px solid #C0111A; background: rgba(192,17,26,0.09); }
+.asset-row.sev-medium  { border-left: 4px solid #FF6B2B; background: rgba(255,107,43,0.07); }
+.asset-row.sev-low     { border-left: 3px solid #D4AF37; background: rgba(212,175,55,0.05); }
 .asset-ticker { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--text-1); min-width: 72px; }
 .asset-tf     { font-family: 'JetBrains Mono', monospace; font-size: 0.82em; color: var(--text-3); min-width: 28px; }
 .asset-gap    { font-family: 'JetBrains Mono', monospace; font-size: 0.82em; color: var(--text-2); min-width: 70px; }
@@ -569,6 +608,18 @@ section[data-testid="stSidebar"] .stRadio label { color: var(--text-1) !importan
 </style>
 """
 st.markdown(_CSS, unsafe_allow_html=True)
+
+# Mobile sidebar: auto-collapse on narrow viewports
+st.components.v1.html(
+    "<script>(function(){"
+    "function _cb(){if(window.innerWidth<=768){"
+    "var b=window.parent.document.querySelector('[data-testid=\"collapsedControl\"]');"
+    "if(b&&b.getAttribute('aria-expanded')!=='false')b.click();}}"
+    "if(document.readyState==='complete')_cb();"
+    "else window.addEventListener('load',_cb);"
+    "})();</script>",
+    height=0, scrolling=False
+)
 
 # ── Deferred imports ──────────────────────────────────────────────────────────
 try:
@@ -704,6 +755,15 @@ def _sec(label):
 def _severity_pill(a) -> str:
     s = a.latest_score
     if a.regime_active:
+        try:
+            import fawp_index as _fi_p
+            _sm = float(getattr(a, 'steer_mi_mean', getattr(getattr(a,'odw_result',None),'steer_mi_at_h',0) or 0))
+            if _sm <= _fi_p.ALPHA_A_SQ:
+                return '<span class="pill pill-fawp">FAWP · null</span>'
+            elif _sm <= _fi_p.ALPHA_A:
+                return '<span class="pill pill-resid">FAWP · residual</span>'
+        except Exception:
+            pass
         return '<span class="pill pill-fawp">FAWP</span>'
     if s >= 0.005:
         return '<span class="pill pill-high">HIGH</span>'
@@ -878,9 +938,41 @@ with st.sidebar:
         timeframes = ["1d"]
 
     st.markdown('<div class="sb-section">Alerts</div>', unsafe_allow_html=True)
-    alert_threshold = st.slider("Gap threshold (bits)", 0.0, 1.0, 0.05, 0.01)
+    alert_threshold = st.slider("Default gap threshold (bits)", 0.0, 1.0, 0.05, 0.01,
+                               key="alert_threshold_global")
+    # Per-ticker thresholds — expand to customise
+    with st.sidebar.expander("⚙ Per-ticker thresholds", expanded=False):
+        st.caption("Override threshold per ticker. Leave blank = use default.")
+        if "ticker_thresholds" not in st.session_state:
+            st.session_state["ticker_thresholds"] = {}
+        _tt_input = st.text_area(
+            "ticker=threshold (one per line, e.g. SPY=0.05)",
+            value="\n".join(f"{k}={v}" for k,v in
+                           st.session_state["ticker_thresholds"].items()),
+            height=100, key="tt_input")
+        if _tt_input:
+            _tt_parsed = {}
+            for _ttl in _tt_input.strip().splitlines():
+                _tts = _ttl.strip().split("=")
+                if len(_tts) == 2:
+                    try: _tt_parsed[_tts[0].strip().upper()] = float(_tts[1])
+                    except ValueError: pass
+            st.session_state["ticker_thresholds"] = _tt_parsed
 
     st.markdown("<br>", unsafe_allow_html=True)
+    # Auto-scheduler
+    import time as _time_sched
+    _auto_on   = st.sidebar.toggle("⏱ Auto-rescan", key="auto_rescan_on",
+                                   help="Automatically re-run scan on a timer")
+    if _auto_on:
+        _auto_mins = st.sidebar.slider("Rescan every (min)", 1, 60, 5, key="auto_rescan_mins")
+        _last_auto = st.session_state.get("_last_auto_scan_ts", 0)
+        _secs_left = max(0, int(_auto_mins * 60 - (_time_sched.time() - _last_auto)))
+        if _secs_left > 0:
+            st.sidebar.caption(f"Next rescan in {_secs_left//60}m {_secs_left%60}s")
+        else:
+            st.session_state["_trigger_auto_scan"] = True
+
     run_btn = st.button("▶  Run Scan", type="primary", use_container_width=True)
 
     # ── User info + sign-out ──────────────────────────────────────────────
@@ -1129,7 +1221,17 @@ elif source == "Enter tickers (yfinance)":
             _default_tickers = st.session_state.pop("_preset_tickers", _default_tickers)
         elif "_preset_tickers" in st.session_state:
             _default_tickers = st.session_state.pop("_preset_tickers")
-        ticker_str = st.text_input("Tickers (comma-separated)", _default_tickers)
+        # CSV import for watchlist
+    _wl_csv = st.file_uploader("Or import tickers from CSV (one ticker per row)",
+                               type=["csv"], key="wl_csv_import")
+    if _wl_csv is not None:
+        import io as _io_wl
+        _csv_lines = _wl_csv.getvalue().decode().strip().splitlines()
+        _csv_tickers = [l.split(",")[0].strip().upper() for l in _csv_lines
+                        if l.strip() and not l.startswith("#")]
+        _default_tickers = ",".join(_csv_tickers[:50])
+        st.success(f"Imported {len(_csv_tickers)} tickers from CSV")
+    ticker_str = st.text_input("Tickers (comma-separated)", _default_tickers)
     with col2:
         period = st.selectbox("Period", ["1y", "2y", "5y", "max"], index=1)
     # Detect if inputs changed since last fetch
@@ -1176,7 +1278,9 @@ if not dfs:
     st.stop()
 
 # ── Run scan ───────────────────────────────────────────────────────────────
-if run_btn:
+_auto_trigger = st.session_state.pop("_trigger_auto_scan", False)
+if run_btn or _auto_trigger:
+    if _auto_trigger: st.session_state["_last_auto_scan_ts"] = _time_sched.time()
     _t0 = time.time()
     _n_tickers = len(dfs)
     _prog_bar = st.progress(0.0, f"Scanning 0/{_n_tickers} assets…")
@@ -1197,6 +1301,37 @@ if run_btn:
     st.session_state["scan_duration"]  = round(time.time() - _t0, 1)
     st.session_state["scan_timestamp"] = pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")
     _n_f = st.session_state["wl_result"].n_flagged
+    if _n_f >= 3:
+        _ct_t = [a.ticker for a in st.session_state["wl_result"].assets if a.regime_active][:5]
+        st.toast(f"⚠️ Systemic: {_n_f} assets in FAWP ({chr(44).join(_ct_t)}) — contagion?", icon="⚠️")
+        st.session_state["_contagion_assets"] = _ct_t
+    else:
+        st.session_state.pop("_contagion_assets", None)
+    # Auto diff-alert: detect FAWP set changes and email if subscribed
+    _prev_fawp = set(st.session_state.get("_prev_fawp_tickers", []))
+    _curr_fawp = {a.ticker for a in
+                  getattr(st.session_state.get("wl_result"), "assets", [])
+                  if a.regime_active}
+    if _prev_fawp != _curr_fawp and _prev_fawp:  # skip first scan
+        _ent = sorted(_curr_fawp - _prev_fawp)
+        _ext = sorted(_prev_fawp - _curr_fawp)
+        if _ent or _ext:
+            _chg = []
+            if _ent: _chg.append("Entered: " + ", ".join(_ent))
+            if _ext: _chg.append("Exited: "  + ", ".join(_ext))
+            st.toast("🔔 FAWP change: " + " | ".join(_chg), icon="🔔")
+            _uemail = (st.session_state.get("auth_user") or {}).get("email", "")
+            _rkey   = st.session_state.get("resend_api_key", "")
+            if _uemail and _rkey and st.session_state.get("digest_toggle"):
+                try:
+                    from email_digest import send_digest
+                    send_digest(_uemail, api_key=_rkey,
+                                finance_results=st.session_state.get("wl_result"),
+                                seismic_result=st.session_state.get("seis_result"),
+                                dynamo_result=st.session_state.get("dynamo_result"))
+                except Exception:
+                    pass
+    st.session_state["_prev_fawp_tickers"] = list(_curr_fawp)
     st.toast(f"🔴 {_n_f} FAWP regime(s) active" if _n_f else "✅ Scan complete — no FAWP active",
              icon="🔴" if _n_f else "✅")
     # Encode key scan params into URL for sharing
@@ -1239,8 +1374,20 @@ if wl is None:
 ranked = wl.rank_by("score")
 scan_duration  = st.session_state.get("scan_duration", "—")
 scan_timestamp = st.session_state.get("scan_timestamp", "—")
+if st.session_state.get("_contagion_assets"):
+    _ct = st.session_state["_contagion_assets"]
+    st.warning(f"⚠️ **Systemic FAWP event** — {len(_ct)} assets entered regime simultaneously: "
+               f"{", ".join(_ct)}. Possible market contagion. Check 🌐 All Scanners.")
 if "scan" in st.query_params:
     _share_url = f"https://fawp-scanner.info/?theme={st.session_state.get('theme','dark')}&scan={st.query_params['scan']}"
+    # Permalink: if arriving via shared link with no active scan, show decoded summary
+    if "wl_result" not in st.session_state:
+        try:
+            import base64 as _b64d, json as _jsd
+            _decoded = _jsd.loads(_b64d.urlsafe_b64decode(st.query_params["scan"] + "=="))
+            st.info(f"📎 Shared scan · Tickers: {_decoded.get('t','?')} · ε={_decoded.get('e','?')} · {_decoded.get('n',0)} FAWP active")
+        except Exception:
+            pass
     st.sidebar.text_input("🔗 Share this scan", value=_share_url,
                           key="share_url_box", help="Copy link to share this scan result")
 # Email alert if FAWP fired and user is logged in
@@ -1476,17 +1623,26 @@ when gold rises and blue collapses, that's FAWP.
             spark_html = _sparkline(a)
             odw_html   = _odw_bar(a, tau_max)
             score_cls  = _score_cls(a)
-            row_cls    = "asset-row fawp-active" if a.regime_active else (
-                         "asset-row high-risk" if a.latest_score >= 0.005 else "asset-row")
+            # 5-level severity colour scale
+            _gap_v = float(a.peak_gap_bits or 0)
+            if a.regime_active and _gap_v >= 1.5:     row_cls = "asset-row sev-critical"
+            elif a.regime_active and _gap_v >= 0.5:   row_cls = "asset-row sev-high"
+            elif a.regime_active:                      row_cls = "asset-row sev-medium"
+            elif a.latest_score >= 0.005:             row_cls = "asset-row sev-low"
+            else:                                       row_cls = "asset-row"
             threshold_badge = (
                 '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;'
                 'background:#FF3040;animation:blink 1.4s ease-in-out infinite;'
                 'margin-right:.35em;vertical-align:middle"'
                 ' title="Gap ≥ threshold {alert_threshold:.3f}b"></span>'
-                if alert_threshold > 0 and a.peak_gap_bits >= alert_threshold and a.regime_active
+                if (st.session_state.get("ticker_thresholds",{}).get(a.ticker, alert_threshold) > 0
+                and a.peak_gap_bits >= st.session_state.get("ticker_thresholds",{}).get(
+                    a.ticker, alert_threshold) and a.regime_active)
                 else ""
             )
             days_str   = f"{a.days_in_regime}d" if a.days_in_regime else "—"
+            decay_str  = (f"−{abs(a.steer_decay_rate):.4f} b/τ"
+                          if hasattr(a, "steer_decay_rate") and a.steer_decay_rate else "")
             age_str    = f"age {a.signal_age_days}d"
             # Streak: consecutive scans in FAWP from history
             _streak = 0
@@ -2138,6 +2294,48 @@ with tab_validation:
 # Tab 6 — History
 # ──────────────────────────────────────────────────────────────────────────
 with tab_history:
+    # Scan history timeline chart
+    st.markdown("### 📈 Scan History Timeline")
+    st.caption("Peak gap bits over time for each asset from scan history.")
+    try:
+        _tl_assets = hist.all_assets() if hasattr(hist,"all_assets") else []
+        if _tl_assets and HAS_MPL:
+            import matplotlib.pyplot as _plt_tl
+            import pandas as _pd_tl
+            _fig_tl, _ax_tl = _plt_tl.subplots(figsize=(10, 4), facecolor="#0D1729")
+            _ax_tl.set_facecolor("#07101E")
+            for _ta in _tl_assets[:8]:
+                _tl = hist.asset_timeline(_ta["ticker"], _ta.get("timeframe","1d"))
+                if _tl.empty or "peak_gap_bits" not in _tl.columns: continue
+                _tl = _tl.dropna(subset=["peak_gap_bits"]).sort_values("scanned_at")
+                _dates = _pd_tl.to_datetime(_tl["scanned_at"])
+                _gaps  = _tl["peak_gap_bits"].astype(float)
+                _col   = "#C0111A" if _tl["regime_active"].any() else "#3A4E70"
+                _ax_tl.plot(_dates, _gaps, lw=1.4, alpha=0.85, color=_col,
+                           label=_ta["ticker"])
+                # Mark FAWP entries
+                _fawp_rows = _tl[_tl["regime_active"] == True]
+                if not _fawp_rows.empty:
+                    _ax_tl.scatter(_pd_tl.to_datetime(_fawp_rows["scanned_at"]),
+                                  _fawp_rows["peak_gap_bits"].astype(float),
+                                  color=_col, s=22, zorder=5)
+            for _sp in _ax_tl.spines.values(): _sp.set_edgecolor("#3A4E70")
+            _ax_tl.tick_params(colors="#7A90B8", labelsize=7)
+            _ax_tl.set_ylabel("Peak gap (bits)", fontsize=8, color="#7A90B8")
+            _ax_tl.set_title("FAWP intensity over time  (dots = FAWP active)",
+                            color="#D4AF37", fontsize=9)
+            _ax_tl.legend(fontsize=7, framealpha=0.2, facecolor="#0D1729",
+                         ncol=4, loc="upper left")
+            _fig_tl.autofmt_xdate(rotation=30, ha="right")
+            _fig_tl.tight_layout()
+            st.pyplot(_fig_tl, use_container_width=True)
+            _plt_tl.close(_fig_tl)
+        elif not _tl_assets:
+            st.info("No scan history yet. Run a scan first.")
+    except Exception as _tle:
+        st.caption(f"Timeline unavailable: {_tle}")
+    st.markdown("---")
+
     st.markdown(_sec("Scan history"), unsafe_allow_html=True)
     st.caption(
         "Every scan is automatically saved. "
@@ -2518,6 +2716,39 @@ with tab_xdomain:
         st.caption(f"History unavailable: {_fwe}")
 
 with tab_compare:
+    # Scan result diff
+    st.markdown("### 📊 Scan Diff")
+    st.caption("Save current scan as baseline, run again, see what changed.")
+    _d1, _d2 = st.columns(2)
+    with _d1:
+        if st.button("💾 Save as baseline", key="diff_save",
+                     disabled="wl_result" not in st.session_state):
+            import copy as _cp_d
+            st.session_state["diff_baseline"] = _cp_d.deepcopy(st.session_state["wl_result"])
+            st.success("Baseline saved.")
+    with _d2:
+        if st.button("🔄 Compare", key="diff_compare",
+                     disabled=("wl_result" not in st.session_state or
+                               "diff_baseline" not in st.session_state)):
+            import pandas as _pd_d
+            _base = st.session_state["diff_baseline"]
+            _curr = st.session_state["wl_result"]
+            _ba   = {a.ticker for a in getattr(_base,"assets",[]) if a.regime_active}
+            _ca   = {a.ticker for a in getattr(_curr,"assets",[]) if a.regime_active}
+            _bg   = {a.ticker: float(a.peak_gap_bits or 0) for a in getattr(_base,"assets",[])}
+            _cg   = {a.ticker: float(a.peak_gap_bits or 0) for a in getattr(_curr,"assets",[])}
+            _rows = ([{"Ticker":t,"Change":"🆕 Entered FAWP","Gap Δ":f"+{_cg.get(t,0):.4f}"} for t in _ca-_ba]
+                    +[{"Ticker":t,"Change":"✅ Exited FAWP","Gap Δ":f"-{_bg.get(t,0):.4f}"} for t in _ba-_ca]
+                    +[{"Ticker":t,"Change":"🔴 Still in FAWP","Gap Δ":f"{_cg.get(t,0)-_bg.get(t,0):+.4f}"} for t in _ba&_ca])
+            st.session_state["diff_result"] = _rows
+    if "diff_result" in st.session_state:
+        import pandas as _pd_d2
+        _dr = st.session_state["diff_result"]
+        if _dr:
+            st.dataframe(_pd_d2.DataFrame(_dr), use_container_width=True, hide_index=True)
+        else:
+            st.info("No changes.")
+    st.markdown("---")
     st.markdown(_sec("FAWP vs classic signals"), unsafe_allow_html=True)
     st.caption(
         "Compare FAWP regime score against RSI, realised volatility, "
@@ -2839,6 +3070,29 @@ with tab_admin:
 
 
 with tab_export:
+    # RSS feed export
+    try:
+        from rss_feed import generate_rss_feed, scan_results_to_rss_items
+        _rss_items = scan_results_to_rss_items(
+            wl_result=st.session_state.get("wl_result"),
+            wx_result=st.session_state.get("wx_result"),
+            seis_result=st.session_state.get("seis_result"),
+            dynamo_result=st.session_state.get("dynamo_result"),
+        )
+        _rss_xml = generate_rss_feed(_rss_items)
+        st.markdown("#### 📡 RSS Feed")
+        st.caption(f"{len(_rss_items)} active FAWP signal(s) in feed · Subscribe in any RSS reader")
+        st.download_button("⬇ Download RSS feed (feed.xml)",
+                           data=_rss_xml.encode(),
+                           file_name="fawp_feed.xml",
+                           mime="application/rss+xml",
+                           key="rss_dl")
+        with st.expander("Preview feed XML"):
+            st.code(_rss_xml[:2000], language="xml")
+    except Exception as _rsse:
+        st.caption(f"RSS: {_rsse}")
+    st.markdown("---")
+
     # ── HTML report ──────────────────────────────────────────────────────
     st.markdown(_sec("Download report"), unsafe_allow_html=True)
     if wl:

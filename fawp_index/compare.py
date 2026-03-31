@@ -508,7 +508,7 @@ def _comparison_html(r: ComparisonResult) -> str:
     import base64, io
     try:
         import matplotlib
-        matplotlib.use("Agg")
+        matplotlib.use("Agg", force=True)
         import matplotlib.pyplot as plt
         import numpy as np
         fig, ax = plt.subplots(figsize=(6, 2.5))
@@ -531,8 +531,14 @@ def _comparison_html(r: ComparisonResult) -> str:
         plt.close(fig)
         b64 = base64.b64encode(buf.getvalue()).decode()
         chart_html = f'<img src="data:image/png;base64,{b64}" style="max-width:100%">'
-    except Exception:
-        chart_html = ""
+    except Exception as _chart_err:
+        import warnings
+        warnings.warn(
+            f"fawp-index: chart render failed in _comparison_html: {_chart_err}")
+        chart_html = (
+            '<p style="color:#c0392b;font-size:.85em">&#9888; Chart unavailable: '
+            f'{_chart_err}</p>'
+        )
 
     rows_html = "".join(
         f"<tr><td>{row.field}</td><td>{row.value_a}</td>"

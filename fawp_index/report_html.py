@@ -13,7 +13,10 @@ import base64, io
 from datetime import datetime
 from typing import Optional, Union
 
-_VERSION = "2.8.0"
+try:
+    from fawp_index import __version__ as _VERSION
+except Exception:
+    _VERSION = "unknown"
 
 
 def _b64_chart(fig) -> str:
@@ -121,8 +124,8 @@ def _weather_report_body(r, include_charts: bool) -> str:
     fawp_badge = '<span class="fawp">🔴 FAWP DETECTED</span>' if r.fawp_found \
                  else '<span class="clear">✅ No FAWP</span>'
     odw = f"τ {r.odw_start}–{r.odw_end}" if r.fawp_found else "—"
-    tauh = str(r.odw_result.tau_h_plus) if r.odw_result.tau_h_plus else "—"
-    tauf = str(r.odw_result.tau_f)      if r.odw_result.tau_f      else "—"
+    tauh = str(r.odw_result.tau_h_plus) if r.odw_result.tau_h_plus is not None else "—"
+    tauf = str(r.odw_result.tau_f)      if r.odw_result.tau_f      is not None else "—"
 
     kpis = (
         _kpi(fawp_badge, "Detection") +

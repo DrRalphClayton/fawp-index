@@ -48,6 +48,13 @@ def launch_demo():
 
     Use --asset TICKER to pre-fill a real ticker instead.
     """
+    # Parse args FIRST so --help works without optional imports
+    import argparse as _ap_d
+    _ap_d.ArgumentParser(
+        prog="fawp-demo",
+        description=f"FAWP Demo (fawp-index v{_VERSION})",
+    ).parse_known_args()
+
     try:
         import streamlit  # noqa: F401
     except ImportError:

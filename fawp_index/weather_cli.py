@@ -68,7 +68,9 @@ def cmd_scan(args):
         location = args.city.title()
     else:
         lat, lon = args.lat, args.lon
-        location = f"({lat:.2f}N, {lon:.2f}E)"
+        _lat_h = "N" if lat >= 0 else "S"
+        _lon_h = "E" if lon >= 0 else "W"
+        location = f"({abs(lat):.2f}{_lat_h}, {abs(lon):.2f}{_lon_h})"
 
     print(f"Scanning: {location}")
     print(f"Variable: {args.variable}")

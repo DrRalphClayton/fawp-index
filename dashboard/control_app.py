@@ -15,6 +15,30 @@ import pandas as pd
 import numpy as np
 import io
 
+# ── Inherit dark/light theme from app.py via query params ────────────────────
+_ctrl_theme = st.query_params.get("theme", "dark")
+if _ctrl_theme == "light":
+    st.markdown(
+        "<script>document.documentElement.setAttribute('data-theme','light')</script>",
+        unsafe_allow_html=True,
+    )
+# Dark mode CSS baseline for Dynamic Systems scanner
+st.markdown("""
+<style>
+:root { --bg-deep:#07101E; --bg-card:#0D1729; --border:#1E3050;
+        --gold:#D4AF37; --blue:#4A7FCC; --text:#EDF0F8; --sub:#7A90B8; }
+[data-theme="light"] { --bg-deep:#F8FAFB; --bg-card:#FFFFFF;
+    --border:#D0DCE8; --gold:#A07800; --blue:#2860AA;
+    --text:#0A1020; --sub:#4A5E7A; }
+.stApp { background: var(--bg-deep); color: var(--text); }
+.stButton>button { background: var(--gold); color: #07101E; font-weight:700; border:none; }
+.stButton>button:hover { opacity:.88; }
+.stSelectbox label, .stSlider label, .stRadio label,
+.stNumberInput label, .stFileUploader label { color: var(--sub) !important; }
+</style>
+""", unsafe_allow_html=True)
+
+
 # ── Domain presets ─────────────────────────────────────────────────────────────
 DOMAINS = {
     "⚙️ Control System": {
@@ -127,7 +151,7 @@ if data_src == "Batch upload (multiple CSVs)":
                     _batch_rows.append({
                         "File": _bf.name, "FAWP": "🔴 YES" if _odw_b.fawp_found else "—",
                         "Peak Gap (bits)": round(float(_odw_b.peak_gap_bits or 0),4),
-                        "τ⁺ₕ": _odw_b.tau_h_plus or "—", "τf": _odw_b.tau_f or "—",
+                        "τ⁺ₕ": _odw_b.tau_h_plus if _odw_b.tau_h_plus is not None else "—", "τf": _odw_b.tau_f if _odw_b.tau_f is not None else "—",
                         "ODW": f"{_odw_b.odw_start}–{_odw_b.odw_end}" if _odw_b.odw_start else "—",
                         "n_obs": int(_mask_b.sum()),
                     })
@@ -323,8 +347,8 @@ if "dynamo_result" in st.session_state:
     # KPI row
     fawp_found = bool(odw.fawp_found)
     peak_gap   = float(odw.peak_gap_bits) if odw.peak_gap_bits else 0.0
-    tau_h      = odw.tau_h_plus or "—"
-    tau_f      = odw.tau_f      or "—"
+    tau_h      = odw.tau_h_plus if odw.tau_h_plus is not None else "—"
+    tau_f      = odw.tau_f      if odw.tau_f      is not None else "—"
     odw_start  = odw.odw_start  or "—"
     odw_end    = odw.odw_end    or "—"
 
@@ -376,7 +400,7 @@ padding:.5em;text-align:center"><div style="font-size:1.4em;font-weight:800;colo
         if odw.tau_h_plus:
             _ax_r.axvline(odw.tau_h_plus, color="#C0111A", ls="--", lw=1.2, alpha=0.7,
                          label=f"τ⁺ₕ = {odw.tau_h_plus}")
-        if odw.tau_f:
+        if odw.tau_f is not None:
             _ax_r.axvline(odw.tau_f, color="#FF8C00", ls=":", lw=1.2, alpha=0.7,
                          label=f"τf = {odw.tau_f}")
 
@@ -408,6 +432,52 @@ padding:.5em;text-align:center"><div style="font-size:1.4em;font-weight:800;colo
     except Exception as _me:
         st.caption(f"Chart: {_me}")
 
+    # Triple Horizon visualiser — SPHERE_23
+    try:
+        import matplotlib.pyplot as _plt_th, matplotlib.patches as _mp_th
+        import fawp_index as _fi_th
+        _fig_th, _ax_th = _plt_th.subplots(figsize=(9, 1.8), facecolor="#0D1729")
+        _ax_th.set_facecolor("#07101E")
+        for _sp in _ax_th.spines.values(): _sp.set_edgecolor("#3A4E70")
+        _ax_th.tick_params(colors="#7A90B8", labelsize=8)
+        _ax_th.set_xlim(0, max(tau_arr[-1], _fi_th.E11_TAU_READOUT + 5))
+        _ax_th.set_ylim(0, 1); _ax_th.set_yticks([])
+        # FAWP window shading (pred > eps, steer < eps)
+        _fawp_mask = (pred_mi > epsilon) & (steer_mi <= epsilon)
+        _in_fawp = False; _fawp_start = None
+        for _ti, _tau in enumerate(tau_arr):
+            if _fawp_mask[_ti] and not _in_fawp:
+                _fawp_start = _tau; _in_fawp = True
+            elif not _fawp_mask[_ti] and _in_fawp:
+                _ax_th.axvspan(_fawp_start, _tau, alpha=0.18, color="#C0111A", zorder=1)
+                _in_fawp = False
+        if _in_fawp: _ax_th.axvspan(_fawp_start, tau_arr[-1], alpha=0.18, color="#C0111A", zorder=1)
+        # Empirical horizons from scan
+        if odw.tau_h_plus:
+            _ax_th.axvline(odw.tau_h_plus, color="#FF6B2B", lw=2, zorder=3,
+                          label=f"τ⁺ₕ={odw.tau_h_plus} (steering horizon)")
+        if odw.tau_f is not None:
+            _ax_th.axvline(odw.tau_f, color="#C0111A", lw=2, ls="--", zorder=3,
+                          label=f"τf={odw.tau_f} (functional horizon)")
+        # Reference constants from SPHERE_23 (E11-1 baseline)
+        _ax_th.axvline(_fi_th.E11_TAU_ALPHA,   color="#D4AF37", lw=1.2, ls=":",
+                      label=f"τα={_fi_th.E11_TAU_ALPHA} (steer wall)")
+        _ax_th.axvline(_fi_th.E11_TAU_ALPHA2,  color="#4A7FCC", lw=1.2, ls="-.",
+                      label=f"τα²={_fi_th.E11_TAU_ALPHA2} (residual floor)")
+        _ax_th.axvline(_fi_th.E11_TAU_READOUT, color="#1DB954", lw=1.2, ls=":",
+                      label=f"τread={_fi_th.E11_TAU_READOUT} (readout horizon)")
+        _ax_th.set_xlabel("τ (delay)", fontsize=8, color="#7A90B8")
+        _ax_th.set_title("Triple Horizon Framework — SPHERE_23 reference boundaries",
+                        color="#D4AF37", fontsize=9, fontweight="bold")
+        _ax_th.legend(fontsize=6.5, framealpha=0.25, loc="upper right",
+                     ncol=3, facecolor="#0D1729", edgecolor="#3A4E70")
+        _fig_th.tight_layout(pad=0.4)
+        st.pyplot(_fig_th, use_container_width=True)
+        _plt_th.close(_fig_th)
+        st.caption("🔴 Shaded = FAWP zone · Reference lines from E11-1 baseline (SPHERE_23)")
+    except Exception as _the:
+        st.caption(f"Triple Horizon visualiser: {_the}")
+
     # E9.7 callout
     try:
         import fawp_index as _fi
@@ -419,6 +489,193 @@ padding:.5em;text-align:center"><div style="font-size:1.4em;font-weight:800;colo
             )
     except Exception:
         pass
+
+    # FAWP Regime Breadth Map (E9.5 interactive)
+    with st.expander("🗺 Regime Breadth Map — sweep (a, K) grid", expanded=False):
+        st.caption("Reproduce E9.5 coarse regime map. Sweeps unstable growth rate a × controller gain K.")
+        _rb_c1, _rb_c2 = st.columns(2)
+        with _rb_c1:
+            _rb_a = st.multiselect("Growth rates a",
+                [1.005,1.01,1.015,1.02,1.03,1.04],
+                default=[1.01,1.02,1.03], key="rb_a")
+            _rb_K = st.multiselect("Controller gains K",
+                [0.4,0.6,0.8,1.0,1.2],
+                default=[0.4,0.8,1.2], key="rb_K")
+        with _rb_c2:
+            _rb_eps   = st.number_input("ε", 0.001, 0.1, 0.01, format="%.3f", key="rb_eps")
+            _rb_seeds = st.slider("Seeds/config", 1, 8, 4, key="rb_seeds")
+            _rb_tau   = st.slider("τ max", 20, 80, 40, key="rb_tau")
+
+        if st.button("▶ Run regime map", key="rb_run", type="primary"):
+            from fawp_index.core.estimators import mi_from_arrays, conservative_null_floor
+            from fawp_index.detection.odw import ODWDetector
+            from fawp_index.constants import PERSISTENCE_RULE_M, PERSISTENCE_RULE_N
+            _rb_rows = []
+            _rb_prog = st.progress(0.0, "Scanning regime grid…")
+            _rb_total = len(_rb_a) * len(_rb_K) * _rb_seeds
+            _rb_done  = 0
+            for _a_v in (_rb_a or [1.02]):
+                for _K_v in (_rb_K or [0.8]):
+                    _fawp_count = 0
+                    for _seed in range(_rb_seeds):
+                        try:
+                            _rng_rb = np.random.default_rng(_seed + 100)
+                            _n_rb = 500; _tau_rb = np.arange(1, _rb_tau+1)
+                            _x_rb = np.zeros(_n_rb); _u_rb = np.zeros(_n_rb)
+                            for _t in range(1, _n_rb):
+                                _obs = _x_rb[max(0,_t-20)]
+                                _u_rb[_t] = np.clip(-_K_v*_obs, -10, 10)
+                                _x_rb[_t] = _a_v*_x_rb[_t-1]+_u_rb[_t]+_rng_rb.normal(0,.1)
+                                if abs(_x_rb[_t])>500: _x_rb[_t]=np.sign(_x_rb[_t])*500
+                            _pm_rb = np.zeros(len(_tau_rb)); _sm_rb = np.zeros(len(_tau_rb))
+                            for _ti,_tau in enumerate(_tau_rb):
+                                _xp=_x_rb[:-_tau]; _yp=_x_rb[_tau:]
+                                _pm_rb[_ti]=max(0.,mi_from_arrays(_xp,_yp)-conservative_null_floor(_xp,_yp,20,.99))
+                                _xs=_u_rb[:-_tau]; _ys=_x_rb[_tau:]
+                                _sm_rb[_ti]=max(0.,mi_from_arrays(_xs,_ys)-conservative_null_floor(_xs,_ys,20,.99))
+                            _odw_rb = ODWDetector(epsilon=_rb_eps,
+                                persistence_m=PERSISTENCE_RULE_M,
+                                persistence_n=PERSISTENCE_RULE_N).detect(
+                                tau=_tau_rb, pred_corr=_pm_rb,
+                                steer_corr=_sm_rb,
+                                fail_rate=np.zeros(len(_tau_rb)))
+                            if _odw_rb.fawp_found: _fawp_count += 1
+                        except Exception:
+                            pass
+                        _rb_done += 1
+                        _rb_prog.progress(_rb_done/_rb_total)
+                    _rb_rows.append({"a":_a_v,"K":_K_v,
+                                     "FAWP rate":_fawp_count/_rb_seeds,
+                                     "Seeds":_rb_seeds})
+            _rb_prog.empty()
+            st.session_state["rb_results"] = _rb_rows
+
+        if "rb_results" in st.session_state and st.session_state["rb_results"]:
+            if HAS_MPL:
+                _rb_df = pd.DataFrame(st.session_state["rb_results"])
+                _a_u = sorted(_rb_df["a"].unique())
+                _K_u = sorted(_rb_df["K"].unique())
+                _mat = [[_rb_df[(_rb_df["a"]==_av)&(_rb_df["K"]==_kv)]["FAWP rate"].mean()
+                         for _kv in _K_u] for _av in _a_u]
+                _fig_rb,_ax_rb=_plt.subplots(figsize=(max(4,len(_K_u)*1.2),
+                                                       max(3,len(_a_u)*0.8)),
+                                             facecolor="#0D1729")
+                _ax_rb.set_facecolor("#07101E")
+                import numpy as _np_rb
+                _im = _ax_rb.imshow(_np_rb.array(_mat), cmap="RdYlGn_r",
+                                   vmin=0, vmax=1, aspect="auto")
+                _plt.colorbar(_im, ax=_ax_rb, label="FAWP detection rate")
+                _ax_rb.set_xticks(range(len(_K_u))); _ax_rb.set_yticks(range(len(_a_u)))
+                _ax_rb.set_xticklabels([str(k) for k in _K_u],
+                                       fontsize=8, color="#EDF0F8")
+                _ax_rb.set_yticklabels([str(a) for a in _a_u],
+                                       fontsize=8, color="#EDF0F8")
+                _ax_rb.set_xlabel("K (controller gain)", fontsize=8, color="#7A90B8")
+                _ax_rb.set_ylabel("a (growth rate)", fontsize=8, color="#7A90B8")
+                _ax_rb.set_title("E9.5 Regime Breadth Map — FAWP detection rate",
+                                color="#D4AF37", fontsize=9)
+                for _sp in _ax_rb.spines.values(): _sp.set_edgecolor("#3A4E70")
+                _fig_rb.tight_layout(); st.pyplot(_fig_rb, use_container_width=True)
+                _plt.close(_fig_rb)
+
+
+
+    # LERI Readout Chain Visualiser
+    with st.expander("🔬 LERI Readout Chain (X→R→Y_τ→D_τ)", expanded=False):
+        st.caption("Estimates how much of the original signal survives at each delay. "
+                   "Based on LERI paper: Clayton (2026).")
+        _lr_c1, _lr_c2 = st.columns(2)
+        with _lr_c1:
+            _lr_sig0 = st.number_input("Baseline noise σ²₀", 0.001, 2.0, 1.0, format="%.3f", key="lr_sig0")
+            _lr_alpha = st.number_input("Noise growth α",    0.001, 2.0, 0.25, format="%.3f", key="lr_alpha")
+        with _lr_c2:
+            _lr_P     = st.number_input("Signal power P",    0.01,  10., 1.0,  format="%.2f", key="lr_P")
+            _lr_eps   = st.number_input("Threshold ε (bits)",0.001, 0.1, 0.01, format="%.3f", key="lr_eps")
+            _lr_tau   = st.slider("τ max", 50, 500, 300, key="lr_tau")
+
+        if st.button("▶ Compute readout chain", key="lr_run", type="primary"):
+            import numpy as _np_lr
+            _tau_lr = _np_lr.arange(0, _lr_tau + 1)
+            _sigma2 = _lr_sig0 + _lr_alpha * _tau_lr
+            _I_tau  = 0.5 * _np_lr.log2(1 + _lr_P / _sigma2)
+            _I_tau  = _np_lr.maximum(0, _I_tau)
+            # Analytic horizon (LERI Eq. 15-16)
+            _denom = 2**(2*_lr_eps) - 1
+            _tau_h = max(0.0, (_lr_P/_denom - _lr_sig0) / _lr_alpha) if _lr_alpha > 0 else float('inf')
+
+            if HAS_MPL:
+                _fig_lr, _ax_lr = _plt.subplots(figsize=(8, 3.5), facecolor="#0D1729")
+                _ax_lr.set_facecolor("#07101E")
+                _ax_lr.plot(_tau_lr, _I_tau, color="#4A7FCC", lw=1.5, label="I(X;D_τ) Gaussian channel")
+                _ax_lr.axhline(_lr_eps, color="#C0111A", ls="--", lw=1, label=f"ε={_lr_eps:.3f}")
+                if _tau_h < _lr_tau:
+                    _ax_lr.axvline(_tau_h, color="#D4AF37", ls=":", lw=1.5,
+                                  label=f"τ⁺ₕ≈{_tau_h:.1f} (analytic)")
+                # Shade below threshold
+                _ax_lr.fill_between(_tau_lr, _I_tau, 0,
+                                   where=_I_tau <= _lr_eps, alpha=0.15, color="#C0111A",
+                                   label="Below detectability")
+                for _sp in _ax_lr.spines.values(): _sp.set_edgecolor("#3A4E70")
+                _ax_lr.tick_params(colors="#7A90B8", labelsize=8)
+                _ax_lr.set_xlabel("τ (delay)", fontsize=8, color="#7A90B8")
+                _ax_lr.set_ylabel("Mutual information (bits)", fontsize=8, color="#7A90B8")
+                _ax_lr.set_title("LERI Readout Chain — Operational Access Horizon",
+                                color="#D4AF37", fontsize=9)
+                _ax_lr.legend(fontsize=7, framealpha=0.2, facecolor="#0D1729")
+                _fig_lr.tight_layout()
+                st.pyplot(_fig_lr, use_container_width=True)
+                _plt.close(_fig_lr)
+
+            _alive = _I_tau[_I_tau > _lr_eps]
+            st.metric("Analytic τ⁺ₕ", f"{_tau_h:.1f}" if _tau_h < _lr_tau else ">τ_max")
+            st.caption(f"Signal readable for {len(_alive)}/{len(_tau_lr)} delays · "
+                       f"σ²(τₕ) ≈ {(_lr_sig0 + _lr_alpha*_tau_h):.3f}")
+
+    # Agency Capacity Surface — P × α → τₕ
+    with st.expander("📡 Agency Capacity Surface (SPHERE_23)", expanded=False):
+        st.caption("Heatmap of agency horizon τₕ = max(0, (P/(2^(2ε)−1) − σ²₀) / α) over P × α space.")
+        _ag_c1, _ag_c2, _ag_c3 = st.columns(3)
+        with _ag_c1:
+            _ag_eps   = st.number_input("ε (bits)", 0.001, 0.1, 0.01, format="%.3f", key="ag_eps")
+            _ag_sig0  = st.number_input("σ²₀", 0.0, 1.0, 0.0001, format="%.4f", key="ag_sig0")
+        with _ag_c2:
+            _ag_pmin  = st.number_input("P min", 0.01, 10.0, 0.1,  key="ag_pmin")
+            _ag_pmax  = st.number_input("P max", 0.1,  100., 10.0, key="ag_pmax")
+        with _ag_c3:
+            _ag_amin  = st.number_input("α min", 1e-4, 0.5, 0.001, format="%.4f", key="ag_amin")
+            _ag_amax  = st.number_input("α max", 1e-3, 1.0, 0.1,   format="%.3f", key="ag_amax")
+            _ag_steps = st.slider("Grid steps", 10, 60, 30, key="ag_steps")
+
+        if st.button("▶ Compute surface", key="ag_run", type="primary"):
+            import numpy as _np_ag
+            _P_v  = _np_ag.logspace(_np_ag.log10(_ag_pmin), _np_ag.log10(_ag_pmax), _ag_steps)
+            _A_v  = _np_ag.logspace(_np_ag.log10(_ag_amin), _np_ag.log10(_ag_amax), _ag_steps)
+            _PP, _AA = _np_ag.meshgrid(_P_v, _A_v)
+            _denom = 2**(2*_ag_eps) - 1
+            _TH = _np_ag.maximum(0, (_PP/_denom - _ag_sig0) / _AA)
+            st.session_state["ag_surface"] = (_P_v, _A_v, _TH)
+
+        if "ag_surface" in st.session_state:
+            _P_v, _A_v, _TH = st.session_state["ag_surface"]
+            if HAS_MPL:
+                _fig_ag, _ax_ag = _plt.subplots(figsize=(7, 5), facecolor="#0D1729")
+                _ax_ag.set_facecolor("#07101E")
+                import numpy as _np_ag2
+                _im_ag = _ax_ag.contourf(_np_ag2.log10(_P_v), _np_ag2.log10(_A_v),
+                                         _TH, levels=25, cmap="RdYlGn")
+                _plt.colorbar(_im_ag, ax=_ax_ag, label="Agency horizon τₕ (steps)")
+                _ax_ag.set_xlabel("log₁₀ P (signal power)", fontsize=8, color="#7A90B8")
+                _ax_ag.set_ylabel("log₁₀ α (noise growth)", fontsize=8, color="#7A90B8")
+                _ax_ag.set_title("Agency Capacity Surface — VTM Eq. 15–16",
+                                color="#D4AF37", fontsize=9)
+                for _sp in _ax_ag.spines.values(): _sp.set_edgecolor("#3A4E70")
+                _ax_ag.tick_params(colors="#7A90B8", labelsize=7)
+                _fig_ag.tight_layout()
+                st.pyplot(_fig_ag, use_container_width=True)
+                _plt.close(_fig_ag)
+                st.caption(f"Max τₕ = {_TH.max():.0f}  ·  "
+                           f"at P={_P_v[_np_ag2.unravel_index(_TH.argmax(),_TH.shape)[1]]:.2f}, "
+                           f"α={_A_v[_np_ag2.unravel_index(_TH.argmax(),_TH.shape)[0]]:.4f}")
 
     # Colab launch button
     st.markdown("---")

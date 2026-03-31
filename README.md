@@ -1,6 +1,8 @@
 # fawp-index
 
 [![PyPI version](https://img.shields.io/pypi/v/fawp-index.svg)](https://pypi.org/project/fawp-index/)
+[![GitHub stars](https://img.shields.io/github/stars/DrRalphClayton/fawp-index?style=social)](https://github.com/DrRalphClayton/fawp-index/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/DrRalphClayton/fawp-index?style=social)](https://github.com/DrRalphClayton/fawp-index/network/members)
 [![PyPI downloads](https://img.shields.io/pypi/dm/fawp-index.svg)](https://pypi.org/project/fawp-index/)
 [![Python](https://img.shields.io/pypi/pyversions/fawp-index)](https://pypi.org/project/fawp-index/)
 [![CI](https://github.com/DrRalphClayton/fawp-index/actions/workflows/ci.yml/badge.svg)](https://github.com/DrRalphClayton/fawp-index/actions/workflows/ci.yml)
@@ -37,7 +39,7 @@
 Scan any stock, ETF, or crypto in your browser.
 Enter tickers → Fetch data → See regime detection in real time.
 
-*Powered by fawp-index v2.8.0 · [pip install it](#install) for full local control*
+*Powered by fawp-index v3.7.21 · [pip install it](#install) for full local control*
 
 </div>
 
@@ -409,7 +411,7 @@ fawp-dashboard                     # opens on http://localhost:8501
 cd dashboard && streamlit run app.py
 ```
 
-**Dashboard features (v2.8.0):**
+**Dashboard features (v3.7.21):**
 - Severity pills (FAWP / HIGH / WATCH / CLEAR) with pulsing indicators
 - Sparkline score trend per asset with ▲/▼ arrows
 - ODW proportional bar showing window position in τ range
@@ -496,7 +498,7 @@ from fawp_index.constants import (
   author  = {Ralph Clayton},
   title   = {fawp-index: Information-Control Exclusion Principle detector},
   year    = {2026},
-  version = {2.8.0},
+  version = {3.7.20},
   url     = {https://github.com/DrRalphClayton/fawp-index},
   doi     = {10.5281/zenodo.18673949}
 }

@@ -89,7 +89,7 @@ def cmd_scan(args):
             print(f"  {i:>3}  {a.ticker:<10} ERROR")
             continue
         status = "FAWP" if a.regime_active else ("watch" if a.latest_score > 0.05 else "—")
-        odw = f"{a.peak_odw_start}-{a.peak_odw_end}" if a.peak_odw_start else "—"
+        odw = f"{a.peak_odw_start}-{a.peak_odw_end}" if a.peak_odw_start is not None else "—"
         print(f"  {i:>3}  {a.ticker:<10} {a.timeframe:<5} "
               f"{a.latest_score:>6.4f} {a.peak_gap_bits:>7.4f} {status:<10} {odw}")
 

@@ -1400,8 +1400,8 @@ def plot_weather_map(
         size  = max(8, min(40, 8 + gap * 60))
 
         odw   = f"τ {r.odw_start}–{r.odw_end}" if fawp else "—"
-        tauh  = str(r.odw_result.tau_h_plus) if r.odw_result.tau_h_plus else "—"
-        tauf  = str(r.odw_result.tau_f)      if r.odw_result.tau_f      else "—"
+        tauh  = str(r.odw_result.tau_h_plus) if r.odw_result.tau_h_plus is not None else "—"
+        tauf  = str(r.odw_result.tau_f)      if r.odw_result.tau_f      is not None else "—"
         hover = (
             f"<b>{name}</b><br>"
             f"FAWP: {'🔴 YES' if fawp else '✅ NO'}<br>"

@@ -209,6 +209,17 @@ class MarketWindowResult:
         score      = int(round(float(self.regime_score) * 100))
         pred_mean  = float(self.pred_mi.mean())  if len(self.pred_mi)  else 0.0
         steer_mean = float(self.steer_mi.mean()) if len(self.steer_mi) else 0.0
+        # Steering decay rate: dI_steer/dτ (bits per delay step, negative = falling)
+        if len(self.steer_mi) >= 3:
+            import numpy as _np_d
+            _tau_d = _np_d.arange(1, len(self.steer_mi)+1)
+            try:
+                _slope = float(_np_d.polyfit(_tau_d, self.steer_mi, 1)[0])
+            except Exception:
+                _slope = 0.0
+            self.steer_decay_rate = round(_slope, 6)
+        else:
+            self.steer_decay_rate = 0.0
         pred_tier  = "HIGH" if pred_mean  > 0.05 else ("MEDIUM" if pred_mean  > 0.01 else "LOW")
         steer_tier = "LOW"  if steer_mean < 0.01 else ("MEDIUM" if steer_mean < 0.05 else "HIGH")
         regime     = "FAWP" if self.fawp_found else ("WATCHING" if score > 5 else "CLEAR")
@@ -373,10 +384,10 @@ class MarketScanSeries:
         """
         try:
             import matplotlib
-            matplotlib.use("Agg" if not show else matplotlib.get_backend())
+            matplotlib.use("Agg", force=True)
             import matplotlib.pyplot as plt
             import matplotlib.patches as mpatches
-        except ImportError:
+        except (ImportError, ValueError):
             raise ImportError("pip install fawp-index[plot]")
 
         has_prices = prices is not None and len(prices) > 0
@@ -978,7 +989,7 @@ def _scan_html(scan: MarketScanSeries) -> str:
     chart_html = ""
     try:
         import matplotlib
-        matplotlib.use("Agg")
+        matplotlib.use("Agg", force=True)
         import matplotlib.pyplot as plt
         import matplotlib.patches as mpatches
         import base64
@@ -993,8 +1004,14 @@ def _scan_html(scan: MarketScanSeries) -> str:
             f'<img src="data:image/png;base64,{b64}" '
             'style="max-width:100%;border:1px solid #ddd;border-radius:4px">'
         )
-    except Exception:
-        pass
+    except Exception as _chart_err:
+        import warnings
+        warnings.warn(
+            f"fawp-index: chart render failed in _scan_html: {_chart_err}")
+        chart_html = (
+            '<p style="color:#c0392b;font-size:.85em">&#9888; Chart unavailable: '
+            f'{_chart_err}</p>'
+        )
 
     # Summary table rows
     def row(k, v, bg="#fff"):

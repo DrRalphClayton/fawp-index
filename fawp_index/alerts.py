@@ -472,7 +472,7 @@ class AlertEngine:
         horizon_warn_tau:        Optional[int] = None,
         state_path:              Optional[Union[str, Path]] = None,
         suppress_errors:         bool = True,
-        # ── New in v2.8.0 ───────────────────────────────────────────────
+        # ── Extended parameters ──────────────────────────────────────────
         cooldown_hours:          float = 0.0,
         min_consecutive_windows: int   = 1,
         score_change_threshold:  float = 0.0,
@@ -1034,7 +1034,7 @@ def render_weather_alert(
         pred_score  = pred_score,
         steer_score = steer_score,
         gap_bits    = result.peak_gap_bits,
-        tau_h       = odw.tau_h_plus if odw.tau_h_plus else "—",
+        tau_h       = odw.tau_h_plus if odw.tau_h_plus is not None else "—",
         odw_start   = result.odw_start if result.odw_start is not None else "—",
         odw_end     = result.odw_end   if result.odw_end   is not None else "—",
     )

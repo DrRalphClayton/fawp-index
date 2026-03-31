@@ -385,11 +385,63 @@ def _build_parser():
     p = sub.add_parser("timing", help="Print E9.7 detector timing results from the paper")
     p.set_defaults(func=cmd_timing)
 
+    # steering profile
+    p = sub.add_parser("steering", help="Steering decay profile with SPHERE_23 αA/α²A thresholds")
+    p.add_argument("--ticker",  required=True)
+    p.add_argument("--period",  default="2y")
+    p.add_argument("--epsilon", type=float, default=0.01)
+    p.add_argument("--n-null",  type=int,   default=50,   dest="n_null")
+    p.add_argument("--plot",    action="store_true")
+    p.set_defaults(func=cmd_steering)
+
+    # scan one-liner
+    p = sub.add_parser("scan", help="One-liner FAWP scan for a single ticker")
+    p.add_argument("--ticker",  required=True,              help="Ticker symbol (e.g. SPY)")
+    p.add_argument("--period",  default="2y",               help="yfinance period (1y, 2y, …)")
+    p.add_argument("--epsilon", type=float, default=0.01)
+    p.add_argument("--n-null",  type=int,   default=50,     dest="n_null")
+    p.add_argument("--out",     default=None,               help="Save result JSON to file")
+    p.set_defaults(func=cmd_scan)
+
     # verify
     p = sub.add_parser("verify", help="Run calibration self-checks against SPHERE/E9 constants")
+    p.add_argument("--sphere23", action="store_true",
+                   help="Run live E11-1 simulation vs SPHERE_23 reference values")
+    p.add_argument("--seed",      type=int, default=42)
+    p.add_argument("--tolerance", type=int, default=5,
+                   help="Allowed horizon deviation in delay steps")
     p.set_defaults(func=cmd_verify)
 
     # grid
+    # calibrate
+    p = sub.add_parser("calibrate", help="Re-derive SPHERE-16 constants from simulation")
+    p.add_argument("--a",        type=float, default=1.02,  help="AR(1) gain")
+    p.add_argument("--K",        type=float, default=0.8,   help="Controller gain")
+    p.add_argument("--delta",    type=int,   default=20,    help="Observation delay Δ")
+    p.add_argument("--n-trials", type=int,   default=200,   dest="n_trials")
+    p.add_argument("--n-null",   type=int,   default=50,    dest="n_null")
+    p.add_argument("--tau-max",  type=int,   default=40,    dest="tau_max")
+    p.add_argument("--seed",     type=int,   default=42)
+    p.add_argument("--out",      default=None)
+    p.set_defaults(func=cmd_calibrate)
+
+    # agency sweep
+    p = sub.add_parser("agency", help="Sweep agency horizon over parameter space (VTM Eq. 15-16)")
+    p.add_argument("--mode",    default="alpha", choices=["alpha","P","surface"],
+                   help="Sweep variable: alpha (noise growth) or P (signal power)")
+    p.add_argument("--P",       type=float, default=1.0,  help="Action variance P (fixed in alpha mode)")
+    p.add_argument("--alpha",   type=float, default=0.01, help="Noise growth α (fixed in P mode)")
+    p.add_argument("--sigma0",  type=float, default=0.0001, help="Baseline noise σ²₀")
+    p.add_argument("--epsilon", type=float, default=0.01,   help="Detectability threshold ε (bits)")
+    p.add_argument("--a-min",   type=float, default=1e-3,   dest="a_min")
+    p.add_argument("--a-max",   type=float, default=1e-1,   dest="a_max")
+    p.add_argument("--P-min",   type=float, default=0.01,   dest="P_min")
+    p.add_argument("--P-max",   type=float, default=100.0,  dest="P_max")
+    p.add_argument("--n-steps", type=int,   default=20,     dest="n_steps")
+    p.add_argument("--no-plot", action="store_true",        dest="no_plot")
+    p.add_argument("--out",     default=None)
+    p.set_defaults(func=cmd_agency)
+
     # leaderboard push/list
     lb_p = sub.add_parser("leaderboard", help="Push or list global FAWP leaderboard entries")
     lb_sub = lb_p.add_subparsers(dest="subcommand")
@@ -404,6 +456,39 @@ def _build_parser():
     lb_list.add_argument("--url",   default=None)
     lb_list.add_argument("--token", default=None)
     lb_p.set_defaults(func=cmd_leaderboard)
+
+    # changelog
+    p = sub.add_parser("changelog", help="Print CHANGELOG entry for the installed version")
+    p.add_argument("--version", default=None, help="Show entry for this version (default: installed)")
+    p.set_defaults(func=cmd_changelog)
+
+    # triple-horizon sweep
+    p = sub.add_parser("triple-horizon-sweep",
+                       help="E11-2 portability sweep over (a,K) grid")
+    p.add_argument("--a-grid",            default="1.01,1.02,1.03",  dest="a_grid")
+    p.add_argument("--K-grid",            default="0.4,0.8,1.2",     dest="K_grid")
+    p.add_argument("--delta",             type=int,   default=20)
+    p.add_argument("--readout-tau-scale", type=float, default=25.0,  dest="readout_tau_scale")
+    p.add_argument("--epsilon",           type=float, default=0.01)
+    p.add_argument("--tau-max",           type=int,   default=50,    dest="tau_max")
+    p.add_argument("--seed",              type=int,   default=42)
+    p.add_argument("--out",               default=None)
+    p.set_defaults(func=cmd_triple_horizon_sweep)
+
+    # triple-horizon
+    p = sub.add_parser("triple-horizon", help="E11-1 Triple Horizon benchmark (SPHERE_23)")
+    p.add_argument("--a",                type=float, default=1.02)
+    p.add_argument("--K",                type=float, default=0.8)
+    p.add_argument("--delta",            type=int,   default=20)
+    p.add_argument("--readout-tau-scale",type=float, default=25.0, dest="readout_tau_scale")
+    p.add_argument("--shield",           type=float, default=0.0)
+    p.add_argument("--x-fail",           type=float, default=500.0, dest="x_fail")
+    p.add_argument("--epsilon",          type=float, default=0.01)
+    p.add_argument("--tau-max",          type=int,   default=50,  dest="tau_max")
+    p.add_argument("--n-null",           type=int,   default=30,  dest="n_null")
+    p.add_argument("--seed",             type=int,   default=42)
+    p.add_argument("--out",              default=None)
+    p.set_defaults(func=cmd_triple_horizon)
 
     # latent (LERI)
     p = sub.add_parser("latent", help="LERI: Latent Environmental Residual Inference access horizon")
@@ -440,7 +525,7 @@ def _build_parser():
     p = sub.add_parser("export", help="Export a FAWP result JSON to csv/html/pdf")
     p.add_argument("--data",   required=True, help="Path to result .json file")
     p.add_argument("--out",    default=None,  help="Output path (auto-detected from format)")
-    p.add_argument("--format", default=None,  choices=["csv","html","pdf"],
+    p.add_argument("--format", default=None,  choices=["csv","html","pdf","parquet"],
                    help="Output format (default: inferred from --out extension)")
     p.add_argument("--title",  default=None)
     p.add_argument("--mode",   default="report", choices=["report","lab"])
@@ -507,6 +592,10 @@ def _build_parser():
 
     # report
     p = sub.add_parser("report", help="Generate a PDF report from a FAWP result JSON")
+    p.add_argument("--ticker",  default=None, help="Ticker to scan inline (skips --data requirement)")
+    p.add_argument("--period",  default="2y")
+    p.add_argument("--epsilon", type=float, default=0.01)
+    p.add_argument("--n-null",  type=int, default=50, dest="n_null")
     p.add_argument("--data",   required=True, help="Path to result .json file")
     p.add_argument("--out",    default=None,  help="Output PDF path (default: <data>.pdf)")
     p.add_argument("--title",  default=None,  help="Report title")
@@ -646,8 +735,11 @@ def cmd_timing(_args):
     print()
 
 
-def cmd_verify(_args):
+def cmd_verify(args):
     """Run calibration self-checks against published SPHERE/E9 constants."""
+    if getattr(args, "sphere23", False):
+        return cmd_verify_sphere23(args)
+
     import fawp_index as fi
     from fawp_index.data import E9_2_SUMMARY_JSON
     import json
@@ -676,6 +768,15 @@ def cmd_verify(_args):
     chk("E97_MEAN_LEAD_GAP2_TO_CLIFF_U",  fi.E97_MEAN_LEAD_GAP2_TO_CLIFF_U,  0.7552, 1e-3)
     chk("E97_MEAN_LEAD_ALPHA_TO_CLIFF_U", fi.E97_MEAN_LEAD_ALPHA_TO_CLIFF_U, -2.004, 1e-3)
     chk("E97_MEAN_ABS_ERR_GAP2_VS_ODW_START", fi.E97_MEAN_ABS_ERR_GAP2_VS_ODW_START, 2.108, 0.01)
+
+    # SPHERE_23 Triple Horizon (Experiment 11, March 2026)
+    chk("ALPHA_A",            fi.ALPHA_A,             0.007297,           1e-5)
+    chk("ALPHA_A_SQ",         fi.ALPHA_A_SQ,          5.325135447834e-5,  1e-10)
+    chk("E11_TAU_ALPHA",       fi.E11_TAU_ALPHA,       10,                 0)
+    chk("E11_TAU_PLUS_H",      fi.E11_TAU_PLUS_H,      12,                 0)
+    chk("E11_TAU_F",           fi.E11_TAU_F,           29,                 0)
+    chk("E11_TAU_ALPHA2",      fi.E11_TAU_ALPHA2,      32,                 0)
+    chk("E11_TAU_READOUT",     fi.E11_TAU_READOUT,     38,                 0)
 
     # Verify bundled E9.2 data is loadable
     try:
@@ -833,7 +934,28 @@ def cmd_forecast(args):
 
 
 def cmd_report(args):
-    """Generate a PDF report from a FAWP result JSON file."""
+    """Generate a PDF report from a FAWP result JSON file, or run inline scan first."""
+    # --ticker shortcut: scan inline then report
+    if getattr(args, "ticker", None):
+        print(f"Running inline scan for {args.ticker} [{args.period}]…")
+        try:
+            import yfinance as _yf_r, json as _j_r, tempfile as _tmp_r
+            from fawp_index.market import scan_fawp_market as _sfm
+            _df_r = _yf_r.download(args.ticker, period=args.period,
+                                   auto_adjust=True, progress=False)
+            if _df_r.empty:
+                print(f"No data for {args.ticker}"); return
+            _epsilon_r = getattr(args, "epsilon", 0.01)
+            _n_null_r  = getattr(args, "n_null",  50)
+            _r_scan = _sfm(_df_r, ticker=args.ticker,
+                           epsilon=_epsilon_r, n_null=_n_null_r, verbose=False)
+            _tf = _tmp_r.NamedTemporaryFile(suffix=".json", delete=False, mode="w")
+            _j_r.dump(getattr(_r_scan, "__dict__", {}), _tf, default=str)
+            _tf.close()
+            args.data = _tf.name
+            print("Scan complete — generating report…")
+        except ImportError:
+            print("yfinance required: pip install yfinance"); return
     import json
     from fawp_index.report import generate_report
 
@@ -1116,8 +1238,10 @@ def cmd_compare(args):
     for label, r in results.items():
         fawp = "🔴 YES" if getattr(r, "fawp_found", False) or getattr(r, "in_fawp", [False])[-1] else "—"
         gap  = getattr(r, "peak_gap_bits", 0) or 0
-        tau_h = getattr(r.odw_result if hasattr(r,"odw_result") else r, "tau_h_plus", "—") or "—"
-        tau_f = getattr(r.odw_result if hasattr(r,"odw_result") else r, "tau_f",     "—") or "—"
+        tau_h = getattr(r.odw_result if hasattr(r,"odw_result") else r, "tau_h_plus", None)
+        tau_h = str(tau_h) if tau_h is not None else "—"
+        tau_f = getattr(r.odw_result if hasattr(r,"odw_result") else r, "tau_f",     None)
+        tau_f = str(tau_f) if tau_f is not None else "—"
         n_obs = getattr(r, "n_obs", getattr(r, "n_windows", "—"))
         print(f"{label:<28} {fawp:>6} {gap:>10.4f} {str(tau_h):>5} {str(tau_f):>5} {str(n_obs):>7}")
     print()
@@ -1169,7 +1293,7 @@ def cmd_export(args):
                         title=args.title or f"FAWP Export — {Path(args.data).stem}",
                         mode=args.mode)
     else:
-        print(f"Unknown format: {fmt}. Use csv, html, or pdf.")
+        print(f"Unknown format: {fmt}. Use csv, html, pdf, or parquet.")
         return
 
     print(f"Saved → {out}")
@@ -1300,8 +1424,8 @@ def cmd_diagnose(args):
     status = "🔴 FAWP DETECTED" if r.fawp_found else "✅ No FAWP"
     print(f"Status        : {status}")
     print(f"Peak gap      : {r.peak_gap_bits:.4f} bits")
-    print(f"Agency horizon: τ⁺ₕ = {r.tau_h_plus or 'not reached'}")
-    print(f"Failure cliff : τf  = {r.tau_f      or 'not reached'}")
+    print(f"Agency horizon: τ⁺ₕ = {r.tau_h_plus if r.tau_h_plus is not None else 'not reached'}")
+    print(f"Failure cliff : τf  = {r.tau_f if r.tau_f is not None else 'not reached'}")
     print(f"Detection window: τ = {r.odw_start or '?'}–{r.odw_end or '?'}")
     print()
 
@@ -1311,7 +1435,7 @@ def cmd_diagnose(args):
         print(f"  Your system entered FAWP at τ = {r.odw_start}.")
         if r.peak_gap_bits:
             print(f"  Prediction peaked at {r.peak_gap_bits:.4f} bits while steering collapsed.")
-        if r.tau_h_plus and r.tau_f:
+        if r.tau_h_plus is not None and r.tau_f is not None:
             print(f"  Steering authority was lost at τ = {r.tau_h_plus}.")
             print(f"  Full control failure occurred at τ = {r.tau_f}.")
             print(f"  The operational detection window spans {lead} delay steps (τ = {r.odw_start}–{r.odw_end}).")
@@ -1493,6 +1617,489 @@ def cmd_leaderboard(args):
                   f"{float(r.get('peak_gap_bits',0)):>12.4f} "
                   f"{'🔴' if r.get('fawp_found') else '—':>6}  "
                   f"{r.get('domain','?'):<16}")
+
+
+def cmd_agency(args):
+    """Sweep agency horizon over (P, alpha, sigma0) and print/plot a surface.
+
+    From the VTM paper (Eq. 15-16):
+      τₕ = max(0, (P / (2^(2ε) - 1) - σ²₀) / α)
+    """
+    import numpy as np
+    import pandas as pd
+
+    eps   = args.epsilon
+    denom = 2 ** (2 * eps) - 1
+
+    if args.mode == "alpha":
+        # Sweep alpha (noise growth rate)
+        alpha_vals = np.logspace(
+            np.log10(args.a_min), np.log10(args.a_max), args.n_steps)
+        tau_h_vals = np.maximum(0, (args.P / denom - args.sigma0) / alpha_vals)
+        print(f"Agency horizon sweep: P={args.P}  σ²₀={args.sigma0}  ε={eps}b")
+        print(f"{'alpha':>12}  {'tau_h':>10}")
+        print("-" * 26)
+        for a, t in zip(alpha_vals, tau_h_vals):
+            print(f"{a:>12.5f}  {t:>10.2f}")
+        if not args.no_plot:
+            try:
+                import matplotlib.pyplot as plt
+                fig, ax = plt.subplots(figsize=(7, 3))
+                ax.loglog(alpha_vals, tau_h_vals, color="#D4AF37", lw=2)
+                ax.set_xlabel("α (noise growth rate)")
+                ax.set_ylabel("τₕ (agency horizon)")
+                ax.set_title(f"Agency Horizon — Inverse Scaling Law  (P={args.P}, ε={eps}b)")
+                ax.grid(True, alpha=0.3)
+                plt.tight_layout()
+                plt.show()
+            except Exception as e:
+                print(f"Plot skipped: {e}")
+
+    elif args.mode == "surface":
+        # 2D heatmap: P × alpha → tau_h
+        import numpy as np
+        P_vals     = np.logspace(np.log10(args.P_min),   np.log10(args.P_max),   args.n_steps)
+        alpha_vals = np.logspace(np.log10(args.a_min),   np.log10(args.a_max),   args.n_steps)
+        PP, AA     = np.meshgrid(P_vals, alpha_vals)
+        TH         = np.maximum(0, (PP / denom - args.sigma0) / AA)
+        print(f"VTM Agency Horizon Surface  (ε={eps}b  σ²₀={args.sigma0})")
+        print(f"  P range: [{P_vals[0]:.3f}, {P_vals[-1]:.3f}]")
+        print(f"  α range: [{alpha_vals[0]:.4f}, {alpha_vals[-1]:.4f}]")
+        print(f"  τₕ min={TH.min():.1f}  max={TH.max():.1f}  mean={TH.mean():.1f}")
+        if not args.no_plot:
+            try:
+                import matplotlib.pyplot as plt
+                fig, ax = plt.subplots(figsize=(7, 5))
+                im = ax.contourf(np.log10(PP), np.log10(AA), TH, levels=20, cmap="RdYlGn")
+                plt.colorbar(im, ax=ax, label="Agency horizon τₕ (steps)")
+                ax.set_xlabel("log₁₀ P (signal power)")
+                ax.set_ylabel("log₁₀ α (noise growth rate)")
+                ax.set_title(f"VTM Agency Horizon Surface  (ε={eps}b)")
+                plt.tight_layout(); plt.show()
+            except Exception as e:
+                print(f"Plot skipped: {e}")
+        if args.out:
+            import pandas as pd
+            rows = [{"P": P_vals[j], "alpha": alpha_vals[i], "tau_h": float(TH[i,j])}
+                    for i in range(len(alpha_vals)) for j in range(len(P_vals))]
+            pd.DataFrame(rows).to_csv(args.out, index=False)
+            print(f"Saved → {args.out}")
+
+    elif args.mode == "P":
+        # Sweep signal power P
+        P_vals = np.logspace(np.log10(args.P_min), np.log10(args.P_max), args.n_steps)
+        tau_h_vals = np.maximum(0, (P_vals / denom - args.sigma0) / args.alpha)
+        print(f"Agency horizon sweep: α={args.alpha}  σ²₀={args.sigma0}  ε={eps}b")
+        print(f"{'P':>12}  {'tau_h':>10}")
+        print("-" * 26)
+        for P, t in zip(P_vals, tau_h_vals):
+            print(f"{P:>12.4f}  {t:>10.2f}")
+
+    if args.out:
+        if args.mode == "alpha":
+            df = pd.DataFrame({"alpha": alpha_vals, "tau_h": tau_h_vals})
+        else:
+            df = pd.DataFrame({"P": P_vals, "tau_h": tau_h_vals})
+        df.to_csv(args.out, index=False)
+        print(f"Saved → {args.out}")
+
+
+def cmd_calibrate(args):
+    """Re-derive SPHERE-16 calibration constants from fresh simulation.
+
+    Runs the E8 flagship simulation and checks whether PEAK_PRED_BITS
+    still agrees with the stored constant (2.233669 bits).
+    """
+    import numpy as np
+    from fawp_index.constants import PEAK_PRED_BITS, TAU_PLUS_H_FLAGSHIP, TAU_F_FLAGSHIP
+    from fawp_index.core.estimators import mi_from_arrays, conservative_null_floor
+
+    a     = args.a
+    K     = args.K
+    delta = args.delta
+    n_trials = args.n_trials
+    seed  = args.seed
+    tau_max = args.tau_max
+
+    print(f"FAWP Calibration Check — SPHERE-16 baseline")
+    print(f"  a={a}  K={K}  Δ={delta}  n_trials={n_trials}  seed={seed}")
+    print(f"  Stored PEAK_PRED_BITS = {PEAK_PRED_BITS}")
+    print()
+
+    rng = np.random.default_rng(seed)
+    n_steps = 1000
+    tau_arr = np.arange(1, tau_max + 1)
+    pred_mi = np.zeros(len(tau_arr))
+
+    print(f"  Simulating {n_trials} trials × {n_steps} steps…")
+    all_x = []
+    all_u = []
+    for trial in range(n_trials):
+        x = np.zeros(n_steps); u = np.zeros(n_steps)
+        for t in range(1, n_steps):
+            obs = x[max(0, t - delta)]
+            u[t] = -K * obs
+            x[t] = a * x[t-1] + u[t] + rng.normal(0, 0.1)
+            if abs(x[t]) > 500: x[t] = np.sign(x[t]) * 500
+        all_x.append(x); all_u.append(u)
+
+    X = np.concatenate(all_x)
+    U = np.concatenate(all_u)
+
+    for ti, tau in enumerate(tau_arr):
+        xp = X[:-tau]; yp = X[tau:]
+        raw   = mi_from_arrays(xp, yp)
+        floor = conservative_null_floor(xp, yp, args.n_null, 0.99)
+        pred_mi[ti] = max(0.0, raw - floor)
+
+    peak_idx  = int(np.argmax(pred_mi))
+    peak_tau  = tau_arr[peak_idx]
+    peak_bits = float(pred_mi[peak_idx])
+    delta_pct = abs(peak_bits - PEAK_PRED_BITS) / PEAK_PRED_BITS * 100
+
+    print(f"  Simulated peak pred MI = {peak_bits:.6f} bits at τ = {peak_tau}")
+    print(f"  Stored   PEAK_PRED_BITS = {PEAK_PRED_BITS} bits")
+    print(f"  Δ = {delta_pct:.2f}%")
+    print()
+
+    if delta_pct < 5.0:
+        print(f"✅ CALIBRATION PASS — within 5% of stored constant")
+    else:
+        print(f"⚠️  CALIBRATION DRIFT — {delta_pct:.1f}% deviation from stored constant")
+        print(f"   Consider updating PEAK_PRED_BITS = {peak_bits:.6f}")
+
+    if args.out:
+        import pandas as pd
+        pd.DataFrame({"tau": tau_arr, "pred_mi": pred_mi}).to_csv(args.out, index=False)
+        print(f"Saved → {args.out}")
+
+
+def cmd_triple_horizon(args):
+    """Run the E11-1 Triple Horizon benchmark: readout, steering, and functional horizons.
+
+    Simulates the unstable latent process + degradable readout chain + viability cliff
+    from the SPHERE_23 paper and reports all five horizon boundaries.
+    """
+    import numpy as np
+    from fawp_index.core.estimators import mi_from_arrays, conservative_null_floor
+    from fawp_index.constants import ALPHA_A, ALPHA_A_SQ
+
+    a = args.a; K = args.K; delta = args.delta
+    rts  = args.readout_tau_scale   # readout decay scale
+    shield = args.shield             # shielding factor [0,1]
+    n = max(600, args.tau_max * 5)
+    tau_arr = np.arange(1, args.tau_max + 1)
+    rng = np.random.default_rng(args.seed)
+    eps = args.epsilon
+
+    print(f"Triple Horizon Benchmark — SPHERE_23 E11-1")
+    print(f"  a={a}  K={K}  Δ={delta}  readout_scale={rts}  shield={shield}")
+    print(f"  ε={eps}  τ_max={args.tau_max}  n={n}  seed={args.seed}")
+    print()
+
+    # Simulate latent process x with delayed controller
+    x = np.zeros(n); u = np.zeros(n); r = np.zeros(n)
+    for t in range(1, n):
+        obs = x[max(0, t - delta)]
+        u[t] = np.clip(-K * obs, -10, 10)
+        x[t] = a * x[t-1] + u[t] + rng.normal(0, 0.1)
+        if abs(x[t]) > 500: x[t] = np.sign(x[t]) * 500
+        # Readout chain: r_t = x_t + noise, with shielding
+        r[t] = (1.0 - shield) * x[t] + rng.normal(0, 0.5)
+
+    # Compute steer MI, readout MI, pred MI per tau
+    steer_mi   = np.zeros(len(tau_arr))
+    readout_mi = np.zeros(len(tau_arr))
+    pred_mi    = np.zeros(len(tau_arr))
+
+    print(f"  Computing MI curves ({len(tau_arr)} delays)…")
+    for ti, tau in enumerate(tau_arr):
+        # Steering: u[t] → x[t+tau]
+        xs = u[:-tau]; ys = x[tau:]
+        steer_mi[ti]   = max(0.0, mi_from_arrays(xs, ys) -
+                              conservative_null_floor(xs, ys, args.n_null, 0.99))
+        # Readout: r[t] → x[t+tau] (degraded by tau-dependent noise)
+        noisy_r = r[:n-tau] + rng.normal(0, 0.1 * tau / rts, n - tau)
+        readout_mi[ti] = max(0.0, mi_from_arrays(noisy_r, x[tau:]) -
+                              conservative_null_floor(noisy_r, x[tau:], args.n_null, 0.99))
+        # Prediction: x[t] → x[t+tau]
+        xp = x[:-tau]; yp = x[tau:]
+        pred_mi[ti]    = max(0.0, mi_from_arrays(xp, yp) -
+                              conservative_null_floor(xp, yp, args.n_null, 0.99))
+
+    # Extract horizon boundaries
+    def first_below(arr, thresh):
+        for i, v in enumerate(arr):
+            if v <= thresh: return int(tau_arr[i])
+        return None
+
+    tau_alpha    = first_below(steer_mi, ALPHA_A)
+    tau_h_plus   = first_below(steer_mi, eps)
+    tau_alpha2   = first_below(readout_mi, ALPHA_A_SQ)
+    tau_readout  = first_below(readout_mi, eps)
+
+    # Functional horizon: viability cliff (crash probability)
+    x_fail = args.x_fail
+    fail_rates = np.array([np.mean(np.abs(x[t:]) > x_fail) for t in tau_arr])
+    tau_f_idx  = np.argmax(fail_rates >= 0.99)
+    tau_f      = int(tau_arr[tau_f_idx]) if fail_rates[tau_f_idx] >= 0.99 else None
+
+    print(f"  τα (steering wall)    : {tau_alpha  or 'not reached'}")
+    print(f"  τ⁺ₕ (steering horizon): {tau_h_plus if tau_h_plus is not None else 'not reached'}")
+    print(f"  τf  (functional)      : {tau_f if tau_f is not None else 'not reached'}")
+    print(f"  τα² (residual floor)  : {tau_alpha2 or 'not reached'}")
+    print(f"  τread (readout)       : {tau_readout or 'not reached'}")
+    print()
+    print(f"  SPHERE_23 E11-1 reference: τα=10  τ⁺ₕ=12  τf=29  τα²=32  τread=38")
+    print()
+
+    # Ordering
+    vals = [(v, n) for v, n in [(tau_alpha,"τα"),(tau_h_plus,"τ⁺ₕ"),
+                                  (tau_f,"τf"),(tau_alpha2,"τα²"),(tau_readout,"τread")]
+            if v is not None]
+    vals.sort()
+    ordering = " < ".join(n for _, n in vals)
+    print(f"  Detected ordering: {ordering}")
+    e11_order = "τα < τ⁺ₕ < τf < τα² < τread"
+    dominant = ordering == e11_order
+    print(f"  Dominant E11 ordering: {'✅ YES' if dominant else '❌ NO (variant detected)'}")
+
+    if args.out:
+        import pandas as pd
+        pd.DataFrame({"tau": tau_arr, "steer_mi": steer_mi,
+                      "readout_mi": readout_mi, "pred_mi": pred_mi,
+                      "fail_rate": fail_rates}).to_csv(args.out, index=False)
+        print(f"Saved → {args.out}")
+
+
+def cmd_changelog(args):
+    """Print the CHANGELOG entry for the current or specified version."""
+    import re
+    from pathlib import Path
+
+    # Find CHANGELOG.md: repo root or installed data path
+    candidates = [
+        Path(__file__).parent.parent / "CHANGELOG.md",
+        Path(__file__).parent.parent.parent / "CHANGELOG.md",
+    ]
+    cl_path = next((p for p in candidates if p.exists()), None)
+    if cl_path is None:
+        print("CHANGELOG.md not found. Clone the repo: git clone https://github.com/DrRalphClayton/fawp-index")
+        return
+
+    import fawp_index as fi
+    version = args.version or fi.__version__
+    src_cl = cl_path.read_text()
+
+    # Find the entry for this version
+    pattern = rf"(## v?{re.escape(version)}.*?)(?=\n## |\Z)"
+    m = re.search(pattern, src_cl, re.DOTALL | re.IGNORECASE)
+    if m:
+        print(m.group(1).strip())
+    else:
+        print(f"No CHANGELOG entry found for v{version}")
+        print(f"(CHANGELOG at: {cl_path})")
+
+        # Show the most recent entry instead
+        first = re.search(r"(## v?\d+\.\d+.*?)(?=\n## |\Z)", src_cl, re.DOTALL)
+        if first:
+            print("\nMost recent entry:")
+            print(first.group(1).strip()[:800])
+
+
+def cmd_scan(args):
+    """One-liner FAWP scan: fetch data and print a plain-text result."""
+    print(f"FAWP scan: {args.ticker} [{args.period}]")
+    try:
+        import yfinance as yf
+    except ImportError:
+        print("yfinance required: pip install yfinance"); return
+
+    df = yf.download(args.ticker, period=args.period,
+                     auto_adjust=True, progress=False)
+    if df.empty:
+        print(f"No data returned for {args.ticker}"); return
+
+    from fawp_index.market import scan_fawp_market
+    r = scan_fawp_market(df, ticker=args.ticker, epsilon=args.epsilon,
+                         n_null=args.n_null, verbose=False)
+
+    odw = getattr(r, "odw_result", r)
+    fawp   = getattr(odw, "fawp_found",    False)
+    gap    = float(getattr(odw, "peak_gap_bits", 0) or 0)
+    tauh   = getattr(odw, "tau_h_plus", None)
+    tauf   = getattr(odw, "tau_f",      None)
+    start  = getattr(odw, "odw_start",  None)
+    end    = getattr(odw, "odw_end",    None)
+    n_bars = len(df)
+
+    status = "🔴 FAWP DETECTED" if fawp else "✅ No FAWP"
+    print(f"Status        : {status}")
+    print(f"Ticker        : {args.ticker}  ({n_bars} bars, {args.period})")
+    print(f"Peak gap      : {gap:.4f} bits")
+    print(f"Agency horizon: τ⁺ₕ = {tauh if tauh is not None else 'not reached'}")
+    print(f"Failure cliff : τf  = {tauf if tauf is not None else 'not reached'}")
+    if start is not None and end is not None:
+        print(f"ODW           : τ = {start}–{end}  (width {end - start} steps)")
+
+    import fawp_index as fi
+    sm = getattr(odw, "steer_mi_at_h", None)
+    if sm is not None:
+        if sm <= fi.ALPHA_A_SQ:
+            tier = "null (below α²A)"
+        elif sm <= fi.ALPHA_A:
+            tier = "residual (αA ↔ α²A)"
+        else:
+            tier = "active steering"
+        print(f"Steering tier : {tier}  (steer MI = {sm:.5f})")
+
+    if args.out:
+        import json
+        with open(args.out, "w") as f:
+            json.dump({"ticker": args.ticker, "period": args.period,
+                       "fawp_found": bool(fawp), "peak_gap_bits": gap,
+                       "tau_h_plus": tauh, "tau_f": tauf,
+                       "odw_start": start, "odw_end": end,
+                       "n_obs": n_bars}, f, indent=2)
+        print(f"Saved → {args.out}")
+
+
+def cmd_triple_horizon_sweep(args):
+    """Sweep (a, K) grid — reproduces E11-2 portability sweep (SPHERE_23)."""
+    import numpy as np
+    from fawp_index.constants import ALPHA_A, ALPHA_A_SQ
+    from fawp_index.core.estimators import mi_from_arrays, conservative_null_floor
+
+    a_vals = [float(x) for x in args.a_grid.split(",")]
+    K_vals = [float(x) for x in args.K_grid.split(",")]
+    n = max(500, args.tau_max * 5)
+    tau_arr = np.arange(1, args.tau_max + 1)
+    eps = args.epsilon; rts = args.readout_tau_scale
+
+    def _run(a, K):
+        rng = np.random.default_rng(args.seed)
+        x = np.zeros(n); u = np.zeros(n); r = np.zeros(n)
+        for t in range(1, n):
+            obs = x[max(0, t - args.delta)]
+            u[t] = np.clip(-K * obs, -10, 10)
+            x[t] = a * x[t-1] + u[t] + rng.normal(0, 0.1)
+            if abs(x[t]) > 500: x[t] = np.sign(x[t]) * 500
+            r[t] = x[t] + rng.normal(0, 0.5)
+        sm = np.zeros(len(tau_arr)); rm = np.zeros(len(tau_arr))
+        for ti, tau in enumerate(tau_arr):
+            xs = u[:-tau]; ys = x[tau:]
+            sm[ti] = max(0.0, mi_from_arrays(xs, ys) - conservative_null_floor(xs, ys, 20, 0.99))
+            nr = r[:n-tau] + rng.normal(0, 0.1*tau/rts, n-tau)
+            rm[ti] = max(0.0, mi_from_arrays(nr, x[tau:]) - conservative_null_floor(nr, x[tau:], 20, 0.99))
+        def _fb(arr, th):
+            for i, v in enumerate(arr):
+                if v <= th: return int(tau_arr[i])
+            return None
+        fr = np.array([np.mean(np.abs(x[t:]) > 500) for t in tau_arr])
+        fi = np.argmax(fr >= 0.99)
+        return {"ta": _fb(sm, ALPHA_A), "th": _fb(sm, eps),
+                "tf": int(tau_arr[fi]) if fr[fi] >= 0.99 else None,
+                "ta2": _fb(rm, ALPHA_A_SQ), "tr": _fb(rm, eps)}
+
+    n_configs = len(a_vals) * len(K_vals)
+    print("Triple Horizon sweep — " + str(n_configs) + " configs")
+    hdr = "{:>6} {:>5} {:>5} {:>5} {:>5} {:>5} {:>7}  {}".format(
+          "a","K","tau_a","tau_h","tau_f","tau_a2","tau_rd","order")
+    print(hdr)
+    print("-" * 60)
+    rows = []
+    for a in a_vals:
+        for K in K_vals:
+            res = _run(a, K)
+            ta, th, tf, ta2, tr = res["ta"], res["th"], res["tf"], res["ta2"], res["tr"]
+            pairs = [(v, n) for v, n in [(ta,"ta"),(th,"th"),(tf,"tf"),(ta2,"ta2"),(tr,"tr")] if v is not None]
+            pairs.sort()
+            order = "<".join(nm for _, nm in pairs)
+            dom = order == "ta<th<tf<ta2<tr"
+            flag = "OK" if dom else "!!"
+            row = "{:>6.3f} {:>5.2f} {:>5} {:>5} {:>5} {:>5} {:>7}  {} {}".format(
+                  a, K, str(ta), str(th), str(tf), str(ta2), str(tr), flag, order)
+            print(row)
+            rows.append({"a":a,"K":K,"tau_alpha":ta,"tau_h_plus":th,
+                         "tau_f":tf,"tau_alpha2":ta2,"tau_readout":tr,
+                         "dominant":dom})
+    dom_rate = sum(1 for r in rows if r["dominant"]) / len(rows)
+    print("")
+    print("Dominant ordering rate: " + str(round(dom_rate*100,1)) + "% (E11-2 ref: 94.4%)")
+    if args.out:
+        import pandas as pd
+        pd.DataFrame(rows).to_csv(args.out, index=False)
+        print("Saved to " + args.out)
+
+
+def cmd_steering(args):
+    """Compute steering decay profile for a ticker vs SPHERE_23 αA / α²A thresholds."""
+    try:
+        import yfinance as yf
+    except ImportError:
+        print("yfinance required: pip install yfinance"); return
+
+    import numpy as np
+    from fawp_index.constants import ALPHA_A, ALPHA_A_SQ
+    from fawp_index.core.estimators import mi_from_arrays, conservative_null_floor
+    from fawp_index.market import scan_fawp_market
+
+    print(f"Steering profile: {args.ticker} [{args.period}]")
+    df = yf.download(args.ticker, period=args.period, auto_adjust=True, progress=False)
+    if df.empty:
+        print(f"No data for {args.ticker}"); return
+
+    r = scan_fawp_market(df, ticker=args.ticker, epsilon=args.epsilon,
+                         n_null=args.n_null, verbose=False)
+    odw = getattr(r, "odw_result", None)
+    steer = getattr(odw, "steer_mi", np.array([])) if odw else np.array([])
+    tau   = getattr(odw, "tau",      np.array([])) if odw else np.array([])
+
+    if len(steer) == 0:
+        print("No steering MI curve available — run a fresh scan first"); return
+
+    decay = float(np.polyfit(tau, steer, 1)[0]) if len(steer) >= 3 else 0.0
+
+    print(f"Decay rate     : {decay:+.6f} bits/τ")
+    print(f"Peak steer MI  : {steer.max():.4f} bits  at τ={tau[steer.argmax()]}")
+    print(f"Final steer MI : {steer[-1]:.4f} bits  at τ={tau[-1]}")
+    print()
+
+    # Tier classification at each delay
+    wall_cross   = next((int(tau[i]) for i,v in enumerate(steer) if v <= ALPHA_A),   None)
+    floor_cross  = next((int(tau[i]) for i,v in enumerate(steer) if v <= ALPHA_A_SQ), None)
+    eps_cross    = next((int(tau[i]) for i,v in enumerate(steer) if v <= args.epsilon), None)
+
+    print(f"αA  steering wall   (={ALPHA_A:.6f}) crossed at: τ = {wall_cross  or 'not reached'}")
+    print(f"α²A residual floor  (={ALPHA_A_SQ:.2e}) crossed at: τ = {floor_cross or 'not reached'}")
+    print(f"ε   op. horizon     (={args.epsilon:.4f})       crossed at: τ = {eps_cross   or 'not reached'}")
+    print()
+
+    # Per-tau table (sampled)
+    step = max(1, len(tau) // 20)
+    print(f"  {'τ':>5}  {'steer MI':>10}  {'tier'}")
+    print(f"  {'—'*35}")
+    for i in range(0, len(tau), step):
+        v = steer[i]
+        tier = ("null      " if v <= ALPHA_A_SQ else
+                "residual  " if v <= ALPHA_A    else "active    ")
+        print(f"  {tau[i]:>5.0f}  {v:>10.5f}  {tier}")
+
+    if args.plot:
+        try:
+            import matplotlib.pyplot as plt
+            fig, ax = plt.subplots(figsize=(8, 3))
+            ax.plot(tau, steer, color="#4A7FCC", lw=1.5, label="Steering MI")
+            ax.axhline(ALPHA_A,    color="#FF6B2B", ls="--", lw=1, label=f"αA={ALPHA_A:.5f}")
+            ax.axhline(ALPHA_A_SQ, color="#D4AF37", ls=":",  lw=1, label=f"α²A={ALPHA_A_SQ:.2e}")
+            ax.axhline(args.epsilon, color="#C0111A", ls="-.", lw=1, label=f"ε={args.epsilon}")
+            if wall_cross:  ax.axvline(wall_cross,  color="#FF6B2B", ls="--", alpha=.5)
+            if floor_cross: ax.axvline(floor_cross, color="#D4AF37", ls=":", alpha=.5)
+            ax.set_xlabel("τ (delay steps)"); ax.set_ylabel("Steering MI (bits)")
+            ax.set_title(f"{args.ticker} — Steering decay profile (SPHERE_23 thresholds)")
+            ax.legend(fontsize=8); plt.tight_layout(); plt.show()
+        except Exception as e:
+            print(f"Plot skipped: {e}")
 
 def main():
     _check_version_update()

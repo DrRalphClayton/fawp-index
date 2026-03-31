@@ -380,9 +380,9 @@ class SignificanceResult:
         """
         try:
             import matplotlib
-            matplotlib.use("Agg" if not show else matplotlib.get_backend())
+            matplotlib.use("Agg", force=True)
             import matplotlib.pyplot as plt
-        except ImportError:
+        except (ImportError, ValueError):
             raise ImportError("pip install fawp-index[plot]")
 
         r = self.observed_odw_result
@@ -1050,7 +1050,7 @@ def _sig_html(sig: SignificanceResult) -> str:
     chart_html = ""
     try:
         import matplotlib
-        matplotlib.use("Agg")
+        matplotlib.use("Agg", force=True)
         import matplotlib.pyplot as plt
         import base64
         import io

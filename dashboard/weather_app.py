@@ -484,7 +484,7 @@ def _mi_chart(r, epsilon):
         if r.fawp_found and r.odw_start is not None:
             ax.axvspan(r.odw_start, r.odw_end, alpha=.15, color="#E83030",
                        label=f"ODW τ={r.odw_start}–{r.odw_end}", zorder=1)
-            if r.odw_result.tau_f:
+            if r.odw_result.tau_f is not None:
                 ax.axvline(r.odw_result.tau_f, color="#E83030",
                            lw=1.2, ls=":", alpha=.6)
         ax.set_xlabel("τ (delay, days)", fontsize=8, color="#5070A0")
@@ -553,7 +553,7 @@ def _multi_scan_panel():
                  "FAWP": "🔴 YES" if r.fawp_found else "—",
                  "Gap (bits)": f"{r.peak_gap_bits:.4f}",
                  "ODW": f"τ {r.odw_start}–{r.odw_end}" if r.fawp_found else "—",
-                 "τ⁺ₕ": str(r.odw_result.tau_h_plus) if r.odw_result.tau_h_plus else "—"}
+                 "τ⁺ₕ": str(r.odw_result.tau_h_plus) if r.odw_result.tau_h_plus is not None else "—"}
                 for r in results]
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
         try:
@@ -616,7 +616,7 @@ with st.sidebar:
                     _url = ("https://nominatim.openstreetmap.org/search"
                             f"?q={urllib.parse.quote(_city_q)}&format=json&limit=5")
                     _req = urllib.request.Request(_url,
-                           headers={"User-Agent": "fawp-scanner/2.8.0"})
+                           headers={"User-Agent": "fawp-scanner/" + __import__("fawp_index").__version__})
                     with urllib.request.urlopen(_req, timeout=4) as _r:
                         _hits = _j.loads(_r.read())
                     if _hits:
@@ -828,7 +828,7 @@ if mode == "Compare two locations":
                     f'</div>', unsafe_allow_html=True)
                 kc = st.columns(3)
                 _kpi(kc[0], f"{r.peak_gap_bits:.4f}", "Gap (bits)")
-                _kpi(kc[1], str(r.odw_result.tau_h_plus) if r.odw_result.tau_h_plus else "—", "τ⁺ₕ")
+                _kpi(kc[1], str(r.odw_result.tau_h_plus) if r.odw_result.tau_h_plus is not None else "—", "τ⁺ₕ")
                 _kpi(kc[2], f"τ{r.odw_start}–{r.odw_end}" if r.fawp_found else "—", "ODW")
                 _mi_chart(r, 0.01)
     elif not run_cmp:
@@ -874,7 +874,7 @@ if mode == "Upload NWP data":
                     unsafe_allow_html=True)
         kc = st.columns(4)
         _kpi(kc[0], f"{nr.peak_gap_bits:.4f}", "Peak gap (bits)")
-        _kpi(kc[1], str(nr.odw_result.tau_h_plus) if nr.odw_result.tau_h_plus else "—", "τ⁺ₕ")
+        _kpi(kc[1], str(nr.odw_result.tau_h_plus) if nr.odw_result.tau_h_plus is not None else "—", "τ⁺ₕ")
         _kpi(kc[2], f"τ{nr.odw_start}–{nr.odw_end}" if nr.fawp_found else "—", "ODW")
         _kpi(kc[3], f"{nr.n_obs:,}", "Observations")
         st.markdown('<div class="wx-sec">MI Curves</div>', unsafe_allow_html=True)
@@ -989,7 +989,7 @@ if st.session_state.get("wx_multi_mode") and "wx_multi_results" in st.session_st
     _mv_rows = [{"Variable": _vn,
                  "FAWP": "🔴 YES" if _vr.fawp_found else "✅ No",
                  "Peak gap": f"{_vr.peak_gap_bits:.4f}b",
-                 "τ⁺ₕ": str(_vr.odw_result.tau_h_plus or "—"),
+                 "τ⁺ₕ": str(_vr.odw_result.tau_h_plus if odw_result.tau_h_plus is not None else "—"),
                  "n obs": _vr.n_obs}
                 for _vn, _vr in _mvr.items()]
     st.dataframe(_pd_mv.DataFrame(_mv_rows).sort_values("Peak gap", ascending=False),
@@ -1021,6 +1021,85 @@ if st.session_state.get("wx_multi_mode") and "wx_multi_results" in st.session_st
     except Exception as _mve:
         st.caption(f"Comparison chart: {_mve}")
     st.markdown("---")
+
+# ── FAWP global weather map ───────────────────────────────────────────────────
+with st.expander("🌍 FAWP Global Weather Map (coarse grid scan)", expanded=False):
+    st.caption("Scan a lat/lon grid and map FAWP detections. Runs quickly at coarse resolution.")
+    _gm_c1, _gm_c2, _gm_c3 = st.columns(3)
+    with _gm_c1:
+        _gm_var  = st.selectbox("Variable", list(VARIABLES.keys()),
+                                format_func=lambda k: VARIABLES[k], key="gm_var")
+        _gm_step = st.slider("Grid step (°)", 5, 20, 10, key="gm_step")
+    with _gm_c2:
+        _gm_eps  = st.number_input("ε threshold", 0.001, 0.1, 0.01,
+                                   format="%.3f", key="gm_eps")
+        _gm_yrs  = st.slider("Years of data", 1, 10, 3, key="gm_yrs")
+    with _gm_c3:
+        _gm_n_null = st.slider("Null perms", 0, 50, 10, key="gm_n_null")
+
+    if st.button("▶ Run global map scan", key="gm_run", type="primary"):
+        from fawp_index.weather import fetch_openmeteo, fawp_from_forecast
+        import numpy as _np_gm, pandas as _pd_gm
+        _lats = list(range(-60, 75, _gm_step))
+        _lons = list(range(-180, 180, _gm_step))
+        _gm_rows = []
+        _gm_prog = st.progress(0.0, "Scanning global grid…")
+        _gm_total = len(_lats) * len(_lons)
+        _gm_done = 0
+        for _glat in _lats:
+            for _glon in _lons:
+                try:
+                    _gdf = fetch_openmeteo(str(_glat), days=365*_gm_yrs,
+                                           var=_gm_var, lat=float(_glat),
+                                           lon=float(_glon))
+                    if _gdf is not None and len(_gdf) > 100:
+                        _gr = fawp_from_forecast(_gdf[_gm_var].values,
+                                                  epsilon=_gm_eps, n_null=_gm_n_null)
+                        _gm_rows.append({"lat": _glat, "lon": _glon,
+                                         "fawp": _gr.fawp_found,
+                                         "gap":  float(_gr.peak_gap_bits or 0)})
+                except Exception:
+                    pass
+                _gm_done += 1
+                _gm_prog.progress(_gm_done/_gm_total,
+                                  f"Scanned {_gm_done}/{_gm_total} grid points…")
+        _gm_prog.empty()
+        st.session_state["gm_results"] = _gm_rows
+        st.rerun()
+
+    if "gm_results" in st.session_state and st.session_state["gm_results"]:
+        _gmr = st.session_state["gm_results"]
+        _gm_fawp = [r for r in _gmr if r["fawp"]]
+        st.success(f"🔴 {len(_gm_fawp)}/{len(_gmr)} grid points in FAWP")
+        try:
+            import folium as _fol
+            from streamlit_folium import st_folium as _stf
+            _gm_map = _fol.Map(location=[20, 0], zoom_start=2,
+                               tiles="CartoDB dark_matter")
+            for _gr in _gmr:
+                _col = "#C0111A" if _gr["fawp"] else "#3A4E70"
+                _fol.CircleMarker(
+                    location=[_gr["lat"], _gr["lon"]],
+                    radius=max(3, _gr["gap"]*15),
+                    color=_col, fill=True, fill_color=_col,
+                    fill_opacity=0.7,
+                    popup=f"({_gr['lat']}°,{_gr['lon']}°) gap={_gr['gap']:.4f}b"
+                ).add_to(_gm_map)
+            _stf(_gm_map, height=400, use_container_width=True)
+        except ImportError:
+            import matplotlib.pyplot as _plt_gm
+            import pandas as _pd_gm
+            _gdf2 = _pd_gm.DataFrame(_gmr)
+            _fig_gm, _ax_gm = _plt_gm.subplots(figsize=(10,4),facecolor="#0D1729")
+            _ax_gm.set_facecolor("#07101E")
+            _ax_gm.scatter(_gdf2["lon"], _gdf2["lat"],
+                          c=["#C0111A" if f else "#3A4E70" for f in _gdf2["fawp"]],
+                          s=_gdf2["gap"]*500+10, alpha=0.75)
+            _ax_gm.set_xlabel("Longitude",fontsize=8,color="#7A90B8")
+            _ax_gm.set_ylabel("Latitude",fontsize=8,color="#7A90B8")
+            _ax_gm.set_title("FAWP Weather Global Map",color="#D4AF37",fontsize=9)
+            _fig_gm.tight_layout(); st.pyplot(_fig_gm,use_container_width=True)
+            _plt_gm.close(_fig_gm)
 
 if "wx_result" in st.session_state:
     r       = st.session_state["wx_result"]
@@ -1057,8 +1136,8 @@ if "wx_result" in st.session_state:
     # KPI row
     c1,c2,c3,c4,c5 = st.columns(5)
     _kpi(c1, f"{r.peak_gap_bits:.4f}", "Peak gap (bits)")
-    _kpi(c2, str(r.odw_result.tau_h_plus) if r.odw_result.tau_h_plus else "—", "τ⁺ₕ horizon")
-    _kpi(c3, str(r.odw_result.tau_f)      if r.odw_result.tau_f      else "—", "τf cliff")
+    _kpi(c2, str(r.odw_result.tau_h_plus) if r.odw_result.tau_h_plus is not None else "—", "τ⁺ₕ horizon")
+    _kpi(c3, str(r.odw_result.tau_f)      if r.odw_result.tau_f      is not None else "—", "τf cliff")
     _kpi(c4, f"τ{r.odw_start}–{r.odw_end}" if r.fawp_found else "—", "ODW",
          "var(--red)" if r.fawp_found else "var(--muted)")
     _kpi(c5, f"{r.n_obs:,}", "Observations")

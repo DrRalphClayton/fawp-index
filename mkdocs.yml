@@ -38,10 +38,17 @@ nav:
       - Watchlist: watchlist.md
       - Significance: significance.md
       - Benchmarks: benchmarks.md
+  - API reference: api.md
   - Changelog: release_v0_23_0.md
 
 plugins:
   - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+            docstring_style: google
 
 markdown_extensions:
   - admonition

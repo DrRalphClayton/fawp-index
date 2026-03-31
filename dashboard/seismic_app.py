@@ -572,8 +572,8 @@ if "seis_result" in st.session_state:
     st.markdown('<div class="seis-sec">Key metrics</div>', unsafe_allow_html=True)
     k1, k2, k3, k4, k5, k6 = st.columns(6)
     _kpi(k1, f"{r.peak_gap_bits:.4f}", "Peak gap (bits)")
-    _kpi(k2, str(r.odw_result.tau_h_plus) if r.odw_result.tau_h_plus else "—", "τ⁺ₕ horizon")
-    _kpi(k3, str(r.odw_result.tau_f) if r.odw_result.tau_f else "—", "τf cliff")
+    _kpi(k2, str(r.odw_result.tau_h_plus) if r.odw_result.tau_h_plus is not None else "—", "τ⁺ₕ horizon")
+    _kpi(k3, str(r.odw_result.tau_f) if r.odw_result.tau_f is not None else "—", "τf cliff")
     _kpi(k4, f"τ{r.odw_start}–{r.odw_end}" if r.fawp_found else "—", "ODW",
          "#C0111A" if r.fawp_found else "#3A4E70")
     _kpi(k5, f"{len(raw_df):,}", "Total events")

@@ -5,7 +5,7 @@ All values are derived directly from the published papers:
 
   VTM   — doi:10.5281/zenodo.18634216
   E1–E7 — doi:10.5281/zenodo.18663547  (Agency Horizon / FORECASTING)
-  E8    — doi:10.5281/zenodo.18673949  (Secret Formula / FAWP confirmation)
+  E8    — doi:10.5281/zenodo.18673949  (FAWP confirmation suite)
   E9    — SPHERE_15 confirmation suite (doi:10.5281/zenodo.18693949 pending)
   E8v2  — SPHERE_16 recalibration (March 2026) — η=0, peak=2.233669 bits
   E9.7  — Comparative timing sweep (March 2026) — gap2 best predictor, α lags
@@ -193,6 +193,58 @@ MARKET_WINDOW: int = 252          # rolling window (bars) — one trading year
 MARKET_STEP: int = 5              # scan step
 MARKET_TAU_MAX: int = 40          # max τ grid
 MARKET_FORECAST_DELTA: int = 20   # Δ for predictive channel
+
+
+
+# ── Triple Horizon Framework — SPHERE_23 (March 29, 2026) ────────────────────
+# Source: Clayton (2026) "The Triple Horizon Framework"
+# doi: pending — Institute for Operational Accessibility Studies
+# Experiment 11 suite: readout, steering, and functional horizons measured jointly.
+
+# Calibrated threshold pair (SPHERE_23 Eq. 12)
+# αA  = practical steering wall (operational steerability boundary)
+# α²A = deeper residual-readable floor (existence ≠ access)
+ALPHA_A: float       = 0.007297              # practical steering wall αA
+ALPHA_A_SQ: float    = 5.325135447834e-5     # residual-readable floor α²A
+
+# E11-1 baseline Triple Horizon benchmark
+# Configuration: a=1.02, K=0.8, delayed steering + degradable readout chain
+E11_TAU_ALPHA: int         = 10   # τα — practical steering wall crossing
+E11_TAU_PLUS_H: int        = 12   # τ⁺ₕ — post-zero steering horizon
+E11_TAU_F: int             = 29   # τf  — functional horizon (viability cliff)
+E11_TAU_ALPHA2: int        = 32   # τα² — deep residual-readable crossing
+E11_TAU_READOUT: int       = 38   # τreadout — final readout horizon
+# Observed ordering: τα < τ⁺ₕ < τf < τα² < τreadout
+E11_FAWP_WINDOW_1: tuple   = (12, 19)    # first persistence-gated FAWP window
+E11_FAWP_WINDOW_2: tuple   = (21, 26)    # second persistence-gated FAWP window
+E11_PEAK_GAP_TAU: int      = 13          # τ of peak corrected leverage gap
+E11_DOMINANT_ORDER: str    = "τα < τ⁺ₕ < τf < τα² < τreadout"
+
+# E11-2 portability sweep (36 configurations)
+E112_N_CONFIGS: int         = 36
+E112_DOMINANT_RATE: float   = 34/36      # ≈ 0.9444 — dominant ordering rate
+E112_PEAK_GAP: float        = 0.428671   # strongest corrected leverage gap
+E112_PEAK_GAP_TAU: int      = 12         # τ of E11-2 peak gap
+E112_WIDEST_FAWP_WIDTH: int = 18         # widest FAWP window (total width)
+
+# E11-3 forced reordering (stress sweep, 18 configs)
+E113_PEAK_GAP: float        = 0.437214   # strongest corrected gap (steering-suppression block)
+E113_PEAK_GAP_TAU: int      = 9          # τ of E11-3 peak gap
+E113_WIDEST_FAWP_WIDTH: int = 14         # widest FAWP window in E11-3
+
+# E11-5 cross-family validation (27 configs: linear, cubic, coupled 2D)
+E115_N_CONFIGS: int         = 27
+E115_DOMINANT_RATE: float   = 1.0        # 27/27 dominant ordering
+E115_CUBIC_PEAK_GAP: float  = 0.4421     # peak gap in cubic nonlinear family
+E115_COUPLED_FAWP_WIDTH: int= 19         # widest FAWP in coupled 2D family
+
+# E11-4 recovery: early upstream intervention (τlens = 5) best gains
+E114_BEST_DELTA_TAU_H: int      = 14     # max Δτ⁺ₕ from early intervention
+E114_BEST_DELTA_READOUT: int    = 17     # max Δτreadout
+E114_BEST_DELTA_TAU_F: int      = 6      # max Δτf
+E114_BEST_DELTA_ALPHA2: int     = 11     # max Δτα²
+E114_BEST_DELTA_FAWP_W: int     = 12     # max ΔFAWP window width
+
 
 # ── LERI photon-record horizon ─────────────────────────────────────────────
 # Source: LERI Eq. 11–12

@@ -47,6 +47,8 @@ jobs:
 
       - name: Publish to PyPI (OIDC trusted publishing)
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          attestations: true
 
       - name: Extract CHANGELOG section
         id: changelog
@@ -67,6 +69,14 @@ jobs:
           PYEOF
         env:
           GITHUB_REF_NAME: ${{ github.ref_name }}
+
+      - name: Trigger Render redeploy
+        if: env.RENDER_DEPLOY_HOOK != ''
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          curl -s "$RENDER_DEPLOY_HOOK" > /dev/null
+          echo "Render deploy triggered"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

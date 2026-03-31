@@ -410,7 +410,7 @@ def _alpha2_chart_html(result) -> str:
     """Embed alpha_2 curve as a base64 PNG in an <img> tag."""
     try:
         import matplotlib
-        matplotlib.use("Agg")
+        matplotlib.use("Agg", force=True)
         import matplotlib.pyplot as plt
         import base64
         import io
@@ -446,8 +446,15 @@ def _alpha2_chart_html(result) -> str:
             'Figure: α₂(τ) with null-corrected I_pred. '
             'Green shading = Operational Detection Window.</p>'
         )
-    except Exception:
-        return ""
+    except Exception as _chart_err:
+        import warnings
+        warnings.warn(
+            f"fawp-index: chart render failed in _alpha2_chart_html: {_chart_err}")
+        return (
+            '<p style="color:#c0392b;font-size:.85em">'
+            '&#9888; Chart unavailable: '
+            f'{_chart_err}</p>'
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

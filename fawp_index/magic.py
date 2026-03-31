@@ -87,8 +87,8 @@ def _run_fawp_on_obj(obj, args, ip):
     status = "🔴 FAWP DETECTED" if odw.fawp_found else "✅ No FAWP"
     print(f"\n{status}")
     print(f"  Peak gap   : {odw.peak_gap_bits:.4f} bits")
-    print(f"  τ⁺ₕ horizon: {odw.tau_h_plus or '—'}")
-    print(f"  τf cliff   : {odw.tau_f or '—'}")
+    print(f"  τ⁺ₕ horizon: {odw.tau_h_plus if odw.tau_h_plus is not None else '—'}")
+    print(f"  τf cliff   : {odw.tau_f if odw.tau_f is not None else '—'}")
     print(f"  ODW        : τ{odw.odw_start}–{odw.odw_end}" if odw.fawp_found else "  ODW        : —")
     print(f"  n obs      : {n}\n")
 

@@ -157,9 +157,9 @@ class BenchmarkResult:
         """
         try:
             import matplotlib
-            matplotlib.use("Agg" if not show else matplotlib.get_backend())
+            matplotlib.use("Agg", force=True)
             import matplotlib.pyplot as plt
-        except ImportError:
+        except (ImportError, ValueError):
             raise ImportError("pip install fawp-index[plot]")
 
         r = self.odw_result
@@ -887,7 +887,7 @@ def _case_chart_b64(br: BenchmarkResult) -> str:
     """Return base64 PNG of the case's MI curves, or '' if matplotlib absent."""
     try:
         import matplotlib
-        matplotlib.use("Agg")
+        matplotlib.use("Agg", force=True)
         import matplotlib.pyplot as plt
         import base64
 
@@ -917,8 +917,11 @@ def _case_chart_b64(br: BenchmarkResult) -> str:
         fig.savefig(buf, format="png", dpi=120, bbox_inches="tight")
         plt.close(fig)
         return base64.b64encode(buf.getvalue()).decode()
-    except Exception:
-        return ""
+    except Exception as _chart_err:
+        import warnings
+        warnings.warn(
+            f"fawp-index: chart render failed in _case_chart_b64: {_chart_err}")
+        return None  # caller injects visible error card
 
 
 def _suite_html(suite: BenchmarkSuite) -> str:
@@ -954,11 +957,24 @@ def _suite_html(suite: BenchmarkSuite) -> str:
         ok_col  = "#1a7a1a" if r.passed else "#aa1111"
         ok_lbl  = "PASS ✓" if r.passed else "FAIL ✗"
         b64     = _case_chart_b64(r)
-        img_tag = (
-            f'<img src="data:image/png;base64,{b64}" '
-            f'style="width:100%;border:1px solid #ddd;border-radius:4px;margin-top:10px">'
-            if b64 else ""
-        )
+        if b64 is None:
+            img_tag = (
+                '<p style="color:#c0392b;font-size:.85em;border:1px solid #c0392b;'
+                'padding:.4em .7em;border-radius:4px;margin-top:8px">'
+                '&#9888; Chart unavailable — check stderr for details</p>'
+            )
+        elif b64:
+            img_tag = (
+                f'<img src="data:image/png;base64,{b64}" '
+                f'style="width:100%;border:1px solid #ddd;border-radius:4px;margin-top:10px">'
+            )
+        else:
+            # Empty b64 string (edge case) — same error card as None
+            img_tag = (
+                '<p style="color:#c0392b;font-size:.85em;border:1px solid #c0392b;'
+                'padding:.4em .7em;border-radius:4px;margin-top:8px">'
+                '&#9888; Chart unavailable — check stderr for details</p>'
+            )
         odw = r.odw_result
         cards += f"""
 <div style="background:#fff;border:1px solid #ddd;border-radius:8px;
@@ -1110,7 +1126,7 @@ def _suite_html(suite: BenchmarkSuite) -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Additional benchmark cases (v2.8.0)
+# Additional benchmark cases
 # ─────────────────────────────────────────────────────────────────────────────
 
 def gradual_fade(simulate: bool = False, seed: int = 42) -> BenchmarkResult:

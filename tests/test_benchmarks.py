@@ -2,6 +2,7 @@
 
 import json
 import pytest
+import fawp_index
 
 from fawp_index.benchmarks import (
     run_all, BenchmarkSuite, BenchmarkFailure,
@@ -133,7 +134,7 @@ class TestSuite:
         assert data["n_passed"] == 8
         assert data["n_failed"] == 0
         assert len(data["cases"]) == 8
-        assert data["fawp_index_version"] == "2.8.0"
+        assert data["fawp_index_version"] == fawp_index.__version__
 
     def test_to_html(self, tmp_path):
         suite = run_all()

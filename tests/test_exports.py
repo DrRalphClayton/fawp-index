@@ -3,6 +3,7 @@
 import json
 
 import pytest
+import fawp_index
 
 from fawp_index import ODWDetector, FAWPAlphaIndexV2
 
@@ -48,7 +49,7 @@ class TestODWExports:
         data = json.loads(p.read_text())
         assert data["result_type"] == "ODWResult"
         assert data["results"]["fawp_found"] is True
-        assert data["meta"]["fawp_index_version"] == "2.8.0"
+        assert data["meta"]["fawp_index_version"] == fawp_index.__version__
 
     def test_to_json_valid_json(self, odw, tmp_path):
         p = tmp_path / "odw_valid.json"

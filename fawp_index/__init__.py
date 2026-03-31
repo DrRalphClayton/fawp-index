@@ -1,11 +1,11 @@
 """
-fawp-index v2.8.0
+fawp-index v3.7.27
 FAWP Alpha Index — Information-Control Exclusion Principle detector.
 Includes full E1-E9 experimental suite data.
 Ralph Clayton (2026) · doi:10.5281/zenodo.18673949
 """
 
-__version__ = "2.8.0"
+__version__ = "3.7.27"
 __author__ = "Ralph Clayton"
 __doi__ = "https://doi.org/10.5281/zenodo.18673949"
 __github__ = "https://github.com/DrRalphClayton/fawp-index"
@@ -56,7 +56,13 @@ from .constants import (
     E97_MEAN_LEAD_ALPHA2_TO_CLIFF_U, E97_MEAN_LEAD_ALPHA2_TO_CLIFF_XI,
     E97_MEAN_ABS_ERR_ALPHA2_VS_ODW_START,
     E97_MEAN_LEAD_ALPHA_TO_CLIFF_U, E97_MEAN_LEAD_ALPHA_TO_CLIFF_XI,
-    E97_MEAN_ABS_ERR_ALPHA_VS_ODW_START, PEAK_GAP_TAU_E9,
+    E97_MEAN_ABS_ERR_ALPHA_VS_ODW_START,
+    # SPHERE_23 Triple Horizon
+    ALPHA_A, ALPHA_A_SQ,
+    E11_TAU_ALPHA, E11_TAU_PLUS_H, E11_TAU_F,
+    E11_TAU_ALPHA2, E11_TAU_READOUT,
+    E11_FAWP_WINDOW_1, E11_FAWP_WINDOW_2, E11_PEAK_GAP_TAU,
+    E112_PEAK_GAP, E113_PEAK_GAP, PEAK_GAP_TAU_E9,
 )
 from .core.alpha_index import FAWPAlphaIndex, FAWPResult
 from .core.alpha_v2 import FAWPAlphaIndexV2, AlphaV2Result

@@ -3,6 +3,7 @@ Tests for fawp_index.watchlist and fawp_index.alerts
 """
 import json
 import pytest
+import fawp_index
 import numpy as np
 import pandas as pd
 from datetime import datetime
@@ -161,7 +162,7 @@ class TestWatchlistResult:
     def test_to_json(self, fast_wl, tmp_path):
         p = fast_wl.to_json(tmp_path / "wl.json")
         d = json.loads(p.read_text())
-        assert d["meta"]["fawp_index_version"] == "2.8.0"
+        assert d["meta"]["fawp_index_version"] == fawp_index.__version__
         assert d["summary"]["n_assets"] == fast_wl.n_assets
         assert len(d["assets"]) == fast_wl.n_assets
 
